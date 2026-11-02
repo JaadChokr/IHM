@@ -297,6 +297,12 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   SQL, comparaison des performances par version (repères sur les courbes, tableau par version) et
   **restauration** d'une version antérieure, recopiée dans un brouillon à tester puis soumettre.
 
+  **Une commande n'est remontée qu'une fois par règle** (toutes versions confondues) : le DAG n'écrit dans
+  `rule_alerts`, et n'envoie au prestataire, que les commandes que la règle n'a jamais remontées. Une requête
+  peut donc relire les mêmes jours (fenêtre glissante, règle horaire sur la veille) sans doublon ; une
+  fenêtre un peu plus large que la fréquence (ex. les 3 derniers jours pour une règle quotidienne) rattrape
+  d'elle-même un run manqué. Les indicateurs comptent ainsi les nouvelles commandes de chaque jour.
+
   Pour chaque commande remontée, le DAG écrit une ligne dans `rule_alerts`. Chaque règle renvoie ses
   propres colonnes ; seule `order_id` est obligatoire (vérifiée à la publication) et sert aux indicateurs.
   Le reste de la ligne va dans la colonne **`details`** (JSON, facultative), pour que l'équipe qui traite

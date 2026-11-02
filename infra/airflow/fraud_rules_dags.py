@@ -6,7 +6,10 @@ Airflow 2.9 ou plus) : une règle soumise est prise en charge dès le run suivan
 et une règle qui change de fréquence change simplement de DAG.
 
 Pour chaque règle, la tâche :
-  1. exécute `sql_query` telle quelle et écrit ses commandes dans `rule_alerts` (order_id + details) ;
+  1. exécute `sql_query` telle quelle et écrit dans `rule_alerts` (order_id + details) les commandes que
+     cette règle n'a encore jamais remontées : la requête peut relire les mêmes jours (fenêtre glissante,
+     règle horaire sur la veille) sans créer de doublon, et une fenêtre un peu plus large que la
+     fréquence rattrape d'elle-même un run manqué ;
   2. si `send_to_provider` est vrai, transmet ces commandes au prestataire (sinon : observation) ;
   3. trace l'exécution dans `rule_runs` (version exécutée, DAG, statut) : c'est ce que lit la plateforme.
 
@@ -114,7 +117,15 @@ def make_dag(frequency: str, cron: str):
                                CAST(t.order_id AS STRING), CURRENT_TIMESTAMP(), TO_JSON(t)
                         FROM (
                     {sql}
-                        ) AS t""",
+                        ) AS t
+                        -- Une commande n'est remontée qu'une fois par règle (toutes versions confondues) :
+                        -- fenêtres glissantes, règles horaires sur la veille et rattrapages ne créent pas
+                        -- de doublon, ni dans rule_alerts ni chez le prestataire.
+                        WHERE NOT EXISTS (
+                          SELECT 1 FROM {ds}.rule_alerts a
+                          WHERE a.rule_id = @rule_id AND a.order_id = CAST(t.order_id AS STRING)
+                        )
+                        QUALIFY ROW_NUMBER() OVER (PARTITION BY CAST(t.order_id AS STRING)) = 1""",
                     rule_id=("STRING", rule["rule_id"]),
                     version=("INT64", rule["version"]),
                     run_id=("STRING", run_id),
