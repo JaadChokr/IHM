@@ -17,7 +17,7 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   ├── app/database.py  connexion PostgreSQL, tables, écriture du journal d'audit
 │   ├── app/schemas.py   formats JSON échangés avec le front
 │   ├── app/auth.py      identification par matricule ; point UNIQUE de résolution de l'identité
-│   ├── app/rules.py     règles : liste, création, versions, soumission (F1, F4, F5)
+│   ├── app/rules.py     règles : liste, versions, décision d'envoi (F1, F5) ; app/drafts.py : brouillons et publication (F4)
 │   ├── app/query.py     test d'une requête : dry-run, exécution, garde-fous (F3)
 │   ├── app/sql_checks.py contrôles du SQL non couverts par BigQuery (paramètres, dates en dur…)
 │   ├── app/pilotage.py  indicateurs de performance et journal d'audit, en lecture (F6, F7, F8)
@@ -153,7 +153,7 @@ cd ../backend
   si on le rouvre.
 - En local, BigQuery est simulé : un test de requête répond toujours « 6 Go, 5 lignes » et les tableaux de
   performance sont vides. Pour le vrai BigQuery : accès GCP et `RM_BIGQUERY_MODE=real`.
-- Le panneau « Simulation Airflow » (premiers runs d'une version soumise, arrêt du DAG) n'existe qu'en mode démo (3a).
+- Le panneau « Simulation Airflow » (premiers runs d'une version publiée, arrêt du DAG) n'existe qu'en mode démo (3a).
 
 ### Dépannage : « npm is not recognized » (Windows)
 
@@ -226,7 +226,7 @@ powershell -ExecutionPolicy Bypass -File infra\bigquery\apply.ps1
 | `RM_GCP_PROJECT`, `RM_BQ_DATASET`, `RM_BQ_LOCATION` | projet, dataset et région du contrat de données | — / `fraud_rules` / `europe-west9` |
 | `RM_BQ_FEEDBACK_TABLE` | table de retour du prestataire (`dataset.table` ou `projet.dataset.table`), pour créer la vue des indicateurs | — |
 | `RM_MAX_BYTES_BILLED`, `RM_JOB_TIMEOUT_MS`, `RM_MAX_RESULTS` | garde-fous des tests (F3) | 50 Go, 60 s, 100 |
-| `RM_NOTIFY_WEBHOOK_URL` | notification de l'équipe data à la soumission | vide = log (Q6) |
+| `RM_NOTIFY_WEBHOOK_URL` | notification facultative de l'équipe data (publication, décisions), pour information | vide = log (Q6) |
 
 ## Architecture (PRD §8)
 
@@ -247,13 +247,14 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 
 - **Q1, base applicative** : PostgreSQL (recommandation du PRD §8.3). L'exposition à l'équipe data se fait par
   `rules_registry` dans BigQuery, alimentée à l'écriture (`upsert_rule` dans `backend/app/bigquery.py`, mode `real`).
-  **Une ligne par règle**, mise à jour à chaque soumission (MERGE sur `rule_id`) : l'historique des versions vit
+  **Une ligne par règle**, mise à jour à chaque publication (MERGE sur `rule_id`) : l'historique des versions vit
   dans `rule_versions`, côté plateforme. Si vous choisissez
   une vue fédérée `EXTERNAL_QUERY`, cette synchronisation devient inutile.
-- **Cycle de vie (écart au PRD F5 et §4.2)** : l'équipe data n'agit pas sur la plateforme. Les gestes de
-  l'analyste sont stockés (brouillon, soumission, décision d'envoi) ; l'exécution se **déduit des runs Airflow**
+- **Cycle de vie (écart au PRD F5 et §4.2)** : **pas d'étape de validation**. L'analyste publie lui-même sa
+  règle, qui part en observation ; l'équipe data n'agit pas sur la plateforme et n'exploite que les DAG. Les gestes
+  de l'analyste sont stockés (brouillon, publication, décision d'envoi) ; l'exécution se **déduit des runs Airflow**
   dans `rule_runs` :
-  - *Soumise* : écrite dans `rules_registry`, pas encore exécutée (elle le sera au prochain run du DAG de sa
+  - *Publiée* : écrite dans `rules_registry`, pas encore exécutée (elle le sera au prochain run du DAG de sa
     fréquence) ;
   - *En observation* : Airflow l'exécute et écrit ses commandes dans `rule_alerts`, **sans les envoyer au
     prestataire** (`send_to_provider = false`). On mesure son volume et son recoupement avec les autres règles ;
@@ -264,25 +265,24 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   - *Écartée* : l'analyste a décidé de ne pas l'envoyer ; elle sort de `rules_registry` et la version
     précédente reprend sa place (avec son envoi, si elle était envoyée) ;
   - *Inactive depuis X* : plus de run depuis 3 périodes (3 h, 3 jours ou 3 semaines selon la fréquence) ;
-  - *Remplacée* : une version plus récente a été soumise ou tourne à sa place.
+  - *Remplacée* : une version plus récente a été publiée ou tourne à sa place.
 
   Une nouvelle version d'une règle envoyée la **remplace en observation** : l'envoi au prestataire est
   suspendu jusqu'à la décision sur la nouvelle version. Les décisions sont tracées dans le journal d'audit
-  (`RULE_SEND_TO_PROVIDER`, `RULE_SUSPEND_SENDING`, `RULE_DISCARD`) et notifiées à l'équipe data. Une table
+  (`RULE_SEND_TO_PROVIDER`, `RULE_SUSPEND_SENDING`, `RULE_DISCARD`) et peuvent être notifiées à l'équipe data pour information. Une table
   `rules_registry` existante reçoit la colonne par `infra/bigquery/07_rules_registry_send.sql`.
 
   **Brouillons personnels** : un brouillon est la sauvegarde de travail d'un analyste, stocké comme son profil
   dans la base de la plateforme (table `drafts`, rattachée à son matricule) et **visible de lui seul** : ni les
   collègues, ni le journal d'audit (un test de brouillon y est tracé sans nommer la règle), ni BigQuery ne le
-  voient. La table `rule_versions` ne contient que des versions soumises, et une règle n'entre dans le
-  référentiel partagé qu'à sa première soumission. Chacun peut préparer sa propre nouvelle version d'une règle
-  (un brouillon par règle et par personne) ; la première soumise prend le numéro suivant, l'éditeur des autres
+  voient. La table `rule_versions` ne contient que des versions publiées, et une règle n'entre dans le
+  référentiel partagé qu'à sa première publication. Chacun peut préparer sa propre nouvelle version d'une règle
+  (un brouillon par règle et par personne) ; la première publiée prend le numéro suivant, l'éditeur des autres
   signale le décalage. La saisie non encore enregistrée est en plus gardée dans le navigateur.
 
-  Une version **soumise mais jamais exécutée** peut être reprise par celui qui l'a soumise : elle sort de
+  Une version **publiée mais jamais exécutée** peut être reprise par celui qui l'a publiée : elle sort de
   `rule_versions`, la ligne de `rules_registry` revient à la version précédente (ou est supprimée s'il n'y en
-  a pas), elle redevient son brouillon, l'équipe data est prévenue
-  (`RULE_SUBMISSION_WITHDRAWN`), puis elle doit être retestée et resoumise (même numéro). Dès qu'une version a
+  a pas), elle redevient son brouillon, puis elle doit être retestée et republiée (même numéro). Dès qu'une version a
   tourné, elle est figée : toute modification passe par un brouillon de nouvelle version.
 
   **Contrat côté Airflow, à valider avec l'équipe data** : **un DAG par fréquence** (`fraud_rules_hourly`,
@@ -290,7 +290,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   fréquence (une ligne par règle : sa dernière version non écartée) et lance une tâche par règle (mappage
   dynamique d'Airflow) : une règle en échec ne bloque pas les autres et se relance seule. La requête est
   exécutée telle quelle, sans être recopiée. Le DAG écrit dans `rule_runs` la version exécutée et son
-  `airflow_dag_id` : c'est ce qui permet à la plateforme d'afficher quelle version tourne. Une règle soumise,
+  `airflow_dag_id` : c'est ce qui permet à la plateforme d'afficher quelle version tourne. Une règle publiée,
   nouvelle ou nouvelle version, tourne donc **dès le run suivant, sans aucune action de l'équipe data** ; une
   règle qui change de fréquence change simplement de DAG. Les brouillons ne sont jamais exécutés. DAG de
   référence à adapter : `infra/airflow/fraud_rules_dags.py` (l'envoi au prestataire y reste à implémenter). Toutes les versions restent conservées dans la plateforme : comparatif
@@ -298,7 +298,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   **restauration** d'une version antérieure, recopiée dans un brouillon à tester puis soumettre.
 
   Pour chaque commande remontée, le DAG écrit une ligne dans `rule_alerts`. Chaque règle renvoie ses
-  propres colonnes ; seule `order_id` est obligatoire (vérifiée à la soumission) et sert aux indicateurs.
+  propres colonnes ; seule `order_id` est obligatoire (vérifiée à la publication) et sert aux indicateurs.
   Le reste de la ligne va dans la colonne **`details`** (JSON, facultative), pour que l'équipe qui traite
   les alertes sache pourquoi la commande a été remontée. Exemple d'écriture en une requête :
   ```sql
@@ -318,7 +318,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   une nouvelle version (risque R3 : le motif n'est pas tracé). L'état des runs est recopié par
   `POST /internal/sync-runs`, à appeler périodiquement (Cloud Scheduler, toutes les heures par exemple).
 - **Contraintes SQL** : seul le DML/DDL bloque l'enregistrement d'un brouillon. Pour tester, il faut une requête
-  valide pour BigQuery exposant `order_id` ; soumettre exige un test réussi. Les dates en
+  valide pour BigQuery exposant `order_id` ; publier exige un test réussi. Les dates en
   dur ne sont qu'une alerte : légitimes comme seuil fixe (`created_at >= '2024-01-01'`), à éviter comme jour
   traité (`order_date = '2026-10-27'` relirait ce jour à chaque exécution).
 - **Paramètres (écart au PRD F2)** : aucun. La requête s'exécute telle quelle, au test comme en production :

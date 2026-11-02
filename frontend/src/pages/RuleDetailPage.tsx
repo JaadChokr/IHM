@@ -94,8 +94,8 @@ export function RuleDetailPage() {
       <div className="stack" style={{ marginBottom: 16 }}>
         {flash === 'draftDeleted' && <Alert kind="success" title="Brouillon supprimé." />}
         {flash === 'submitted' && (
-          <Alert kind="success" title={`v${r.version} soumise à l'équipe data.`}>
-            Airflow l'exécutera au prochain run du DAG {SCHEDULE_LABEL[r.schedule].toLowerCase()}, d'abord en observation :
+          <Alert kind="success" title={`v${r.version} publiée.`}>
+            Airflow l'exécutera au prochain run du DAG {{ DAILY: 'quotidien', HOURLY: 'horaire', WEEKLY: 'hebdomadaire' }[r.schedule]}, d'abord en observation :
             ses commandes ne seront envoyées au prestataire qu'après votre décision. Vous pouvez encore la modifier tant qu'Airflow
             ne l'a pas exécutée : elle redeviendra alors votre brouillon.
           </Alert>
@@ -115,7 +115,7 @@ export function RuleDetailPage() {
         )}
         {r.productionVersion && (
           <Alert kind="info" title={`La v${r.productionVersion} est encore exécutée par Airflow.`}>
-            La v{r.version}, soumise, la remplacera au prochain run, en observation : l'envoi au prestataire est suspendu jusqu'à votre
+            La v{r.version}, publiée, la remplacera au prochain run, en observation : l'envoi au prestataire est suspendu jusqu'à votre
             décision sur la v{r.version}.
           </Alert>
         )}
@@ -162,7 +162,7 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
           <dd className="mono small">{r.ruleId}</dd>
           <dt>Créée le</dt>
           <dd>{fmtDateTime(r.createdAt)}</dd>
-          <dt>Soumise le</dt>
+          <dt>Publiée le</dt>
           <dd>
             {fmtDateTime(r.submittedAt)} par {r.submittedByName}
           </dd>
@@ -182,7 +182,7 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
         <div className="card-head">
           <div>
             <h2 id="rule-test-title">Requête SQL</h2>
-            <p>v{r.version} telle que soumise ; le test l'exécute sans rien modifier.</p>
+            <p>v{r.version} telle que publiée ; le test l'exécute sans rien modifier.</p>
           </div>
         </div>
         <div className="card-pad stack">
@@ -291,7 +291,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                 <th>Version</th>
                 <th>Statut</th>
                 <th>Créée le</th>
-                <th>Soumise</th>
+                <th>Publiée</th>
                 <th>DAG</th>
                 <th>
                   <span className="sr-only">Actions</span>
@@ -349,9 +349,9 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
           {r.myDraftId
             ? `Le contenu de la v${confirming} remplace celui de votre brouillon en cours.`
             : r.canWithdraw
-              ? `Votre soumission de la v${r.version} est retirée (Airflow ne l'a jamais exécutée) et redevient votre brouillon, avec le contenu de la v${confirming}.`
-              : `Un brouillon personnel est créé avec le contenu de la v${confirming}. La v${r.version} reste en place jusqu'à sa soumission.`}{' '}
-          Il faudra ensuite le tester et le soumettre.
+              ? `Votre publication de la v${r.version} est retirée (Airflow ne l'a jamais exécutée) et redevient votre brouillon, avec le contenu de la v${confirming}.`
+              : `Un brouillon personnel est créé avec le contenu de la v${confirming}. La v${r.version} reste en place jusqu'à sa publication.`}{' '}
+          Il faudra ensuite le tester et le publier.
         </Alert>
       )}
       {restoreError && <Alert kind="error" title={restoreError} />}
@@ -525,7 +525,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
   );
 }
 
-/** Mode démo uniquement : simule les écritures que l'équipe data fait en base. */
+/** Mode démo uniquement : simule ce qu'Airflow écrit dans rule_runs. */
 function DemoPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) => void }) {
   const [err, setErr] = useState<string>();
   const waiting = r.versions.some((v) => v.status === 'SUBMITTED');

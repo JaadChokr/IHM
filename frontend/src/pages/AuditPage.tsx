@@ -14,8 +14,8 @@ export const ACTION_LABEL: Record<AuditAction, string> = {
   RULE_UPDATE: 'Modification',
   RULE_NEW_VERSION: 'Nouvelle version',
   RULE_TEST: 'Test',
-  RULE_SUBMIT: 'Soumission',
-  RULE_WITHDRAW: 'Soumission retirée',
+  RULE_SUBMIT: 'Publication',
+  RULE_WITHDRAW: 'Publication retirée',
   RULE_SEND_TO_PROVIDER: 'Envoi au prestataire',
   RULE_SUSPEND_SENDING: 'Envoi suspendu',
   RULE_DISCARD: 'Version écartée',
@@ -77,7 +77,7 @@ export function AuditPage() {
       <div className="page-head">
         <div>
           <h1>Journal d'audit</h1>
-          <p>Qui a créé, modifié, testé ou soumis quoi, et quand. Immuable, conservé 24 mois.</p>
+          <p>Qui a créé, modifié, testé ou publié quoi, et quand. Immuable, conservé 24 mois.</p>
         </div>
       </div>
       <div className="stack">

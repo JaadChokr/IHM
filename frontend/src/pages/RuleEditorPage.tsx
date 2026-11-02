@@ -43,8 +43,8 @@ interface StoredDraft {
 /**
  * Éditeur = espace de travail du brouillon personnel (visible de son seul auteur).
  *  - /rules/new             nouvelle règle (le brouillon est créé au premier enregistrement) ;
- *  - /rules/:ruleId/edit    nouvelle version d'une règle, ou reprise d'une soumission jamais exécutée ;
- *  - /drafts/:draftId       brouillon existant : enregistrer, tester, soumettre ou supprimer.
+ *  - /rules/:ruleId/edit    nouvelle version d'une règle, ou reprise d'une publication jamais exécutée ;
+ *  - /drafts/:draftId       brouillon existant : enregistrer, tester, publier ou supprimer.
  */
 export function RuleEditorPage() {
   const { ruleId, draftId } = useParams();
@@ -164,7 +164,7 @@ export function RuleEditorPage() {
   usePageTitle(draft || rule || !(ruleId || draftId) ? heading : undefined);
   const canSubmit = formValid && execHash === hash && !paramIssues.some((i) => i.severity === 'error');
   const submitHint = 'Une exécution de test réussie sur la requête actuelle est requise';
-  // Un collègue a soumis une version depuis que ce brouillon a été commencé.
+  // Un collègue a publié une version depuis que ce brouillon a été commencé.
   const behind = draft && draft.latestVersion !== undefined && draft.latestVersion !== draft.baseVersion;
 
   async function persist(): Promise<Draft> {
@@ -239,8 +239,8 @@ export function RuleEditorPage() {
               ? draft.newRule
                 ? 'Nouvelle règle, '
                 : `Nouvelle version de la règle (préparée à partir de la v${draft.baseVersion ?? draft.latestVersion}), `
-              : 'Décrivez la règle, écrivez la requête, testez-la, puis soumettez-la. Brouillon '}
-            visible de vous seul jusqu'à sa soumission.
+              : 'Décrivez la règle, écrivez la requête, testez-la, puis publiez-la. Brouillon '}
+            visible de vous seul jusqu'à sa publication.
           </p>
         </div>
         <div className="row">
@@ -259,7 +259,7 @@ export function RuleEditorPage() {
             onClick={() => save(undefined, true)}
           >
             {saving === 'submit' && <span className="spinner" aria-hidden="true" />}
-            Enregistrer et soumettre
+            Enregistrer et publier
           </button>
         </div>
       </div>
@@ -267,20 +267,20 @@ export function RuleEditorPage() {
       <div className="stack">
         {flash === 'saved' && !dirty && <Alert kind="success" title="Brouillon enregistré. Vous seul le voyez ; reprenez-le quand vous voulez depuis « Mes brouillons »." />}
         {flash === 'withdrawn' && !dirty && (
-          <Alert kind="success" title="Soumission retirée : la version est redevenue votre brouillon.">
+          <Alert kind="success" title="Publication retirée : la version est redevenue votre brouillon.">
             La ligne de la règle dans <span className="mono">rules_registry</span> est revenue à la version précédente (Airflow ne peut plus prendre
-            celle-ci) et l'équipe data est prévenue. Testez-la puis soumettez-la à nouveau.
+            celle-ci). Testez-la puis publiez-la à nouveau.
           </Alert>
         )}
         {flash?.startsWith('restored:') && !dirty && (
           <Alert kind="success" title={`Contenu de la v${flash.split(':')[1]} repris dans votre brouillon.`}>
-            Testez-le puis soumettez-le : Airflow exécutera cette version dès le run suivant.
+            Testez-le puis publiez-le : Airflow exécutera cette version dès le run suivant.
           </Alert>
         )}
         {behind && (
-          <Alert kind="warn" title={`La v${draft.latestVersion} a été soumise depuis que vous avez commencé ce brouillon.`}>
+          <Alert kind="warn" title={`La v${draft.latestVersion} a été publiée depuis que vous avez commencé ce brouillon.`}>
             Vous êtes parti{draft.baseVersion ? ` de la v${draft.baseVersion}` : ' d’une version précédente'} : vérifiez que ce brouillon tient compte des
-            changements de la <Link to={`/rules/${draft.ruleId}`}>v{draft.latestVersion}</Link>. À la soumission, il deviendra la v
+            changements de la <Link to={`/rules/${draft.ruleId}`}>v{draft.latestVersion}</Link>. À la publication, il deviendra la v
             {draft.latestVersion! + 1}.
           </Alert>
         )}
@@ -298,21 +298,21 @@ export function RuleEditorPage() {
           </Alert>
         )}
         {rule && withdraws && (
-          <Alert kind="info" title={`Vous avez soumis la v${rule.version}, qu'Airflow n'a pas encore exécutée : vous pouvez la reprendre.`}>
+          <Alert kind="info" title={`Vous avez publié la v${rule.version}, qu'Airflow n'a pas encore exécutée : vous pouvez la reprendre.`}>
             L'enregistrement ramène la ligne de la règle dans <span className="mono">rules_registry</span> à la version précédente (Airflow ne peut donc
-            plus prendre celle-ci), prévient l'équipe data et en refait votre brouillon personnel. Il faudra la retester puis la soumettre à nouveau ; elle gardera le numéro v{rule.version}.
+            plus prendre celle-ci) et en refait votre brouillon personnel. Il faudra la retester puis la publier à nouveau ; elle gardera le numéro v{rule.version}.
           </Alert>
         )}
         {rule && !withdraws && (
           <Alert kind="info" title={`Vous préparez une nouvelle version à partir de la v${rule.version} (« ${STATUS_LABEL[rule.status]} »).`}>
             La v{rule.version} reste inchangée
-            {rule.status === 'IN_PRODUCTION' || rule.status === 'INACTIVE' ? ' et continue de tourner' : ''} jusqu'à la soumission de votre brouillon,
+            {rule.status === 'IN_PRODUCTION' || rule.status === 'INACTIVE' ? ' et continue de tourner' : ''} jusqu'à la publication de votre brouillon,
             qui deviendra alors la v{rule.version + 1}. D'ici là, personne d'autre ne le voit.
           </Alert>
         )}
         {confirmDelete && draft && (
           <Alert kind="warn" title="Supprimer ce brouillon ?">
-            Son contenu sera perdu{draft.newRule ? '' : ` ; la règle et ses versions soumises ne changent pas`}.
+            Son contenu sera perdu{draft.newRule ? '' : ` ; la règle et ses versions publiées ne changent pas`}.
             <div className="row" style={{ marginTop: 8 }}>
               <button type="button" className="btn btn-sm btn-danger" onClick={remove} disabled={!!saving}>
                 {saving === 'delete' && <span className="spinner" aria-hidden="true" />}
@@ -464,12 +464,12 @@ export function RuleEditorPage() {
             Enregistrer le brouillon
           </button>
           <button type="button" className="btn btn-primary" disabled={!!saving || !canSubmit} onClick={() => save(undefined, true)}>
-            Enregistrer et soumettre
+            Enregistrer et publier
           </button>
         </div>
         {!canSubmit && (
           <p className="small muted" style={{ margin: 0, textAlign: 'right' }}>
-            La soumission exige tous les champs obligatoires et une exécution de test réussie sur la requête actuelle.
+            La publication exige tous les champs obligatoires et une exécution de test réussie sur la requête actuelle.
           </p>
         )}
       </div>

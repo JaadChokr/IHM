@@ -458,7 +458,7 @@ export function createMockApi(): Api {
           withdrawn = true;
           d.baseVersion = r.versions.length > 1 ? r.versions[r.versions.length - 2].version : undefined;
           d.createdAt = cur.createdAt;
-          audit(u, 'RULE_WITHDRAW', cur, 'Soumission retirée pour modification (équipe data prévenue)');
+          audit(u, 'RULE_WITHDRAW', cur, 'Publication retirée pour modification');
           for (const test of db.tests) {
             if (test.ruleId === r.ruleId && test.version === cur.version) {
               test.draftId = d.id;
@@ -597,7 +597,7 @@ export function createMockApi(): Api {
       }
       db.drafts = db.drafts.filter((x) => x !== d);
       const origin = v.version === 1 ? 'Nouvelle règle' : `Nouvelle version (préparée à partir de la v${d.baseVersion})`;
-      audit(u, 'RULE_SUBMIT', v, `${origin} — notification envoyée à l'équipe data (canal à arbitrer, PRD Q6)`);
+      audit(u, 'RULE_SUBMIT', v, origin);
       save();
       return detail(r, u);
     },
@@ -656,7 +656,7 @@ export function createMockApi(): Api {
         const u = currentUser();
         const r = findRule(id);
         const target = [...r.versions].reverse().find((v) => r.productionSince[v.version] === undefined && v.decision !== 'DISCARDED');
-        if (!target) throw new ApiError(409, 'Aucune version soumise en attente de mise en production.');
+        if (!target) throw new ApiError(409, 'Aucune version publiée en attente de son premier run.');
         const today = isoDate(new Date());
         // La version qui tournait s'arrête : Airflow exécute désormais la dernière version soumise.
         const prev = running(r);

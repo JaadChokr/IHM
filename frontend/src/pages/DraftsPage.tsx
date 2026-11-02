@@ -18,7 +18,7 @@ export function DraftsPage() {
       <div className="page-head">
         <div>
           <h1>Mes brouillons</h1>
-          <p>Votre travail en cours, visible de vous seul. Une règle n'apparaît dans le référentiel qu'une fois soumise.</p>
+          <p>Votre travail en cours, visible de vous seul. Une règle n'apparaît dans le référentiel qu'une fois publiée.</p>
         </div>
         <Link to="/rules/new" className="btn btn-primary">
           + Nouvelle règle
@@ -67,7 +67,7 @@ export function DraftsPage() {
                           <>
                             {draftKind(d)}
                             {d.latestVersion !== d.baseVersion && (
-                              <div style={{ color: 'var(--warn)' }}>⚠ v{d.latestVersion} soumise depuis</div>
+                              <div style={{ color: 'var(--warn)' }}>⚠ v{d.latestVersion} publiée depuis</div>
                             )}
                           </>
                         )}
@@ -78,7 +78,7 @@ export function DraftsPage() {
                       <td className="small">{fmtDateTime(d.updatedAt)}</td>
                       <td className="small nowrap">
                         {readyToSubmit(d) ? (
-                          <span style={{ color: 'var(--good)' }}>✓ Prêt à soumettre</span>
+                          <span style={{ color: 'var(--good)' }}>✓ Prêt à publier</span>
                         ) : !d.lastTest ? (
                           <span className="muted">Jamais testé</span>
                         ) : !d.lastTest.success ? (

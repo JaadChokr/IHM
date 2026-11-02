@@ -147,7 +147,7 @@ def create_draft(
             user,
             "RULE_WITHDRAW",
             withdrawn,
-            "Soumission retirée pour modification (équipe data prévenue)",
+            "Publication retirée pour modification",
         )
         # Les tests de la version retirée suivent le brouillon.
         db.execute(
@@ -248,7 +248,7 @@ def submit_draft(
     origin = (
         "Nouvelle règle" if number == 1 else f"Nouvelle version (préparée à partir de la v{d.base_version})"
     )
-    record_audit(db, user, "RULE_SUBMIT", v, f"{origin} — notification envoyée à l'équipe data")
+    record_audit(db, user, "RULE_SUBMIT", v, origin)
     db.delete(d)
     try:
         db.commit()

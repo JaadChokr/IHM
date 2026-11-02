@@ -80,7 +80,7 @@ export function OverviewPage() {
             <span className="kpi-value">{fmtInt(count('OBSERVATION'))}</span>
             <span className="kpi-sub">
               Exécutées par Airflow, décision d'envoi attendue
-              {count('SUBMITTED') > 0 && ` · ${count('SUBMITTED')} soumise${count('SUBMITTED') > 1 ? 's' : ''} en attente du premier run`}
+              {count('SUBMITTED') > 0 && ` · ${count('SUBMITTED')} publiée${count('SUBMITTED') > 1 ? 's' : ''} en attente du premier run`}
             </span>
           </button>
           <Link to="/production" className="card kpi kpi-link">
@@ -93,7 +93,7 @@ export function OverviewPage() {
             <span className="kpi-label">Mes brouillons</span>
             <span className="kpi-value">{drafts.data ? fmtInt(myDrafts.length) : '…'}</span>
             <span className="kpi-sub">
-              Visibles de vous seul · dont {myReady.length} prêt{myReady.length > 1 ? 's' : ''} à soumettre
+              Visibles de vous seul · dont {myReady.length} prêt{myReady.length > 1 ? 's' : ''} à publier
             </span>
           </Link>
         </div>
@@ -186,7 +186,7 @@ export function OverviewPage() {
                     </Link>
                     {readyToSubmit(r) ? (
                       <span className="small" style={{ color: 'var(--good)' }}>
-                        ✓ Testée, prête à soumettre
+                        ✓ Testée, prête à publier
                       </span>
                     ) : (
                       <span className="small muted">{r.lastTest ? 'Test à refaire sur la requête actuelle' : 'Jamais testée'}</span>
