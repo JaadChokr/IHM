@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from airflow.decorators import dag, task
 from airflow.exceptions import AirflowException
 from airflow.models import Variable
+from airflow.operators.empty import EmptyOperator
 from airflow.operators.python import get_current_context
 from google.cloud import bigquery
 
@@ -66,6 +67,11 @@ def make_dag(frequency: str, cron: str):
         tags=["fraud-rules"],
     )
     def fraud_rules():
+        # Bornes du DAG. « end » : none_failed, pour aboutir aussi quand il n'y a aucune règle (tâches
+        # sautées) tout en restant en échec si une règle échoue, ce qui met le run en échec dans Airflow.
+        start = EmptyOperator(task_id="start")
+        end = EmptyOperator(task_id="end", trigger_rule="none_failed")
+
         @task
         def rules_due() -> list[dict]:
             """Règles de cette fréquence : une ligne par règle, sa dernière version non écartée."""
@@ -139,7 +145,9 @@ def make_dag(frequency: str, cron: str):
                     error=("STRING", error),
                 )
 
-        run_rule.expand(rule=rules_due())
+        due = rules_due()
+        start >> due
+        run_rule.expand(rule=due) >> end
 
     return fraud_rules()
 
