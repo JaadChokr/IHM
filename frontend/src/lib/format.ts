@@ -3,17 +3,21 @@ import type { Criticality, DisplayStatus, Schedule } from '../api/types';
 export const STATUS_LABEL: Record<DisplayStatus, string> = {
   DRAFT: 'Brouillon',
   SUBMITTED: 'Soumise',
+  OBSERVATION: 'En observation',
   IN_PRODUCTION: 'En production',
   INACTIVE: 'Inactive',
   REPLACED: 'Remplacée',
+  DISCARDED: 'Écartée',
 };
 
 export const STATUS_HELP: Record<DisplayStatus, string> = {
   DRAFT: 'En cours de rédaction, visible de vous seul',
   SUBMITTED: "Soumise : exécutée par Airflow dès le prochain run (ou dès que l'équipe data a créé le DAG)",
-  IN_PRODUCTION: 'Exécutée par Airflow',
+  OBSERVATION: "Exécutée par Airflow sans envoi au prestataire, en attendant la décision de l'envoyer",
+  IN_PRODUCTION: 'Exécutée par Airflow, commandes envoyées au prestataire',
   INACTIVE: 'Plus aucune exécution Airflow depuis 3 périodes',
   REPLACED: 'Remplacée par une version plus récente',
+  DISCARDED: "Écartée après observation : Airflow ne l'exécute plus",
 };
 
 export const CRITICALITY_LABEL: Record<Criticality, string> = {

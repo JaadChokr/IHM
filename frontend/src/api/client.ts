@@ -2,6 +2,7 @@ import type {
   AuditEvent,
   Draft,
   ConsolidatedRow,
+  DecisionAction,
   DryRunResult,
   ExecutionResult,
   Guardrails,
@@ -32,6 +33,8 @@ export interface Api {
   // F1 / F5
   listRules(filters: RuleFilters): Promise<RuleSummary[]>;
   getRule(ruleId: string): Promise<RuleDetail>;
+  /** Après observation : envoyer au prestataire, suspendre l'envoi, ou écarter la dernière version. */
+  decide(ruleId: string, action: DecisionAction): Promise<RuleDetail>;
   checkNameAvailable(name: string, excludeRuleId?: string): Promise<boolean>;
 
   // Brouillons personnels (visibles de leur seul auteur)
@@ -107,6 +110,7 @@ export function createHttpApi(): Api {
     listUsers: () => http('GET', '/users'),
     listRules: (f) => http('GET', `/rules${qs({ ...f })}`),
     getRule: (id) => http('GET', `/rules/${id}`),
+    decide: (id, action) => http('POST', `/rules/${id}/decision`, { action }),
     checkNameAvailable: async (name, excludeRuleId) =>
       (await http<{ available: boolean }>('GET', `/rules/name-available${qs({ name, exclude: excludeRuleId })}`)).available,
     listDrafts: () => http('GET', '/drafts'),

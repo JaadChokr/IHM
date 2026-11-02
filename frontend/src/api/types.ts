@@ -3,7 +3,11 @@
 // (PRD §5.4, règle 1), pas par un e-mail.
 
 /** Statuts d'une version de règle : toutes ont été soumises (les brouillons sont personnels, voir Draft). */
-export const RULE_STATUSES = ['SUBMITTED', 'IN_PRODUCTION', 'INACTIVE', 'REPLACED'] as const;
+/**
+ * Soumise → en observation (Airflow l'exécute, ses commandes ne partent pas chez le prestataire) →
+ * en production (l'analyste a décidé de l'envoyer au prestataire). Inactive, remplacée ou écartée sinon.
+ */
+export const RULE_STATUSES = ['SUBMITTED', 'OBSERVATION', 'IN_PRODUCTION', 'INACTIVE', 'REPLACED', 'DISCARDED'] as const;
 export type RuleStatus = (typeof RULE_STATUSES)[number];
 /** Statut affiché : celui d'une version, ou « brouillon » pour le travail en cours d'un analyste. */
 export type DisplayStatus = RuleStatus | 'DRAFT';
@@ -45,7 +49,14 @@ export interface RuleVersion extends RuleInput {
   airflowDagId?: string;
   firstRunAt?: string;
   lastRunAt?: string;
+  /** Décision de l'analyste après observation : envoyée au prestataire, ou écartée. */
+  decision?: 'SENT' | 'DISCARDED';
+  decidedAt?: string;
+  decidedByName?: string;
 }
+
+/** Action de l'analyste sur la dernière version d'une règle. */
+export type DecisionAction = 'send' | 'suspend' | 'discard';
 
 /** Ligne de la liste des règles : version courante (= la plus récente). */
 export interface RuleSummary extends RuleVersion {
@@ -227,7 +238,10 @@ export type AuditAction =
   | 'RULE_NEW_VERSION'
   | 'RULE_TEST'
   | 'RULE_SUBMIT'
-  | 'RULE_WITHDRAW';
+  | 'RULE_WITHDRAW'
+  | 'RULE_SEND_TO_PROVIDER'
+  | 'RULE_SUSPEND_SENDING'
+  | 'RULE_DISCARD';
 
 export interface AuditEvent {
   id: string;

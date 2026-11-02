@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
-import type { RuleDetail, RuleVersion, SqlIssue } from '../api/types';
+import type { DecisionAction, RuleDetail, RuleVersion, SqlIssue } from '../api/types';
 import { SqlEditor, type SqlEditorHandle } from '../components/SqlEditor';
 import { TestActions, TestResults, useQueryTest } from '../components/TestPanel';
 import { Breadcrumb } from '../components/Breadcrumb';
@@ -96,11 +96,13 @@ export function RuleDetailPage() {
         {flash === 'submitted' && (
           <Alert kind="success" title={`v${r.version} soumise à l'équipe data.`}>
             {r.versionCount > 1 || r.productionVersion
-              ? 'Airflow exécutera cette version dès le prochain run.'
-              : "L'équipe data est prévenue pour créer le DAG ; Airflow exécutera ensuite toujours la dernière version soumise."}{' '}
-            Vous pouvez encore la modifier tant qu'Airflow ne l'a pas exécutée : elle redeviendra alors votre brouillon.
+              ? 'Airflow l’exécutera dès le prochain run, en observation : '
+              : "L'équipe data est prévenue pour l'industrialiser dans Airflow, qui l'exécutera d'abord en observation : "}
+            ses commandes ne seront envoyées au prestataire qu'après votre décision. Vous pouvez encore la modifier tant qu'Airflow
+            ne l'a pas exécutée : elle redeviendra alors votre brouillon.
           </Alert>
         )}
+        <DecisionPanel r={r} onChange={rule.setData} />
         {r.myDraftId && !flash && (
           <Alert kind="info" title="Vous préparez une nouvelle version de cette règle.">
             Votre brouillon n'est visible que de vous.{' '}
@@ -109,13 +111,14 @@ export function RuleDetailPage() {
         )}
         {r.status === 'INACTIVE' && r.lastRunAt && (
           <Alert kind="warn" title={`Plus exécutée par Airflow depuis ${idleFor(r.lastRunAt)}`}>
-            Dernier run le {fmtDateTime(r.lastRunAt)}. Le DAG a été arrêté ou est en panne : vérifiez auprès de l'équipe data. Le statut
-            redeviendra « En production » dès que les runs reprendront.
+            Dernier run le {fmtDateTime(r.lastRunAt)}. Le DAG a été arrêté ou est en panne : vérifiez auprès de l'équipe data. La règle
+            reprendra son statut dès que les runs reprendront.
           </Alert>
         )}
         {r.productionVersion && (
-          <Alert kind="info" title={`La v${r.productionVersion} tourne en production.`}>
-            La v{r.version}, soumise, la remplacera au prochain run Airflow.
+          <Alert kind="info" title={`La v${r.productionVersion} est encore exécutée par Airflow.`}>
+            La v{r.version}, soumise, la remplacera au prochain run, en observation : l'envoi au prestataire est suspendu jusqu'à votre
+            décision sur la v{r.version}.
           </Alert>
         )}
       </div>
@@ -131,7 +134,7 @@ export function RuleDetailPage() {
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'definition' && <DefinitionTab r={r} onTested={rule.reload} />}
-        {tab === 'performance' && <PerformanceDashboard ruleId={r.ruleId} firstRunDate={firstRunDate} versionsRun={ran.length} />}
+        {tab === 'performance' && <PerformanceDashboard ruleId={r.ruleId} firstRunDate={firstRunDate} versionsRun={ran.length} observing={r.status === 'OBSERVATION'} />}
         {tab === 'tests' && <TestsTab r={r} hash={hash} />}
         {tab === 'versions' && (
           <VersionsTab
@@ -413,11 +416,122 @@ function RuleAudit({ ruleId }: { ruleId: string }) {
   );
 }
 
+/**
+ * Décision de l'analyste après observation : envoyer la version au prestataire, suspendre l'envoi, ou
+ * l'écarter. La plateforme met à jour rules_registry ; le DAG en tient compte au run suivant.
+ */
+function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) => void }) {
+  const [confirming, setConfirming] = useState<DecisionAction | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string>();
+  const decide = async (action: DecisionAction) => {
+    setBusy(true);
+    setErr(undefined);
+    try {
+      onChange(await api.decide(r.ruleId, action));
+      setConfirming(null);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const CONFIRM: Record<DecisionAction, { title: string; text: string; label: string; danger?: boolean }> = {
+    send: {
+      title: `Envoyer la v${r.version} au prestataire ?`,
+      text: 'Ses commandes lui seront transmises dès le prochain run Airflow.',
+      label: "Confirmer l'envoi",
+    },
+    suspend: {
+      title: `Suspendre l'envoi de la v${r.version} ?`,
+      text: "Airflow continue de l'exécuter, mais ses commandes ne sont plus transmises au prestataire.",
+      label: 'Suspendre',
+      danger: true,
+    },
+    discard: {
+      title: `Écarter la v${r.version} ?`,
+      text:
+        r.versionCount > 1
+          ? "Airflow ne l'exécutera plus ; la version précédente reprend sa place (et son envoi au prestataire, si elle était envoyée)."
+          : "Airflow ne l'exécutera plus. Vous pourrez toujours en créer une nouvelle version.",
+      label: 'Écarter',
+      danger: true,
+    },
+  };
+
+  let panel: ReactNode = null;
+  if (r.status === 'OBSERVATION') {
+    panel = (
+      <div className="decision-card observing">
+        <div>
+          <strong>En observation{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}</strong>
+          <p>
+            Airflow exécute la v{r.version} mais ses commandes ne sont pas envoyées au prestataire. Consultez l'onglet Performance, puis
+            décidez.
+          </p>
+        </div>
+        <div className="decision-actions">
+          <button type="button" className="btn" onClick={() => setConfirming('discard')} disabled={busy}>
+            Écarter
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => setConfirming('send')} disabled={busy}>
+            Envoyer au prestataire
+          </button>
+        </div>
+      </div>
+    );
+  } else if (r.decision === 'SENT' && (r.status === 'IN_PRODUCTION' || r.status === 'INACTIVE')) {
+    panel = (
+      <div className="decision-card sent">
+        <span>
+          ✓ Envoyée au prestataire
+          {r.decidedAt && ` depuis le ${fmtDateTime(r.decidedAt)}`}
+          {r.decidedByName && ` (décision de ${r.decidedByName})`}
+        </span>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => setConfirming('suspend')} disabled={busy}>
+          Suspendre l'envoi
+        </button>
+      </div>
+    );
+  } else if (r.status === 'DISCARDED') {
+    panel = (
+      <div className="decision-card">
+        <span>
+          Écartée{r.decidedAt && ` le ${fmtDateTime(r.decidedAt)}`}
+          {r.decidedByName && ` par ${r.decidedByName}`} : Airflow ne l'exécute plus.
+        </span>
+      </div>
+    );
+  }
+  if (!panel) return null;
+  const c = confirming ? CONFIRM[confirming] : null;
+  return (
+    <>
+      {panel}
+      {c && confirming && (
+        <Alert kind={c.danger ? 'warn' : 'info'} title={c.title}>
+          {c.text}
+          <div className="row" style={{ marginTop: 8 }}>
+            <button type="button" className={`btn btn-sm ${c.danger ? 'btn-danger' : 'btn-primary'}`} onClick={() => decide(confirming)} disabled={busy}>
+              {busy && <span className="spinner" aria-hidden="true" />}
+              {c.label}
+            </button>
+            <button type="button" className="btn btn-sm btn-ghost" onClick={() => setConfirming(null)} disabled={busy}>
+              Annuler
+            </button>
+          </div>
+        </Alert>
+      )}
+      {err && <Alert kind="error" title={err} />}
+    </>
+  );
+}
+
 /** Mode démo uniquement : simule les écritures que l'équipe data fait en base. */
 function DemoPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) => void }) {
   const [err, setErr] = useState<string>();
   const waiting = r.versions.some((v) => v.status === 'SUBMITTED');
-  const running = r.versions.find((v) => v.status === 'IN_PRODUCTION');
+  const running = r.versions.find((v) => v.status === 'IN_PRODUCTION' || v.status === 'OBSERVATION');
   const act = async (fn: (id: string) => Promise<RuleDetail>) => {
     setErr(undefined);
     try {
@@ -432,7 +546,8 @@ function DemoPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) =
         <strong>Simulation Airflow</strong>{' '}
         <span className="small muted">
           — mode démo uniquement. En réel, la plateforme lit les exécutions dans <span className="mono">rule_runs</span> : une version
-          qui tourne passe « En production », une version qui ne tourne plus depuis 3 périodes passe « Inactive ».
+          qui tourne passe « En observation » (puis « En production » une fois envoyée au prestataire), une version qui ne tourne plus
+          depuis 3 périodes passe « Inactive ».
         </span>
       </div>
       <div className="row">

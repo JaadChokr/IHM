@@ -71,14 +71,17 @@ export function OverviewPage() {
             <span className="kpi-label">En production</span>
             <span className="kpi-value">{fmtInt(count('IN_PRODUCTION'))}</span>
             <span className="kpi-sub">
-              Règles exécutées par Airflow
+              Envoyées au prestataire
               {count('INACTIVE') > 0 && ` · ${count('INACTIVE')} inactive${count('INACTIVE') > 1 ? 's' : ''} en plus`}
             </span>
           </button>
-          <button type="button" className="card kpi kpi-link" onClick={() => openList({ status: 'SUBMITTED' })}>
-            <span className="kpi-label">Soumises</span>
-            <span className="kpi-value">{fmtInt(count('SUBMITTED'))}</span>
-            <span className="kpi-sub">En attente de leur premier run Airflow</span>
+          <button type="button" className="card kpi kpi-link" onClick={() => openList({ status: 'OBSERVATION' })}>
+            <span className="kpi-label">En observation</span>
+            <span className="kpi-value">{fmtInt(count('OBSERVATION'))}</span>
+            <span className="kpi-sub">
+              Exécutées par Airflow, décision d'envoi attendue
+              {count('SUBMITTED') > 0 && ` · ${count('SUBMITTED')} soumise${count('SUBMITTED') > 1 ? 's' : ''} en attente du premier run`}
+            </span>
           </button>
           <Link to="/production" className="card kpi kpi-link">
             <span className="kpi-label">À surveiller</span>
@@ -111,7 +114,7 @@ export function OverviewPage() {
               ) : health.length === 0 ? (
                 <div className="empty">Aucune règle en production.</div>
               ) : (
-                <PrecisionBars rows={health} threshold={threshold} />
+                <PrecisionBars rows={health.filter((h) => h.status !== 'OBSERVATION')} threshold={threshold} />
               )}
             </div>
             <CardFoot to="/production">Voir la vue production</CardFoot>

@@ -48,7 +48,7 @@ export function ProductionPage() {
       <div className="page-head">
         <div>
           <h1>Règles en production</h1>
-          <p>Toutes les règles exécutées par Airflow, y compris celles devenues inactives, sur les 30 derniers jours.</p>
+          <p>Toutes les règles exécutées par Airflow sur les 30 derniers jours : envoyées au prestataire, en observation ou devenues inactives.</p>
         </div>
       </div>
       <div className="stack">
@@ -106,7 +106,7 @@ export function ProductionPage() {
                           <Link to={`/rules/${r.ruleId}`} className="rule-link">
                             {r.name}
                           </Link>
-                          {r.status === 'INACTIVE' && <StatusBadge status="INACTIVE" lastRunAt={r.lastRunAt} />}
+                          {(r.status === 'INACTIVE' || r.status === 'OBSERVATION') && <StatusBadge status={r.status} lastRunAt={r.lastRunAt} />}
                         </div>
                         <div className="small muted">
                           v{r.version} · {r.fraudTypology} · {r.ownerName}

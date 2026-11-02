@@ -249,12 +249,25 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   **Une ligne par règle**, mise à jour à chaque soumission (MERGE sur `rule_id`) : l'historique des versions vit
   dans `rule_versions`, côté plateforme. Si vous choisissez
   une vue fédérée `EXTERNAL_QUERY`, cette synchronisation devient inutile.
-- **Cycle de vie (écart au PRD F5 et §4.2)** : l'équipe data n'agit pas sur la plateforme. Seuls les gestes de
-  l'analyste sont stockés (brouillon, soumission) ; le reste se **déduit des exécutions Airflow** dans `rule_runs` :
-  - *En production* : la version tourne (Airflow écrit `airflow_dag_id` dans `rule_runs`) ;
+- **Cycle de vie (écart au PRD F5 et §4.2)** : l'équipe data n'agit pas sur la plateforme. Les gestes de
+  l'analyste sont stockés (brouillon, soumission, décision d'envoi) ; l'exécution se **déduit des runs Airflow**
+  dans `rule_runs` :
+  - *Soumise* : écrite dans `rules_registry`, pas encore exécutée (l'équipe data industrialise le DAG) ;
+  - *En observation* : Airflow l'exécute et écrit ses commandes dans `rule_alerts`, **sans les envoyer au
+    prestataire** (`send_to_provider = false`). On mesure son volume et son recoupement avec les autres règles ;
+    la précision n'est pas représentative, le prestataire ne traitant que les commandes aussi remontées par une
+    règle envoyée. L'observation n'a pas d'échéance ;
+  - *En production* : l'analyste a cliqué « Envoyer au prestataire » ; `send_to_provider` passe à vrai et le DAG
+    transmet ses commandes dès le run suivant. « Suspendre l'envoi » la ramène en observation ;
+  - *Écartée* : l'analyste a décidé de ne pas l'envoyer ; elle sort de `rules_registry` et la version
+    précédente reprend sa place (avec son envoi, si elle était envoyée) ;
   - *Inactive depuis X* : plus de run depuis 3 périodes (3 h, 3 jours ou 3 semaines selon la fréquence) ;
-    le statut redevient « En production » dès que les runs reprennent ;
   - *Remplacée* : une version plus récente a été soumise ou tourne à sa place.
+
+  Une nouvelle version d'une règle envoyée la **remplace en observation** : l'envoi au prestataire est
+  suspendu jusqu'à la décision sur la nouvelle version. Les décisions sont tracées dans le journal d'audit
+  (`RULE_SEND_TO_PROVIDER`, `RULE_SUSPEND_SENDING`, `RULE_DISCARD`) et notifiées à l'équipe data. Une table
+  `rules_registry` existante reçoit la colonne par `infra/bigquery/07_rules_registry_send.sql`.
 
   **Brouillons personnels** : un brouillon est la sauvegarde de travail d'un analyste, stocké comme son profil
   dans la base de la plateforme (table `drafts`, rattachée à son matricule) et **visible de lui seul** : ni les

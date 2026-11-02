@@ -35,7 +35,7 @@ export interface MockDb {
   audit: AuditEvent[];
 }
 
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 const daysAgo = (n: number, h = 10) => {
   const d = new Date();
@@ -300,7 +300,7 @@ export function buildSeed(): MockDb {
   const r4v2 = v({ ...R4, sql: R4_V2_SQL }, 2, 43, { airflowDagId: 'fraud_rule_changement_email' });
   const r5v1 = v(R5, 1, 70, { airflowDagId: 'fraud_rule_promo_comptes_lies' });
   const r5v2 = v({ ...R5, sql: R5_V2_SQL }, 2, 6, { submittedAt: daysAgo(5) });
-  const r6v1 = v(R6, 1, 12, { submittedAt: daysAgo(11) });
+  const r6v1 = v(R6, 1, 12, { submittedAt: daysAgo(11), airflowDagId: 'fraud_rule_bin_etranger' });
   const r7v1 = v(R7, 1, 20, { submittedAt: daysAgo(19) });
   // Brouillons personnels de Camille Martin : une nouvelle version de R3, une nouvelle règle.
   const drafts: MockDraft[] = [
@@ -350,9 +350,25 @@ export function buildSeed(): MockDb {
       productionUntil: {},
       profile: { dailyVolume: 3, processingRate: 0.85, precision: 0.52 },
     },
-    { ruleId: R6.id, versions: [r6v1], productionSince: {}, productionUntil: {} },
+    {
+      // En observation depuis 9 jours : exécutée par Airflow, rien n'est envoyé au prestataire.
+      ruleId: R6.id,
+      versions: [r6v1],
+      productionSince: { 1: daysAgo(9).slice(0, 10) },
+      productionUntil: {},
+      profile: { dailyVolume: 18, processingRate: 0.85, precision: 0.41 },
+    },
     { ruleId: R7.id, versions: [r7v1], productionSince: {}, productionUntil: {} },
   ];
+
+  // Les versions qui ont tourné ont été envoyées au prestataire, sauf R6 (en observation).
+  for (const rule of rules) {
+    if (rule.ruleId === R6.id) continue;
+    for (const ver of rule.versions) {
+      const since = rule.productionSince[ver.version];
+      if (since) Object.assign(ver, { decision: 'SENT', decidedAt: `${since}T09:00:00.000Z`, decidedByName: ver.submittedByName });
+    }
+  }
 
   const tests: TestRecord[] = [
     passedTest(r1v1, 161, '104233', 0),
@@ -388,6 +404,7 @@ export function buildSeed(): MockDb {
   for (const rule of rules) {
     for (const ver of rule.versions) {
       ev(ver.submittedAt, ver.submittedBy, 'RULE_SUBMIT', ver, ver.version === 1 ? 'Nouvelle règle' : 'Nouvelle version');
+      if (ver.decision === 'SENT') ev(ver.decidedAt!, ver.submittedBy, 'RULE_SEND_TO_PROVIDER', ver, 'Envoi au prestataire décidé');
     }
   }
   for (const t of tests) {

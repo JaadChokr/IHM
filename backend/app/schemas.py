@@ -7,8 +7,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
 
 # Statut d'une version de règle (toujours soumise : les brouillons sont à part, voir DraftOut).
-# SUBMITTED : geste de l'analyste. Les autres sont déduits des exécutions Airflow.
-RuleStatus = Literal["SUBMITTED", "IN_PRODUCTION", "INACTIVE", "REPLACED"]
+# Soumise → en observation (Airflow l'exécute, rien n'est envoyé au prestataire) → en production
+# (envoyée au prestataire) ; inactive, remplacée ou écartée sinon.
+RuleStatus = Literal["SUBMITTED", "OBSERVATION", "IN_PRODUCTION", "INACTIVE", "REPLACED", "DISCARDED"]
+Decision = Literal["SENT", "DISCARDED"]
 Criticality = Literal["HIGH", "MEDIUM", "LOW"]
 Schedule = Literal["DAILY", "HOURLY", "WEEKLY"]
 
@@ -74,6 +76,9 @@ class RuleVersionOut(RuleInput):
     created_at: datetime
     updated_at: datetime
     submitted_at: datetime
+    decision: Decision | None = None
+    decided_at: datetime | None = None
+    decided_by_name: str | None = None
     airflow_dag_id: str | None = None
     first_run_at: datetime | None = None
     last_run_at: datetime | None = None
@@ -91,6 +96,10 @@ class RuleDetail(RuleSummary):
     # Propres à l'utilisateur connecté.
     my_draft_id: str | None = None  # son brouillon de nouvelle version, s'il en a un
     can_withdraw: bool = False  # il a soumis la dernière version et Airflow ne l'a jamais exécutée
+
+
+class DecisionIn(Model):
+    action: Literal["send", "suspend", "discard"]
 
 
 class DraftIn(RuleInput):

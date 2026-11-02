@@ -134,19 +134,23 @@ export function createMockApi(): Api {
   }
 
   function deriveStatus(r: MockRule, v: RuleVersion): RuleVersion['status'] {
-    const newer = r.versions.filter((w) => w.version > v.version);
+    if (v.decision === 'DISCARDED') return 'DISCARDED';
+    // Une version écartée ne remplace rien : la précédente reprend sa place dans rules_registry.
+    const newer = r.versions.filter((w) => w.version > v.version && w.decision !== 'DISCARDED');
     if (newer.some((w) => r.productionSince[w.version] !== undefined)) return 'REPLACED';
     const run = withRuns(r, v);
     if (run.lastRunAt) {
       const idleDays = (Date.now() - new Date(run.lastRunAt).getTime()) / 86400000;
-      return idleDays > PERIOD_DAYS[v.schedule] * INACTIVE_AFTER_PERIODS ? 'INACTIVE' : 'IN_PRODUCTION';
+      if (idleDays > PERIOD_DAYS[v.schedule] * INACTIVE_AFTER_PERIODS) return 'INACTIVE';
+      return v.decision === 'SENT' ? 'IN_PRODUCTION' : 'OBSERVATION';
     }
     if (newer.length) return 'REPLACED'; // une version plus récente a été soumise avant que celle-ci ne tourne
     return 'SUBMITTED';
   }
 
   const view = (r: MockRule, v: RuleVersion): RuleVersion => ({ ...withRuns(r, v), status: deriveStatus(r, v) });
-  const running = (r: MockRule) => r.versions.find((v) => ['IN_PRODUCTION', 'INACTIVE'].includes(deriveStatus(r, v)));
+  const RUNNING: RuleVersion['status'][] = ['OBSERVATION', 'IN_PRODUCTION', 'INACTIVE'];
+  const running = (r: MockRule) => r.versions.find((v) => RUNNING.includes(deriveStatus(r, v)));
 
   function summary(r: MockRule): RuleSummary {
     const cur = current(r);
@@ -265,7 +269,11 @@ export function createMockApi(): Api {
       const weekly = dow === 0 || dow === 6 ? 1.3 : 1;
       const flagged = broken ? 0 : Math.round(p.dailyVolume * weekly * (0.55 + rnd(s + 'f') * 0.9));
       const latency = Math.min(1, age / LATENCY_DAYS);
-      const processed = Math.min(flagged, Math.round(flagged * p.processingRate * latency * (0.85 + rnd(s + 'p') * 0.3)));
+      // En observation, rien n'est envoyé au prestataire : seules les commandes aussi remontées par une
+      // règle envoyée sont traitées (environ un tiers).
+      const sent = r.versions.find((v) => v.version === version)?.decision === 'SENT';
+      const rate = p.processingRate * (sent ? 1 : 0.3);
+      const processed = Math.min(flagged, Math.round(flagged * rate * latency * (0.85 + rnd(s + 'p') * 0.3)));
       const confirmed = Math.min(processed, Math.round(processed * p.precision * (0.6 + rnd(s + 'c') * 0.8)));
       out.push({ date: d, ruleVersion: version, ordersFlagged: flagged, ordersProcessed: processed, ordersConfirmedFraud: confirmed });
     }
@@ -388,6 +396,37 @@ export function createMockApi(): Api {
     async getRule(id) {
       await delay();
       return detail(findRule(id), currentUser());
+    },
+
+    async decide(id, action) {
+      await delay();
+      const u = currentUser();
+      const r = findRule(id);
+      const cur = current(r);
+      const status = deriveStatus(r, cur);
+      const allowed: Record<typeof action, RuleVersion['status'][]> = {
+        send: ['OBSERVATION'],
+        suspend: ['IN_PRODUCTION', 'INACTIVE'],
+        discard: ['SUBMITTED', 'OBSERVATION', 'INACTIVE'],
+      };
+      if (!allowed[action].includes(status) || (action === 'discard' && cur.decision === 'SENT')) {
+        throw new ApiError(409, `Action impossible : la v${cur.version} est « ${status} ».`, 'BAD_STATUS');
+      }
+      cur.decision = action === 'send' ? 'SENT' : action === 'discard' ? 'DISCARDED' : undefined;
+      cur.decidedAt = now();
+      cur.decidedByName = fullName(u);
+      if (action === 'discard' && r.productionSince[cur.version] !== undefined && !r.productionUntil[cur.version]) {
+        // Airflow ne l'exécute plus (la ligne de rules_registry revient à la version précédente).
+        r.productionUntil[cur.version] = isoDate(new Date());
+      }
+      const label = {
+        send: 'Envoi au prestataire décidé',
+        suspend: 'Envoi au prestataire suspendu : retour en observation',
+        discard: "Version écartée : Airflow ne l'exécute plus",
+      }[action];
+      audit(u, action === 'send' ? 'RULE_SEND_TO_PROVIDER' : action === 'discard' ? 'RULE_DISCARD' : 'RULE_SUSPEND_SENDING', cur, label);
+      save();
+      return detail(r, u);
     },
 
     async listDrafts() {
@@ -616,7 +655,7 @@ export function createMockApi(): Api {
         await delay();
         const u = currentUser();
         const r = findRule(id);
-        const target = [...r.versions].reverse().find((v) => r.productionSince[v.version] === undefined);
+        const target = [...r.versions].reverse().find((v) => r.productionSince[v.version] === undefined && v.decision !== 'DISCARDED');
         if (!target) throw new ApiError(409, 'Aucune version soumise en attente de mise en production.');
         const today = isoDate(new Date());
         // La version qui tournait s'arrête : Airflow exécute désormais la dernière version soumise.

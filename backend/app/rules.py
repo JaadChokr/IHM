@@ -16,10 +16,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import get_current_user
-from app.bigquery import BigQueryGateway, QueryError
+from app.bigquery import BigQueryGateway, QueryError, get_bigquery
 from app.core import ApiError, as_utc, get_settings, now
-from app.database import Draft, Rule, RuleVersion, TestRun, User, get_db
+from app.database import Draft, Rule, RuleVersion, TestRun, User, get_db, record_audit
 from app.schemas import (
+    DecisionIn,
     NameAvailable,
     RuleDetail,
     RuleInput,
@@ -64,33 +65,47 @@ INACTIVE_AFTER_PERIODS = 3
 SCHEDULE_PERIOD = {"HOURLY": timedelta(hours=1), "DAILY": timedelta(days=1), "WEEKLY": timedelta(weeks=1)}
 
 
+RUNNING = ("OBSERVATION", "IN_PRODUCTION", "INACTIVE")
+
+
 def derive_status(rule: Rule, v: RuleVersion, at: datetime | None = None) -> str:
     """Statut affiché d'une version (toutes les versions stockées ont été soumises).
 
-    L'équipe data n'agit pas sur la plateforme : la mise en production se constate dans les
-    exécutions Airflow (`rule_runs`), recopiées dans first_run_at / last_run_at.
+    Cycle : soumise → en observation (Airflow l'exécute, rien n'est envoyé au prestataire) → en
+    production (l'analyste a décidé de l'envoyer) ou écartée. L'exécution se constate dans
+    `rule_runs` (first_run_at / last_run_at) ; la décision est un geste de l'analyste.
     """
-    newer = [w for w in rule.versions if w.version > v.version]
+    if v.decision == "DISCARDED":
+        return "DISCARDED"
+    # Une version écartée ne remplace rien : la précédente reprend sa place dans rules_registry.
+    newer = [w for w in rule.versions if w.version > v.version and w.decision != "DISCARDED"]
     if any(w.first_run_at for w in newer):
         return "REPLACED"  # une version plus récente tourne à sa place
     if v.first_run_at and v.last_run_at:
         idle = (at or now()) - as_utc(v.last_run_at)
         limit = SCHEDULE_PERIOD.get(v.schedule, timedelta(days=1)) * INACTIVE_AFTER_PERIODS
-        return "INACTIVE" if idle > limit else "IN_PRODUCTION"
+        if idle > limit:
+            return "INACTIVE"
+        return "IN_PRODUCTION" if v.decision == "SENT" else "OBSERVATION"
     if newer:
         return "REPLACED"  # une version plus récente a été soumise avant que celle-ci ne tourne
     return "SUBMITTED"
 
 
 def running_version(rule: Rule) -> RuleVersion | None:
-    """Version orchestrée par Airflow (en production ou inactive), s'il y en a une."""
-    return next((v for v in rule.versions if derive_status(rule, v) in ("IN_PRODUCTION", "INACTIVE")), None)
+    """Version exécutée par Airflow (en observation, en production ou inactive), s'il y en a une."""
+    return next((v for v in rule.versions if derive_status(rule, v) in RUNNING), None)
+
+
+def registry_version(rule: Rule) -> RuleVersion | None:
+    """Version portée par la ligne de la règle dans rules_registry : la dernière non écartée."""
+    return next((v for v in reversed(rule.versions) if v.decision != "DISCARDED"), None)
 
 
 def withdrawable(rule: Rule, user: User) -> bool:
     """L'utilisateur a soumis la dernière version et Airflow ne l'a jamais exécutée : il peut la reprendre."""
     cur = rule.versions[-1]
-    return cur.submitted_by == user.matricule and cur.first_run_at is None
+    return cur.submitted_by == user.matricule and cur.first_run_at is None and cur.decision is None
 
 
 def _version_out(v: RuleVersion, rule: Rule, users: dict[str, User]) -> RuleVersionOut:
@@ -111,6 +126,9 @@ def _version_out(v: RuleVersion, rule: Rule, users: dict[str, User]) -> RuleVers
         created_at=v.created_at,
         updated_at=v.updated_at,
         submitted_at=v.submitted_at,
+        decision=v.decision,  # type: ignore[arg-type]
+        decided_at=v.decided_at,
+        decided_by_name=_name(users, v.decided_by) if v.decided_by else None,
         airflow_dag_id=v.airflow_dag_id,
         first_run_at=v.first_run_at,
         last_run_at=v.last_run_at,
@@ -197,14 +215,16 @@ def validate(db: Session, bq: BigQueryGateway, data: RuleInput, rule_id: str | N
 
 
 def sync_registry(bq: BigQueryGateway, rule: Rule) -> None:
-    """Aligne la ligne de la règle dans `rules_registry` sur sa dernière version soumise.
+    """Aligne la ligne de la règle dans `rules_registry` sur sa dernière version non écartée.
 
-    Une ligne par règle, mise à jour à chaque soumission : c'est la requête qu'Airflow exécute au
-    run suivant. L'historique des versions reste dans `rule_versions` ; les brouillons n'y vont jamais.
+    Une ligne par règle : la requête qu'Airflow exécute au run suivant, et `send_to_provider`, qui dit
+    si ses commandes partent chez le prestataire (vrai seulement après la décision de l'analyste). Une
+    nouvelle version remplace donc la précédente en observation : l'envoi est suspendu jusqu'à décision.
+    L'historique reste dans `rule_versions` ; les brouillons n'y vont jamais.
     """
-    if rule.versions:
-        cur = rule.versions[-1]
-        bq.upsert_rule(rule, cur, derive_status(rule, cur))
+    v = registry_version(rule)
+    if v:
+        bq.upsert_rule(rule, v, derive_status(rule, v), send_to_provider=v.decision == "SENT")
     else:
         bq.delete_rule(rule.rule_id)
 
@@ -301,3 +321,43 @@ def get_rule(
     rule_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> RuleDetail:
     return detail(db, load_rule(db, rule_id), user)
+
+
+# --------------------------------------------------------------------------- décision après observation
+
+DECISIONS = {
+    # action : (statuts acceptés, décision posée, événement d'audit, notification équipe data)
+    "send": (("OBSERVATION",), "SENT", "RULE_SEND_TO_PROVIDER", "RULE_SENT_TO_PROVIDER"),
+    "suspend": (("IN_PRODUCTION", "INACTIVE"), None, "RULE_SUSPEND_SENDING", "RULE_SENDING_SUSPENDED"),
+    "discard": (("SUBMITTED", "OBSERVATION", "INACTIVE"), "DISCARDED", "RULE_DISCARD", "RULE_DISCARDED"),
+}
+DECISION_LABEL = {
+    "send": "Envoi au prestataire décidé",
+    "suspend": "Envoi au prestataire suspendu : retour en observation",
+    "discard": "Version écartée : Airflow ne l'exécute plus",
+}
+
+
+@router.post("/{rule_id}/decision", response_model=RuleDetail)
+def decide(
+    rule_id: str,
+    body: DecisionIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    bq: BigQueryGateway = Depends(get_bigquery),
+) -> RuleDetail:
+    """Décision de l'analyste sur la dernière version : l'envoyer au prestataire, suspendre l'envoi,
+    ou l'écarter. rules_registry est mis à jour ; le DAG en tient compte au run suivant."""
+    rule = load_rule(db, rule_id)
+    cur = rule.versions[-1]
+    allowed, decision, action, event = DECISIONS[body.action]
+    status = derive_status(rule, cur)
+    if status not in allowed or (body.action == "discard" and cur.decision == "SENT"):
+        raise ApiError(409, f"Action impossible : la v{cur.version} est « {status} ».", "BAD_STATUS")
+    cur.decision = decision
+    cur.decided_at, cur.decided_by = now(), user.matricule
+    record_audit(db, user, action, cur, DECISION_LABEL[body.action])
+    db.commit()
+    sync_registry(bq, rule)
+    notify_data_team(event, rule.rule_id, cur.version, cur.name, user.matricule)
+    return detail(db, rule, user)

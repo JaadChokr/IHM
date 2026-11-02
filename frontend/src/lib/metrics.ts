@@ -59,6 +59,8 @@ export function productionHealth(r: ConsolidatedRow, threshold: number): Product
   if (r.status === 'INACTIVE')
     reasons.push(`Plus exécutée par Airflow${r.lastRunAt ? ` depuis le ${fmtDate(r.lastRunAt)}` : ''} — DAG arrêté ou en panne`);
   if (r.ordersFlagged30d === 0) reasons.push('Aucune remontée sur 30 jours — règle probablement cassée');
-  if (precision !== null && precision < threshold) reasons.push(`Précision sous le seuil de ${fmtPct(threshold)}`);
+  // En observation, rien n'est envoyé au prestataire : la précision n'est pas significative.
+  if (r.status !== 'OBSERVATION' && precision !== null && precision < threshold)
+    reasons.push(`Précision sous le seuil de ${fmtPct(threshold)}`);
   return { ...r, processingRate, precision, lowSample, reasons };
 }

@@ -100,9 +100,10 @@ class BigQueryGateway(Protocol):
 
     def run_stats(self) -> list[RunStats]: ...
 
-    def upsert_rule(self, rule: Rule, v: RuleVersion, status: str) -> None:
+    def upsert_rule(self, rule: Rule, v: RuleVersion, status: str, send_to_provider: bool) -> None:
         """Écrit dans `rules_registry` la version à exécuter de la règle : une ligne par règle,
-        insérée à la première soumission puis mise à jour (UPDATE) à chaque nouvelle version."""
+        insérée à la première soumission puis mise à jour (UPDATE) à chaque nouvelle version ou décision.
+        `send_to_provider` : ses commandes partent-elles chez le prestataire (sinon observation) ?"""
         ...
 
     def delete_rule(self, rule_id: str) -> None:
@@ -286,7 +287,7 @@ class RealBigQueryGateway:
         sql = f"DELETE FROM {self.ds}.rules_registry WHERE rule_id = @rule_id"
         self.client.query(sql, job_config=cfg).result()
 
-    def upsert_rule(self, rule: Rule, v: RuleVersion, status: str) -> None:
+    def upsert_rule(self, rule: Rule, v: RuleVersion, status: str, send_to_provider: bool) -> None:
         P = self._bq.ScalarQueryParameter
         params = [
             P("rule_id", "STRING", v.rule_id),
@@ -298,6 +299,7 @@ class RealBigQueryGateway:
             P("schedule", "STRING", v.schedule),
             P("sql_query", "STRING", v.sql_query),
             P("status", "STRING", status),
+            P("send_to_provider", "BOOL", send_to_provider),
             P("owner_matricule", "STRING", rule.owner_matricule),
             P("created_at", "TIMESTAMP", rule.created_at),
             P("updated_at", "TIMESTAMP", v.updated_at),
@@ -311,12 +313,13 @@ class RealBigQueryGateway:
         WHEN MATCHED THEN UPDATE SET
           version = @version, name = @name, description = @description,
           fraud_typology = @fraud_typology, criticality = @criticality, schedule = @schedule,
-          sql_query = @sql_query, status = @status, updated_at = @updated_at
+          sql_query = @sql_query, status = @status, send_to_provider = @send_to_provider,
+          updated_at = @updated_at
         WHEN NOT MATCHED THEN INSERT
           (rule_id, version, name, description, fraud_typology, criticality, schedule, sql_query,
-           status, owner_matricule, created_at, updated_at)
+           status, send_to_provider, owner_matricule, created_at, updated_at)
         VALUES (@rule_id, @version, @name, @description, @fraud_typology, @criticality, @schedule,
-                @sql_query, @status, @owner_matricule, @created_at, @updated_at)
+                @sql_query, @status, @send_to_provider, @owner_matricule, @created_at, @updated_at)
         """
         self.client.query(sql, job_config=self._bq.QueryJobConfig(query_parameters=params)).result()
 
@@ -388,8 +391,8 @@ class FakeBigQueryGateway:
     next_dry_run: DryRunMeta | None = None
     next_error: QueryError | None = None
     performance: dict[str, list[DailyPerformance]] = field(default_factory=dict)
-    # Contenu simulé de rules_registry : rule_id → (version, statut).
-    registry: dict[str, tuple[int, str]] = field(default_factory=dict)
+    # Contenu simulé de rules_registry : rule_id → (version, statut, envoi au prestataire).
+    registry: dict[str, tuple[int, str, bool]] = field(default_factory=dict)
     stats: list[RunStats] = field(default_factory=list)
     overlap: list[tuple[str, int]] = field(default_factory=list)
 
@@ -455,9 +458,9 @@ class FakeBigQueryGateway:
     def run_stats(self):
         return list(self.stats)
 
-    def upsert_rule(self, rule, v, status):
-        log.info("rules_registry ← %s v%s (%s)", v.rule_id, v.version, status)
-        self.registry[v.rule_id] = (v.version, status)
+    def upsert_rule(self, rule, v, status, send_to_provider):
+        log.info("rules_registry ← %s v%s (%s, envoi=%s)", v.rule_id, v.version, status, send_to_provider)
+        self.registry[v.rule_id] = (v.version, status, send_to_provider)
 
     def delete_rule(self, rule_id):
         log.info("rules_registry ✕ %s", rule_id)

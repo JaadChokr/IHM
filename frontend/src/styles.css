@@ -522,6 +522,15 @@ table.data tr:last-child td {
   background: var(--info-soft);
   color: var(--info);
 }
+/* En observation : bleu, distinct de « inactive » (orange) et de « en production » (vert). */
+.st-OBSERVATION {
+  background: color-mix(in srgb, var(--version-2) 13%, transparent);
+  color: var(--version-2);
+}
+.st-DISCARDED {
+  background: var(--muted-soft);
+  color: var(--text-3);
+}
 .st-IN_PRODUCTION {
   background: var(--good-soft);
   color: var(--good);
@@ -1734,4 +1743,34 @@ details summary {
     border-left: none;
     padding-left: 0;
   }
+}
+
+/* Décision après observation (page d'une règle) */
+.decision-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-size: 13.5px;
+}
+.decision-card p {
+  margin: 2px 0 0;
+  color: var(--text-2);
+}
+.decision-card.observing {
+  border-left: 3px solid var(--version-2);
+}
+.decision-card.sent {
+  border-left: 3px solid var(--good);
+  padding: 8px 12px 8px 16px;
+}
+.decision-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
 }

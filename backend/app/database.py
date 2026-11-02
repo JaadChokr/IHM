@@ -112,6 +112,11 @@ class RuleVersion(Base):
     airflow_dag_id: Mapped[str | None] = mapped_column(String(200))
     first_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Décision de l'analyste après observation : SENT (envoyée au prestataire), DISCARDED (écartée),
+    # ou NULL (en observation : Airflow l'exécute, ses commandes ne partent pas chez le prestataire).
+    decision: Mapped[str | None] = mapped_column(String(10))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    decided_by: Mapped[str | None] = mapped_column(String(6))
 
     rule: Mapped[Rule] = relationship(back_populates="versions")
 

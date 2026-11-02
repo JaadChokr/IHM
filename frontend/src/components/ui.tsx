@@ -55,8 +55,8 @@ export function Alert({ kind, title, children }: { kind: AlertKind; title?: Reac
  * l'analyste ; la suite se constate dans les exécutions Airflow.
  */
 export function Lifecycle({ status, lastRunAt }: { status: DisplayStatus; lastRunAt?: string }) {
-  const main: DisplayStatus[] = ['DRAFT', 'SUBMITTED', 'IN_PRODUCTION'];
-  const branch = status === 'INACTIVE' || status === 'REPLACED' ? status : null;
+  const main: DisplayStatus[] = ['DRAFT', 'SUBMITTED', 'OBSERVATION', 'IN_PRODUCTION'];
+  const branch = status === 'INACTIVE' || status === 'REPLACED' || status === 'DISCARDED' ? status : null;
   return (
     <div className="lifecycle" aria-label={`Cycle de vie, statut actuel : ${STATUS_LABEL[status]}`}>
       {main.map((s, i) => (

@@ -24,9 +24,11 @@ interface Props {
   firstRunDate?: string;
   /** Nombre de versions qui ont tourné : à partir de 2, l'historique complet est affiché d'emblée pour les comparer. */
   versionsRun: number;
+  /** Version courante en observation : ses commandes ne sont pas envoyées au prestataire. */
+  observing?: boolean;
 }
 
-export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun }: Props) {
+export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observing }: Props) {
   const today = isoDate(new Date());
   const [preset, setPreset] = useState<Preset>(versionsRun > 1 ? 'all' : 30);
   const [custom, setCustom] = useState({ from: addDays(today, -59), to: today });
@@ -84,6 +86,12 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun }: Prop
 
   return (
     <div className="stack">
+      {observing && (
+        <Alert kind="info" title="En observation : ses commandes ne sont pas envoyées au prestataire.">
+          Le volume remonté est réel. Le taux de traitement et la précision ne portent que sur les commandes aussi remontées par une
+          règle envoyée au prestataire : ils ne sont pas représentatifs tant que la règle n'est pas envoyée.
+        </Alert>
+      )}
       <div className="row">
         <div className="seg" role="group" aria-label="Période">
           {([7, 30, 90] as const).map((p) => (
