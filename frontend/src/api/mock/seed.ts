@@ -35,7 +35,10 @@ export interface MockDb {
   audit: AuditEvent[];
 }
 
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
+
+/** Marqueur : la version a tourné ; v() le remplace par le DAG de sa fréquence. */
+const dag = 'dag';
 
 const daysAgo = (n: number, h = 10) => {
   const d = new Date();
@@ -96,6 +99,8 @@ function v(def: Def, version: number, created: number, extra: Partial<RuleVersio
     updatedAt: daysAgo(Math.max(0, created - 1)),
     submittedAt: daysAgo(Math.max(0, created - 1)),
     ...extra,
+    // Un DAG par fréquence : toutes les règles quotidiennes tournent dans fraud_rules_daily, etc.
+    ...(extra.airflowDagId ? { airflowDagId: `fraud_rules_${def.schedule.toLowerCase()}` } : {}),
   };
 }
 
@@ -290,17 +295,17 @@ function passedTest(r: RuleVersion, at: number, by: string, i: number): TestReco
 export function buildSeed(): MockDb {
   // Versions soumises : leur statut affiché se déduit des runs Airflow simulés.
   // Le DAG d'une règle ne change pas d'une version à l'autre : il lit la ligne de la règle dans rules_registry.
-  const r1v1 = v({ ...R1, sql: R1_V1_SQL }, 1, 160, { airflowDagId: 'fraud_rule_compte_recent' });
-  const r1v2 = v(R1, 2, 95, { airflowDagId: 'fraud_rule_compte_recent' });
-  const r1v3 = v({ ...R1, sql: R1_V3_SQL }, 3, 40, { airflowDagId: 'fraud_rule_compte_recent' });
-  const r2v1 = v(R2, 1, 120, { airflowDagId: 'fraud_rule_livraison_pays' });
-  const r2v2 = v({ ...R2, sql: R2_V2_SQL }, 2, 62, { airflowDagId: 'fraud_rule_livraison_pays' });
-  const r3v1 = v(R3, 1, 95, { submittedAt: daysAgo(94), airflowDagId: 'fraud_rule_tentatives_paiement' });
-  const r4v1 = v(R4, 1, 140, { airflowDagId: 'fraud_rule_changement_email' });
-  const r4v2 = v({ ...R4, sql: R4_V2_SQL }, 2, 43, { airflowDagId: 'fraud_rule_changement_email' });
-  const r5v1 = v(R5, 1, 70, { airflowDagId: 'fraud_rule_promo_comptes_lies' });
+  const r1v1 = v({ ...R1, sql: R1_V1_SQL }, 1, 160, { airflowDagId: dag });
+  const r1v2 = v(R1, 2, 95, { airflowDagId: dag });
+  const r1v3 = v({ ...R1, sql: R1_V3_SQL }, 3, 40, { airflowDagId: dag });
+  const r2v1 = v(R2, 1, 120, { airflowDagId: dag });
+  const r2v2 = v({ ...R2, sql: R2_V2_SQL }, 2, 62, { airflowDagId: dag });
+  const r3v1 = v(R3, 1, 95, { submittedAt: daysAgo(94), airflowDagId: dag });
+  const r4v1 = v(R4, 1, 140, { airflowDagId: dag });
+  const r4v2 = v({ ...R4, sql: R4_V2_SQL }, 2, 43, { airflowDagId: dag });
+  const r5v1 = v(R5, 1, 70, { airflowDagId: dag });
   const r5v2 = v({ ...R5, sql: R5_V2_SQL }, 2, 6, { submittedAt: daysAgo(5) });
-  const r6v1 = v(R6, 1, 12, { submittedAt: daysAgo(11), airflowDagId: 'fraud_rule_bin_etranger' });
+  const r6v1 = v(R6, 1, 12, { submittedAt: daysAgo(11), airflowDagId: dag });
   const r7v1 = v(R7, 1, 20, { submittedAt: daysAgo(19) });
   // Brouillons personnels de Camille Martin : une nouvelle version de R3, une nouvelle règle.
   const drafts: MockDraft[] = [

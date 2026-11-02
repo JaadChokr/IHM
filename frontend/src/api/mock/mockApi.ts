@@ -662,7 +662,7 @@ export function createMockApi(): Api {
         const prev = running(r);
         if (prev && prev.version !== target.version) r.productionUntil[prev.version] = addDays(today, -1);
         r.productionSince[target.version] = today;
-        target.airflowDagId = `fraud_rule_${target.ruleId.slice(0, 8)}_v${target.version}`;
+        target.airflowDagId = `fraud_rules_${target.schedule.toLowerCase()}`; // un DAG par fréquence
         r.profile ??= { dailyVolume: 10 + Math.round(rnd(id) * 40), processingRate: 0.75, precision: 0.2 + rnd(id + 'p') * 0.4 };
         save();
         return detail(r, u);

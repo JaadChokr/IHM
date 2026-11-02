@@ -25,6 +25,7 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   ├── migrations/      Alembic (PostgreSQL / Cloud SQL)
 │   └── tests/           pytest (SQLite en mémoire + BigQuery factice)
 ├── infra/
+│   ├── airflow/         DAG de référence : un DAG par fréquence, une tâche par règle
 │   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), v_rule_performance
 │   └── cloudbuild.yaml  build → Artifact Registry → Cloud Run (+ job de migration)
 ├── docker-compose.yml   environnement local complet (PostgreSQL + API + front)
@@ -252,7 +253,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - **Cycle de vie (écart au PRD F5 et §4.2)** : l'équipe data n'agit pas sur la plateforme. Les gestes de
   l'analyste sont stockés (brouillon, soumission, décision d'envoi) ; l'exécution se **déduit des runs Airflow**
   dans `rule_runs` :
-  - *Soumise* : écrite dans `rules_registry`, pas encore exécutée (l'équipe data industrialise le DAG) ;
+  - *Soumise* : écrite dans `rules_registry`, pas encore exécutée (elle le sera au prochain run du DAG de sa
+    fréquence) ;
   - *En observation* : Airflow l'exécute et écrit ses commandes dans `rule_alerts`, **sans les envoyer au
     prestataire** (`send_to_provider = false`). On mesure son volume et son recoupement avec les autres règles ;
     la précision n'est pas représentative, le prestataire ne traitant que les commandes aussi remontées par une
@@ -283,12 +285,15 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   (`RULE_SUBMISSION_WITHDRAWN`), puis elle doit être retestée et resoumise (même numéro). Dès qu'une version a
   tourné, elle est figée : toute modification passe par un brouillon de nouvelle version.
 
-  **Contrat côté Airflow, à valider avec l'équipe data** : le DAG ne recopie pas la requête, il l'exécute telle
-  qu'il la trouve dans `rules_registry`, sur la ligne de sa règle identifiée par son `rule_id` (le nom est
-  modifiable) : c'est toujours la **dernière version soumise**. Il écrit dans `rule_runs` la version
-  qu'il a exécutée (colonne `version` de la ligne lue) : c'est ce qui permet à la plateforme d'afficher quelle version tourne. Une nouvelle version soumise tourne donc dès le
-  run suivant, sans action de l'équipe data, qui n'intervient que pour créer le DAG d'une nouvelle règle. Les
-  brouillons ne sont jamais exécutés. Toutes les versions restent conservées dans la plateforme : comparatif
+  **Contrat côté Airflow, à valider avec l'équipe data** : **un DAG par fréquence** (`fraud_rules_hourly`,
+  `fraud_rules_daily`, `fraud_rules_weekly`). À chaque exécution, il lit dans `rules_registry` les règles de sa
+  fréquence (une ligne par règle : sa dernière version non écartée) et lance une tâche par règle (mappage
+  dynamique d'Airflow) : une règle en échec ne bloque pas les autres et se relance seule. La requête est
+  exécutée telle quelle, sans être recopiée. Le DAG écrit dans `rule_runs` la version exécutée et son
+  `airflow_dag_id` : c'est ce qui permet à la plateforme d'afficher quelle version tourne. Une règle soumise,
+  nouvelle ou nouvelle version, tourne donc **dès le run suivant, sans aucune action de l'équipe data** ; une
+  règle qui change de fréquence change simplement de DAG. Les brouillons ne sont jamais exécutés. DAG de
+  référence à adapter : `infra/airflow/fraud_rules_dags.py` (l'envoi au prestataire y reste à implémenter). Toutes les versions restent conservées dans la plateforme : comparatif
   SQL, comparaison des performances par version (repères sur les courbes, tableau par version) et
   **restauration** d'une version antérieure, recopiée dans un brouillon à tester puis soumettre.
 

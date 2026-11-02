@@ -95,9 +95,7 @@ export function RuleDetailPage() {
         {flash === 'draftDeleted' && <Alert kind="success" title="Brouillon supprimé." />}
         {flash === 'submitted' && (
           <Alert kind="success" title={`v${r.version} soumise à l'équipe data.`}>
-            {r.versionCount > 1 || r.productionVersion
-              ? 'Airflow l’exécutera dès le prochain run, en observation : '
-              : "L'équipe data est prévenue pour l'industrialiser dans Airflow, qui l'exécutera d'abord en observation : "}
+            Airflow l'exécutera au prochain run du DAG {SCHEDULE_LABEL[r.schedule].toLowerCase()}, d'abord en observation :
             ses commandes ne seront envoyées au prestataire qu'après votre décision. Vous pouvez encore la modifier tant qu'Airflow
             ne l'a pas exécutée : elle redeviendra alors votre brouillon.
           </Alert>

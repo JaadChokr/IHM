@@ -12,7 +12,7 @@ export const STATUS_LABEL: Record<DisplayStatus, string> = {
 
 export const STATUS_HELP: Record<DisplayStatus, string> = {
   DRAFT: 'En cours de rédaction, visible de vous seul',
-  SUBMITTED: "Soumise : exécutée par Airflow dès le prochain run (ou dès que l'équipe data a créé le DAG)",
+  SUBMITTED: 'Soumise : exécutée par Airflow au prochain run du DAG de sa fréquence',
   OBSERVATION: "Exécutée par Airflow sans envoi au prestataire, en attendant la décision de l'envoyer",
   IN_PRODUCTION: 'Exécutée par Airflow, commandes envoyées au prestataire',
   INACTIVE: 'Plus aucune exécution Airflow depuis 3 périodes',
