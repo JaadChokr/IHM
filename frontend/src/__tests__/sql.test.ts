@@ -57,6 +57,13 @@ describe('dry-run simulé', () => {
     expect(r.issues.find((i) => i.code === 'HARDCODED_DATE')?.severity).toBe('warning');
     expect(r.ok).toBe(true);
   });
+  it("signale l'absence de fenêtre relative au jour d'exécution sans bloquer", () => {
+    const sans = simulateDryRun('SELECT order_id FROM `sales.orders` -- CURRENT_DATE()', G, 't');
+    expect(sans.issues.find((i) => i.code === 'NO_DATE_WINDOW')?.severity).toBe('warning');
+    expect(sans.ok).toBe(true);
+    const avec = simulateDryRun('SELECT order_id FROM `sales.orders` WHERE order_date >= current_date()', G, 't');
+    expect(avec.issues.some((i) => i.code === 'NO_DATE_WINDOW')).toBe(false);
+  });
   it('signale un dépassement du plafond de volume', () => {
     const r = simulateDryRun('SELECT order_id FROM `tracking.web_events_raw` WHERE d = CURRENT_DATE()', G, 't');
     expect(r.ok).toBe(true);

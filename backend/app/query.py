@@ -10,7 +10,7 @@ from app.bigquery import BigQueryGateway, BytesLimitExceeded, QueryError, get_bi
 from app.core import ApiError, Settings, get_settings, now
 from app.database import Draft, Rule, RuleVersion, TestRun, User, get_db, record_audit
 from app.schemas import DryRunResult, ExecutionResult, Guardrails, QueryIn, SqlIssue
-from app.sql_checks import check_hardcoded_dates, check_params, query_hash
+from app.sql_checks import check_date_window, check_hardcoded_dates, check_params, query_hash
 
 router = APIRouter(tags=["test"])
 
@@ -56,7 +56,7 @@ def _record(db: Session, user: User, body: QueryIn, target: Target, **fields) ->
 
 
 def _analyse(bq: BigQueryGateway, body: QueryIn) -> tuple[list[SqlIssue], object | None]:
-    issues = check_params(body.sql) + check_hardcoded_dates(body.sql)
+    issues = check_params(body.sql) + check_hardcoded_dates(body.sql) + check_date_window(body.sql)
     try:
         meta = bq.dry_run(body.sql)
     except QueryError as e:

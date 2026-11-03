@@ -3,7 +3,7 @@
 Les contraintes structurelles (SELECT unique, colonne order_id) s'appuient sur
 les métadonnées du dry-run BigQuery, pas sur le texte : voir `query.py`. Ici,
 uniquement ce que BigQuery ne dit pas : aucun paramètre (la requête s'exécute telle quelle) ; dates
-en dur (simple alerte).
+en dur et absence de fenêtre relative au jour d'exécution (simples alertes).
 """
 
 import re
@@ -11,6 +11,7 @@ import re
 from app.schemas import SqlIssue
 
 _PARAM_RE = re.compile(r"(^|[^@\w])@([A-Za-z_]\w*)")
+_CLOCK_RE = re.compile(r"\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b", re.IGNORECASE)
 _DATE_RE = re.compile(r"(?:\b(?:DATE|TIMESTAMP)\s*)?'\d{4}-\d{2}-\d{2}[^']*'", re.IGNORECASE)
 
 
@@ -105,6 +106,22 @@ def check_hardcoded_dates(sql: str) -> list[SqlIssue]:
             )
         )
     return issues
+
+
+def check_date_window(sql: str) -> list[SqlIssue]:
+    """Alerte si la requête ne dépend pas du jour d'exécution : sans fenêtre glissante, le premier run
+    d'une version remonte tout ce qu'elle lit (le dédoublonnage ne joue qu'ensuite)."""
+    if not sql.strip() or _CLOCK_RE.search(mask_sql(sql)):
+        return []
+    return [
+        SqlIssue(
+            severity="warning",
+            code="NO_DATE_WINDOW",
+            message="Pas de fenêtre relative au jour d'exécution (CURRENT_DATE(), CURRENT_TIMESTAMP()…) : "
+            "au premier run, la règle remontera toutes les commandes lues, d'où un pic ponctuel dans le "
+            "comparatif des versions. Les runs suivants n'écrivent que les nouvelles commandes.",
+        )
+    ]
 
 
 def query_hash(sql: str) -> str:

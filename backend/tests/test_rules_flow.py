@@ -153,6 +153,14 @@ def test_dry_run_controles(client, bq):
     assert issues["NO_ORDER_ID"] == issues["PARAM_NOT_ALLOWED"] == "error"
     # Une date en dur n'empêche pas de tester.
     assert issues["HARDCODED_DATE"] == "warning"
+    # Pas de CURRENT_DATE() : alerte sur le pic du premier run, sans bloquer.
+    assert issues["NO_DATE_WINDOW"] == "warning"
+    with_window = "SELECT order_id FROM t WHERE d >= current_date() -- CURRENT_DATE"
+    codes = [i["code"] for i in client.post("/query/dry-run", json={"sql": with_window}).json()["issues"]]
+    assert "NO_DATE_WINDOW" not in codes
+    commented = "SELECT order_id FROM t -- CURRENT_DATE()"
+    codes = [i["code"] for i in client.post("/query/dry-run", json={"sql": commented}).json()["issues"]]
+    assert "NO_DATE_WINDOW" in codes
 
 
 def test_date_en_dur_soumissible(client):

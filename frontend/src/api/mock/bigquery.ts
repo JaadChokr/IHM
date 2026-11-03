@@ -205,6 +205,15 @@ function analyse(sql: string): Analysis {
     );
   }
 
+  // Pas de fenêtre relative au jour d'exécution : alerte (pic au premier run d'une version)
+  if (!/\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b/i.test(masked)) {
+    issues.push({
+      severity: 'warning',
+      code: 'NO_DATE_WINDOW',
+      message: "Pas de fenêtre relative au jour d'exécution (CURRENT_DATE(), CURRENT_TIMESTAMP()…) : au premier run, la règle remontera toutes les commandes lues, d'où un pic ponctuel dans le comparatif des versions. Les runs suivants n'écrivent que les nouvelles commandes.",
+    });
+  }
+
   // Paramètres : aucun
   issues.push(...checkParams(sql));
 

@@ -7,7 +7,6 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_runs` (
   rule_version  INT64     NOT NULL,
   airflow_dag_id STRING   NOT NULL,      -- DAG qui exécute la règle
   run_date      DATE      NOT NULL,
-  run_at        TIMESTAMP,             -- heure que représente le run (data_interval_end d'Airflow)
   replayed_as_of TIMESTAMP,            -- relance : heure à laquelle la requête a été replacée ; NULL sinon
   started_at    TIMESTAMP NOT NULL,
   finished_at   TIMESTAMP,
