@@ -297,11 +297,37 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   SQL, comparaison des performances par version (repères sur les courbes, tableau par version) et
   **restauration** d'une version antérieure, recopiée dans un brouillon à tester puis soumettre.
 
-  **Une commande n'est remontée qu'une fois par règle** (toutes versions confondues) : le DAG n'écrit dans
-  `rule_alerts`, et n'envoie au prestataire, que les commandes que la règle n'a jamais remontées. Une requête
-  peut donc relire les mêmes jours (fenêtre glissante, règle horaire sur la veille) sans doublon ; une
-  fenêtre un peu plus large que la fréquence (ex. les 3 derniers jours pour une règle quotidienne) rattrape
-  d'elle-même un run manqué. Les indicateurs comptent ainsi les nouvelles commandes de chaque jour.
+  **Dédoublonnage : une fois par version pour le suivi, une fois par règle pour l'envoi.** Le DAG n'écrit dans
+  `rule_alerts` que les commandes que *cette version* n'a jamais remontées : une requête peut relire les mêmes
+  jours (fenêtre glissante, règle horaire sur la veille) sans doublon, une fenêtre un peu plus large que la
+  fréquence rattrape d'elle-même un run manqué, et chaque version est mesurée sur tout ce qu'elle trouve (une
+  v2 n'est pas amputée de ce que la v1 avait déjà remonté, sinon le comparatif serait faussé). Au prestataire,
+  en revanche, le DAG ne transmet que ce que *la règle*, toutes versions confondues, ne lui a jamais transmis
+  (colonne `rule_alerts.sent_to_provider`) : passer à la v2 ne renvoie pas les commandes de la v1.
+
+  **Relance d'un run passé (« voyage dans le temps »)** : un run relancé après coup depuis Airflow (Clear d'un
+  run ancien) est replacé à son heure d'origine (`data_interval_end`). `CURRENT_DATE()`, `CURRENT_DATETIME()`
+  et `CURRENT_TIMESTAMP()` y renvoient la date du run (fuseau conservé :
+  `CURRENT_DATE('Europe/Paris')` → `DATE(TIMESTAMP '…', 'Europe/Paris')`), et chaque table est lue dans son état
+  d'alors (`FOR SYSTEM_TIME AS OF`), comme `rules_registry`, pour rejouer la version qui était en place. La
+  requête de l'analyste n'est modifiée qu'à ces endroits (module `infra/airflow/fraud_rules_sql.py`, analysé par
+  sqlglot, à installer dans l'environnement Airflow : une chaîne ou un commentaire n'est jamais touché ;
+  tests : `pytest infra/airflow`). Limites de
+  BigQuery : 7 jours au plus et vraies tables seulement. Au-delà, ou pour une vue / une table externe, la
+  lecture se fait au présent et `rule_runs.note` le signale ; `rule_runs.replayed_as_of` marque les relances.
+
+  **Âge maximal et rattrapage** : une version ne remonte pas de commande passée plus de 7 jours
+  (`fraud_rules_max_age_days`) avant sa mise en route, c'est-à-dire son premier run. Une requête sans fenêtre de
+  dates ne déverse donc pas tout l'historique dans `rule_alerts` ni chez le prestataire. Les commandes
+  antérieures à la dernière période avant la mise en route (la veille pour une règle quotidienne, l'heure
+  précédente pour une règle horaire) sont marquées `backfill` : elles restent envoyables, mais la vue
+  `v_rule_performance` les écarte, une version n'étant mesurée que sur ce qui s'est passé pendant qu'elle tournait.
+  Ces deux garde-fous lisent la date de chaque commande dans la table des commandes, à déclarer dans les
+  Variables Airflow `fraud_rules_orders_table`, `fraud_rules_orders_id_column` (`order_id`),
+  `fraud_rules_orders_date_column` (`created_at`, de type DATE, DATETIME ou TIMESTAMP) et
+  `fraud_rules_orders_timezone` (`Europe/Paris`). Sans `fraud_rules_orders_table`, ils sont désactivés.
+  Des tables `rule_runs` / `rule_alerts` existantes reçoivent les nouvelles colonnes par
+  `infra/bigquery/03_rule_upgrade_suivi.sql`.
 
   Pour chaque commande remontée, le DAG écrit une ligne dans `rule_alerts`. Chaque règle renvoie ses
   propres colonnes ; seule `order_id` est obligatoire (vérifiée à la publication) et sert aux indicateurs.
@@ -330,8 +356,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - **Paramètres (écart au PRD F2)** : aucun. La requête s'exécute telle quelle, au test comme en production :
   les seuils s'écrivent en dur dans le SQL (`amount_eur >= 500`), leur évolution se lit dans le comparatif
   entre versions, et les dates sont relatives au jour d'exécution (`CURRENT_DATE()`). Tout `@paramètre` est
-  refusé. `rules_registry` n'a donc pas de colonne `parameters`. Conséquence à connaître pour l'équipe data :
-  rejouer une règle sur un jour passé (rattrapage) demande de réécrire la date dans la requête.
+  refusé. `rules_registry` n'a donc pas de colonne `parameters`. Rejouer un jour passé ne demande pas de
+  réécrire la requête : le DAG la replace à l'heure du run (voir « Relance d'un run passé »).
 - **Identité** : `owner_matricule` remplace `owner_email` dans `rules_registry`.
 - **Résultat d'un test** : nombre de commandes remontées (distinctes), et combien sont déjà remontées par une
   autre règle (table `rule_alerts`, 90 derniers jours, réglable par `RM_OVERLAP_DAYS`).

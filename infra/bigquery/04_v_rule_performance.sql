@@ -2,6 +2,8 @@
 -- order_id, is_processed, is_fraud sont l'hypothèse de travail.
 CREATE OR REPLACE VIEW `${PROJECT}.${DATASET}.v_rule_performance` AS
 -- Une ligne par règle, version et jour : permet de comparer les versions d'une même règle.
+-- Les commandes de rattrapage (antérieures à la mise en route de la version) sont écartées : une version
+-- n'est mesurée que sur les commandes passées pendant qu'elle tournait.
 SELECT
   a.rule_id,
   a.rule_version,
@@ -12,4 +14,5 @@ SELECT
 FROM `${PROJECT}.${DATASET}.rule_alerts` a
 LEFT JOIN `${FEEDBACK_TABLE}` f   -- projet.dataset.table (complété par apply.sh / apply.ps1)
   ON f.order_id = a.order_id
+WHERE NOT IFNULL(a.backfill, FALSE)
 GROUP BY a.rule_id, a.rule_version, a.run_date;
