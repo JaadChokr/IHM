@@ -15,4 +15,4 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_alerts` (
   sent_to_provider BOOL
 )
 PARTITION BY run_date
-CLUSTER BY rule_id;
+CLUSTER BY rule_id, order_id;  -- rule_id en tête : presque toutes les lectures filtrent sur la règle
