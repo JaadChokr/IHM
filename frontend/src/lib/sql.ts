@@ -97,20 +97,29 @@ export function checkParams(sql: string): SqlIssue[] {
   return issues;
 }
 
+const CLOCK_REPLACEMENT: Record<string, string> = {
+  CURRENT_DATE: "DATE(@period_end, 'Europe/Paris')",
+  CURRENT_DATETIME: "DATETIME(@period_end, 'Europe/Paris')",
+  CURRENT_TIMESTAMP: '@period_end',
+};
+
 /**
- * Alertes sur la fenêtre de dates (miroir de check_date_window côté back) :
- * - CURRENT_DATE() et consorts donnent la date réelle d'exécution, fausse en rattrapage ou en relance ;
- * - sans fenêtre, le premier run d'une version remonte tout ce qu'elle lit (pic dans le comparatif).
+ * Contrôles de la fenêtre de dates (miroir de check_date_window côté back) :
+ * - CURRENT_DATE() et consorts sont refusés (erreur) : ils donnent la date réelle d'exécution, fausse en
+ *   rattrapage ou en relance ; tout ce qu'ils expriment s'écrit avec @period_end ;
+ * - sans fenêtre, le premier run d'une version remonte tout ce qu'elle lit (pic dans le comparatif) : alerte.
  */
 export function checkDateWindow(sql: string): SqlIssue[] {
-  const masked = maskSql(sql);
+  // Hors chaînes et commentaires, et hors identifiants entre backticks (une colonne `current_date`).
+  const masked = maskSql(sql).replace(/`[^`\n]*`/g, (s) => ' '.repeat(s.length));
   const issues: SqlIssue[] = [];
   for (const m of masked.matchAll(/\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b(?:\s*\(\s*\))?/gi)) {
     const { line, column } = offsetToLineCol(sql, m.index ?? 0);
+    const name = m[0].split('(')[0].trim().toUpperCase();
     issues.push({
-      severity: 'warning',
-      code: 'CURRENT_DATE_USED',
-      message: `${m[0].trim()} donne la date réelle d'exécution : en rattrapage ou en relance d'un run passé, la requête lirait la mauvaise période. Préférez @period_start / @period_end (ex. DATE(@period_end, 'Europe/Paris') pour le jour du run).`,
+      severity: 'error',
+      code: 'CURRENT_DATE_NOT_ALLOWED',
+      message: `${name} donne la date réelle d'exécution, fausse en rattrapage ou en relance d'un run passé. Utilisez ${CLOCK_REPLACEMENT[name]} : même résultat au run normal, bonne période sinon (bornes de la période du run : @period_start, @period_end).`,
       line,
       column,
       length: m[0].length,

@@ -20,9 +20,11 @@ describe('paramètres nommés', () => {
     expect(checkParams('SELECT order_id WHERE x > @seuil AND d = @run_date').map((i) => i.code)).toEqual(['PARAM_NOT_ALLOWED', 'PARAM_NOT_ALLOWED']);
     expect(checkParams('SELECT order_id FROM t WHERE d >= @period_start AND d < @period_end')).toEqual([]);
   });
-  it('alerte sur CURRENT_DATE() et sur une requête sans fenêtre de dates', () => {
+  it('refuse CURRENT_DATE(), alerte sur une requête sans fenêtre de dates', () => {
     const cur = checkDateWindow('SELECT order_id FROM t\nWHERE d >= current_date() -- CURRENT_DATE');
-    expect(cur.map((i) => [i.code, i.line])).toEqual([['CURRENT_DATE_USED', 2]]);
+    expect(cur.map((i) => [i.code, i.severity, i.line])).toEqual([['CURRENT_DATE_NOT_ALLOWED', 'error', 2]]);
+    expect(checkDateWindow('SELECT CURRENT_TIMESTAMP() AS t')[0].message).toContain('Utilisez @period_end');
+    expect(checkDateWindow('SELECT `current_date` FROM t WHERE d < @period_end')).toEqual([]);
     expect(checkDateWindow('SELECT order_id FROM t -- CURRENT_DATE()').map((i) => i.code)).toEqual(['NO_DATE_WINDOW']);
     expect(checkDateWindow("SELECT order_id FROM t WHERE d = DATE(@period_end, 'Europe/Paris')")).toEqual([]);
   });
@@ -37,7 +39,7 @@ describe('paramètres nommés', () => {
 });
 
 describe('dry-run simulé', () => {
-  const ok = 'SELECT o.order_id FROM `sales.orders` o WHERE o.order_date = CURRENT_DATE()';
+  const ok = 'SELECT o.order_id FROM `sales.orders` o WHERE o.created_at >= @period_start';
   it('accepte une requête conforme', () => {
     const r = simulateDryRun(ok, G, 't');
     expect(r.ok).toBe(true);
@@ -50,11 +52,11 @@ describe('dry-run simulé', () => {
     expect(r.issues[0].code).toBe('NOT_SELECT');
   });
   it('exige order_id en sortie', () => {
-    const r = simulateDryRun('SELECT o.customer_id FROM `sales.orders` o WHERE o.order_date = CURRENT_DATE()', G, 't');
+    const r = simulateDryRun('SELECT o.customer_id FROM `sales.orders` o WHERE o.created_at >= @period_start', G, 't');
     expect(r.issues.map((i) => i.code)).toContain('NO_ORDER_ID');
   });
   it('signale une table inconnue avec sa position', () => {
-    const r = simulateDryRun('SELECT order_id\nFROM `sales.nope` WHERE d = CURRENT_DATE()', G, 't');
+    const r = simulateDryRun('SELECT order_id\nFROM `sales.nope` WHERE d < @period_end', G, 't');
     const i = r.issues.find((x) => x.code === 'NOT_FOUND')!;
     expect(i.line).toBe(2);
     expect(i.column).toBe(6);
@@ -72,7 +74,7 @@ describe('dry-run simulé', () => {
     expect(avec.issues).toEqual([]);
   });
   it('signale un dépassement du plafond de volume', () => {
-    const r = simulateDryRun('SELECT order_id FROM `tracking.web_events_raw` WHERE d = CURRENT_DATE()', G, 't');
+    const r = simulateDryRun('SELECT order_id FROM `tracking.web_events_raw` WHERE d < @period_end', G, 't');
     expect(r.ok).toBe(true);
     expect(r.exceedsBytesLimit).toBe(true);
   });

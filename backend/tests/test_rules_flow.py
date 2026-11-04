@@ -159,8 +159,14 @@ def test_dry_run_controles(client, bq):
     def codes(sql: str) -> list[str]:
         return [i["code"] for i in client.post("/query/dry-run", json={"sql": sql}).json()["issues"]]
 
-    # CURRENT_DATE() : juste au run normal, faux en rattrapage → alerte, avec sa position.
-    assert codes("SELECT order_id FROM t WHERE d >= current_date() -- CURRENT_DATE") == ["CURRENT_DATE_USED"]
+    # CURRENT_DATE() : juste au run normal, faux en rattrapage → refusé, avec sa position.
+    sql = "SELECT order_id FROM t\nWHERE d >= current_date()"
+    dry = client.post("/query/dry-run", json={"sql": sql}).json()
+    assert dry["ok"] is False
+    issue = dry["issues"][0]
+    assert (issue["code"], issue["severity"], issue["line"]) == ("CURRENT_DATE_NOT_ALLOWED", "error", 2)
+    assert "DATE(@period_end, 'Europe/Paris')" in issue["message"]
+    assert codes("SELECT order_id FROM t WHERE t.`current_date` >= @period_start") == []  # une colonne
     assert codes("SELECT order_id FROM t -- CURRENT_DATE()") == ["NO_DATE_WINDOW"]
     # Les bornes de la période : aucune alerte.
     assert codes("SELECT order_id FROM t WHERE d >= DATE(@period_end, 'Europe/Paris')") == []

@@ -14,6 +14,11 @@ from app.schemas import SqlIssue
 
 _PARAM_RE = re.compile(r"(^|[^@\w])@([A-Za-z_]\w*)")
 _CLOCK_RE = re.compile(r"\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b(?:\s*\(\s*\))?", re.IGNORECASE)
+_CLOCK_REPLACEMENT = {
+    "CURRENT_DATE": "DATE(@period_end, 'Europe/Paris')",
+    "CURRENT_DATETIME": "DATETIME(@period_end, 'Europe/Paris')",
+    "CURRENT_TIMESTAMP": "@period_end",
+}
 _DATE_RE = re.compile(r"(?:\b(?:DATE|TIMESTAMP)\s*)?'\d{4}-\d{2}-\d{2}[^']*'", re.IGNORECASE)
 
 
@@ -111,24 +116,28 @@ def check_hardcoded_dates(sql: str) -> list[SqlIssue]:
 
 
 def check_date_window(sql: str) -> list[SqlIssue]:
-    """Alertes sur la fenêtre de dates de la requête.
+    """Contrôles de la fenêtre de dates de la requête.
 
-    - CURRENT_DATE() et consorts donnent la date réelle d'exécution : juste au run normal, faux en
-      rattrapage ou en relance d'un run passé, où seuls @period_start / @period_end suivent la période ;
+    - CURRENT_DATE() et consorts sont refusés (erreur : ni test ni publication ; le brouillon s'enregistre).
+      Ils donnent la date réelle d'exécution : juste au run normal, faux en rattrapage ou en relance d'un
+      run passé, où seuls @period_start / @period_end suivent la période. Tout ce qu'ils expriment
+      s'écrit avec @period_end ;
     - sans aucune fenêtre, le premier run d'une version remonte tout ce qu'elle lit (le dédoublonnage ne
-      joue qu'ensuite) : pic ponctuel dans le comparatif des versions.
+      joue qu'ensuite) : pic ponctuel dans le comparatif des versions (simple alerte).
     """
-    masked = mask_sql(sql)
+    # Hors chaînes et commentaires, et hors identifiants entre backticks (une colonne `current_date`).
+    masked = re.sub(r"`[^`\n]*`", lambda m: " " * len(m.group(0)), mask_sql(sql))
     issues: list[SqlIssue] = []
     for m in _CLOCK_RE.finditer(masked):
         line, col = offset_to_line_col(sql, m.start())
+        name = m.group(0).split("(")[0].strip().upper()
         issues.append(
             SqlIssue(
-                severity="warning",
-                code="CURRENT_DATE_USED",
-                message=f"{m.group(0).strip()} donne la date réelle d'exécution : en rattrapage ou en "
-                "relance d'un run passé, la requête lirait la mauvaise période. Préférez @period_start / "
-                "@period_end (ex. DATE(@period_end, 'Europe/Paris') pour le jour du run).",
+                severity="error",
+                code="CURRENT_DATE_NOT_ALLOWED",
+                message=f"{name} donne la date réelle d'exécution, fausse en rattrapage ou en relance d'un "
+                f"run passé. Utilisez {_CLOCK_REPLACEMENT[name]} : même résultat au run normal, bonne "
+                "période sinon (bornes de la période du run : @period_start, @period_end).",
                 line=line,
                 column=col,
                 length=len(m.group(0)),

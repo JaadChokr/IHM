@@ -316,8 +316,12 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 
   Un rattrapage (`catchup=True` : périodes manquées pendant un déploiement ou une panne) ou une relance d'un run
   passé (Clear dans Airflow) repasse les bornes de la période d'origine : la requête porte sur la bonne
-  période sans être réécrite. `CURRENT_DATE()` et consorts restent permis mais donnent la date réelle
-  d'exécution, fausse dans ces deux cas : l'éditeur les signale (alerte `CURRENT_DATE_USED`). Pour lire une
+  période sans être réécrite. `CURRENT_DATE()`, `CURRENT_DATETIME()` et `CURRENT_TIMESTAMP()` sont **refusés**
+  (erreur `CURRENT_DATE_NOT_ALLOWED` : le brouillon s'enregistre, mais ni test ni publication) : ils donnent
+  la date réelle d'exécution, fausse dans ces deux cas, et tout ce qu'ils expriment s'écrit avec `@period_end`
+  (`DATE(@period_end, 'Europe/Paris')`, `TIMESTAMP_SUB(@period_end, INTERVAL 1 HOUR)`…). Le message indique la
+  tournure de remplacement. Une version déjà publiée avec `CURRENT_DATE()` continue de tourner ; seule sa
+  prochaine version devra être corrigée. Pour lire une
   table dans son état de fin de période : `FROM t FOR SYSTEM_TIME AS OF @period_end` ; BigQuery ne le permet que
   sur **7 jours**, et au-delà le DAG échoue avec un message explicite (on part du principe qu'un run manqué est
   relancé dans la semaine). Pour un rattrapage de moins de 7 jours, `rules_registry` est lue dans son état de
@@ -330,8 +334,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   fenêtre relative à la date d'exécution remonte donc, à son premier run, toutes les commandes qu'elle lit ;
   le comparatif des versions montre un pic ce jour-là. Rien n'est envoyé pour autant : toute version commence
   en observation, et l'envoi ne transmet que les commandes des runs faits après la décision. L'éditeur
-  l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'utilise ni `@period_start` / `@period_end`,
-  ni `CURRENT_DATE()` et consorts.
+  l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'utilise ni `@period_start` ni `@period_end`.
 
   Pour chaque commande remontée, le DAG écrit une ligne dans `rule_alerts`. Chaque règle renvoie ses
   propres colonnes ; seule `order_id` est obligatoire (vérifiée à la publication) et sert aux indicateurs.
@@ -356,8 +359,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - **Contraintes SQL** : seul le DML/DDL bloque l'enregistrement d'un brouillon. Pour tester, il faut une requête
   valide pour BigQuery exposant `order_id` ; publier exige un test réussi. Les dates en
   dur ne sont qu'une alerte : légitimes comme seuil fixe (`created_at >= '2024-01-01'`), à éviter comme jour
-  traité (`order_date = '2026-10-27'` relirait ce jour à chaque exécution). `CURRENT_DATE()` et l'absence de
-  fenêtre de dates sont aussi de simples alertes.
+  traité (`order_date = '2026-10-27'` relirait ce jour à chaque exécution). L'absence de fenêtre de dates est
+  aussi une simple alerte ; `CURRENT_DATE()` et consorts, eux, bloquent le test (voir « Période du run »).
 - **Paramètres (écart au PRD F2)** : seulement `@period_start` et `@period_end`, bornes de la période du run,
   fournies par Airflow et, au test, par la plateforme ; l'analyste ne les saisit jamais. Les seuils s'écrivent
   en dur dans le SQL (`amount_eur >= 500`) et leur évolution se lit dans le comparatif entre versions ; tout
