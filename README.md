@@ -321,12 +321,24 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   la date réelle d'exécution, fausse dans ces deux cas, et tout ce qu'ils expriment s'écrit avec `@period_end`
   (`DATE(@period_end, 'Europe/Paris')`, `TIMESTAMP_SUB(@period_end, INTERVAL 1 HOUR)`…). Le message indique la
   tournure de remplacement. Une version déjà publiée avec `CURRENT_DATE()` continue de tourner ; seule sa
-  prochaine version devra être corrigée. Pour lire une
-  table dans son état de fin de période : `FROM t FOR SYSTEM_TIME AS OF @period_end` ; BigQuery ne le permet que
-  sur **7 jours**, et au-delà le DAG échoue avec un message explicite (on part du principe qu'un run manqué est
-  relancé dans la semaine). Pour un rattrapage de moins de 7 jours, `rules_registry` est lue dans son état de
-  fin de période : c'est la version alors en place qui tourne. `rule_runs` garde la période de chaque run
-  (`period_start`, `period_end`) ; des tables existantes reçoivent les nouvelles colonnes par
+  prochaine version devra être corrigée.
+
+  **Voyage dans le temps, ajouté par le DAG** : l'analyste écrit sa requête librement, et le DAG ajoute
+  `FOR SYSTEM_TIME AS OF @period_end` après chaque table qu'elle lit. Un run exécuté à l'heure, rattrapé ou
+  relancé voit ainsi les tables dans leur état de fin de période. C'est surtout utile aux requêtes sans
+  fenêtre de dates : sans cela, un run rattrapé remonterait aussi les commandes passées depuis, rattachées au
+  mauvais jour. La requête n'est modifiée qu'à ces endroits (module `infra/airflow/fraud_rules_sql.py`, analyse
+  par sqlglot, à installer dans l'environnement Airflow ; tests : `pytest infra/airflow`) : chaînes,
+  commentaires, noms de CTE et tables déjà datées par l'analyste ne sont pas touchés. Limites de BigQuery,
+  notées dans `rule_runs.note` : une vue, une table externe ou générique (`events_*`) est lue au présent ; un
+  run de plus de **7 jours** lit tout au présent (une fenêtre `@period_start` / `@period_end` reste juste ; une
+  requête sans fenêtre rattache alors au run rattrapé des commandes plus récentes, sans doublon ni perte). Une
+  règle qui date elle-même une table et tourne au-delà de 7 jours échoue avec un message explicite. Pour un
+  rattrapage de moins de 7 jours, `rules_registry` est aussi lue dans son état de fin de période : c'est la
+  version alors en place qui tourne. Le test dans l'IHM, lui, lit les tables au présent.
+
+  `rule_runs` garde la période de chaque run (`period_start`, `period_end`) et la note ; des tables existantes
+  reçoivent les nouvelles colonnes par
   `infra/bigquery/03_rule_upgrade_suivi.sql`. Les crons sont à garder alignés entre le DAG et
   `backend/app/periods.py`, qui calcule la période testée dans l'IHM.
 

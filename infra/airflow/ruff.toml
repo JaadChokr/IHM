@@ -2,3 +2,6 @@ line-length = 110
 
 [lint]
 select = ["E", "F", "I", "B", "UP"]
+
+[lint.isort]
+known-first-party = ["fraud_rules_sql"]
