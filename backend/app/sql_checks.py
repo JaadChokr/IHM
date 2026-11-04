@@ -122,8 +122,9 @@ def check_date_window(sql: str) -> list[SqlIssue]:
       Ils donnent la date réelle d'exécution : juste au run normal, faux en rattrapage ou en relance d'un
       run passé, où seuls @period_start / @period_end suivent la période. Tout ce qu'ils expriment
       s'écrit avec @period_end ;
-    - sans aucune fenêtre, le premier run d'une version remonte tout ce qu'elle lit (le dédoublonnage ne
-      joue qu'ensuite) : pic ponctuel dans le comparatif des versions (simple alerte).
+    - sans plage de dates, chaque run relit toute la table (volume, coût) et le premier run d'une version
+      remonte tout ce qu'elle lit (le dédoublonnage ne joue qu'ensuite) : simple alerte, la requête reste
+      libre (rien n'est perdu ni doublé, même en relance).
     """
     # Hors chaînes et commentaires, et hors identifiants entre backticks (une colonne `current_date`).
     masked = re.sub(r"`[^`\n]*`", lambda m: " " * len(m.group(0)), mask_sql(sql))
@@ -148,9 +149,10 @@ def check_date_window(sql: str) -> list[SqlIssue]:
             SqlIssue(
                 severity="warning",
                 code="NO_DATE_WINDOW",
-                message="Pas de fenêtre de dates (@period_start / @period_end) : au premier run, la règle "
-                "remontera toutes les commandes lues, d'où un pic ponctuel dans le comparatif des "
-                "versions. Les runs suivants n'écrivent que les nouvelles commandes.",
+                message="Pas de plage de dates : chaque run relira toute la table, un volume inutilement "
+                "grand, et le premier run remontera tout l'historique (pic dans le comparatif des "
+                "versions). Bornez la lecture à la période du run : "
+                "created_at >= @period_start AND created_at < @period_end.",
             )
         )
     return issues

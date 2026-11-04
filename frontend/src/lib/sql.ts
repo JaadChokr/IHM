@@ -107,7 +107,7 @@ const CLOCK_REPLACEMENT: Record<string, string> = {
  * Contrôles de la fenêtre de dates (miroir de check_date_window côté back) :
  * - CURRENT_DATE() et consorts sont refusés (erreur) : ils donnent la date réelle d'exécution, fausse en
  *   rattrapage ou en relance ; tout ce qu'ils expriment s'écrit avec @period_end ;
- * - sans fenêtre, le premier run d'une version remonte tout ce qu'elle lit (pic dans le comparatif) : alerte.
+ * - sans plage de dates, chaque run relit toute la table et le premier remonte tout l'historique : alerte.
  */
 export function checkDateWindow(sql: string): SqlIssue[] {
   // Hors chaînes et commentaires, et hors identifiants entre backticks (une colonne `current_date`).
@@ -130,7 +130,7 @@ export function checkDateWindow(sql: string): SqlIssue[] {
       severity: 'warning',
       code: 'NO_DATE_WINDOW',
       message:
-        'Pas de fenêtre de dates (@period_start / @period_end) : au premier run, la règle remontera toutes les commandes lues, d\'où un pic ponctuel dans le comparatif des versions. Les runs suivants n\'écrivent que les nouvelles commandes.',
+        "Pas de plage de dates : chaque run relira toute la table, un volume inutilement grand, et le premier run remontera tout l'historique (pic dans le comparatif des versions). Bornez la lecture à la période du run : created_at >= @period_start AND created_at < @period_end.",
     });
   }
   return issues;

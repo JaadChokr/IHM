@@ -19,22 +19,16 @@ Pour chaque règle, la tâche :
      confondues) ne lui a jamais transmises ;
   3. trace l'exécution dans `rule_runs` (version, période, statut) : c'est ce que lit la plateforme.
 
-Voyage dans le temps : le DAG ajoute `FOR SYSTEM_TIME AS OF @period_end` après chaque table lue par la
-requête (module fraud_rules_sql.py) : un run exécuté à l'heure, rattrapé ou relancé voit les tables dans
-leur état de fin de période, y compris une requête sans fenêtre de dates, dont les commandes restent
-rattachées au bon run. L'analyste écrit sa requête librement ; seul CURRENT_DATE() lui est interdit
-(remplacé par @period_end). Limites de BigQuery, signalées dans `rule_runs.note` :
-  - vraies tables seulement : une vue, une table externe ou générique (`events_*`) est lue au présent ;
-  - 7 jours au plus (moins si le dataset le règle autrement) : un run plus ancien lit tout au présent
-    (une fenêtre @period_start / @period_end reste juste ; une requête sans fenêtre rattache alors au run
-    rattrapé des commandes plus récentes, sans doublon ni perte).
-Une règle qui date elle-même une table (FOR SYSTEM_TIME AS OF …) est laissée telle quelle ; au-delà de
-7 jours, sa tâche échoue avec un message explicite.
+Relance et rattrapage : la requête est exécutée telle quelle, tables lues au présent.
+  - Avec une plage @period_start / @period_end, elle porte sur la période d'origine : résultat exact.
+  - Sans plage, elle relit toute la table : rien n'est perdu ni doublé (dédoublonnage par règle et par
+    version), mais les commandes passées depuis sont rattachées au run rejoué. L'IHM incite à poser une
+    plage, qui évite aussi de relire chaque fois un volume inutilement grand.
+L'analyste peut dater lui-même une table (FOR SYSTEM_TIME AS OF @period_end) ; BigQuery ne le permet que
+sur 7 jours : au-delà, la tâche échoue avec un message explicite.
 
 Variables Airflow : fraud_rules_gcp_conn_id (google_cloud_default), fraud_rules_project (obligatoire),
 fraud_rules_dataset (fraud_rules), fraud_rules_alert_emails (adresses séparées par des virgules, facultatif).
-
-Module associé : fraud_rules_sql.py, à déposer à côté ; dépendance : sqlglot (pip install sqlglot).
 """
 
 from __future__ import annotations
@@ -49,10 +43,7 @@ from airflow.exceptions import AirflowException
 from airflow.models import Variable
 from airflow.operators.python import get_current_context
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
-from google.api_core.exceptions import GoogleAPIError
 from google.cloud import bigquery
-
-from fraud_rules_sql import SqlglotError, referenced_tables, with_time_travel
 
 log = logging.getLogger("airflow.task")
 
@@ -98,27 +89,6 @@ def _query(client: bigquery.Client, sql: str, **params: tuple[str, object]):
     job = client.query(sql, job_config=cfg)
     job.result()
     return job
-
-
-def _time_travel(client: bigquery.Client, sql: str, late: timedelta) -> tuple[str, str | None]:
-    """La requête avec chaque vraie table lue en fin de période, et une note pour rule_runs quand une
-    partie est lue au présent."""
-    if late > TIME_TRAVEL_MAX:
-        return sql, "Run de plus de 7 jours : tables lues au présent (voyage dans le temps impossible)."
-    try:
-        keys = referenced_tables(sql)
-    except SqlglotError:
-        return sql, "Requête non analysable : tables lues au présent."
-    frozen, present = set(), []
-    for key in keys:
-        name = key if key.count(".") == 2 else f"{client.project}.{key}"
-        try:
-            kind = client.get_table(name).table_type  # TABLE, VIEW, EXTERNAL, MATERIALIZED_VIEW…
-        except GoogleAPIError:
-            kind = None  # table générique (events_*), INFORMATION_SCHEMA…
-        (frozen.add(key) if kind == "TABLE" else present.append(key))
-    note = f"Lues au présent (vue, table externe ou générique) : {', '.join(present)}." if present else None
-    return with_time_travel(sql, frozen), note
 
 
 def send_to_provider(rule: dict, orders: list[dict]) -> None:
@@ -229,7 +199,7 @@ def make_dag(frequency: str, cron: str):
             started = datetime.now(UTC)
             ids = {"rule_id": ("STRING", rule["rule_id"]), "version": ("INT64", rule["version"])}
             sql = rule["sql_query"].strip().rstrip(";")
-            status, rows, sent, note, error = "SUCCESS", None, None, None, None
+            status, rows, sent, error = "SUCCESS", None, None, None
             try:
                 if _TIME_TRAVEL.search(sql) and started - period_end > TIME_TRAVEL_MAX:
                     raise AirflowException(
@@ -237,9 +207,6 @@ def make_dag(frequency: str, cron: str):
                         "elle-même une table (FOR SYSTEM_TIME AS OF), ce que BigQuery ne permet que sur "
                         "7 jours. Run à traiter à la main (ou à laisser de côté)."
                     )
-                sql, note = _time_travel(client, sql, started - period_end)
-                if note:
-                    log.warning(note)
                 _query(
                     client,
                     f"""DELETE FROM {ds}.rule_alerts
@@ -288,10 +255,10 @@ def make_dag(frequency: str, cron: str):
                         f"""INSERT INTO {ds}.rule_runs
                               (run_id, rule_id, rule_version, airflow_dag_id, run_date, period_start,
                                period_end, started_at, finished_at, status, rows_returned, rows_sent,
-                               note, error_message)
+                               error_message)
                             VALUES (@run_id, @rule_id, @version, @dag_id, @run_date, @period_start,
                                     @period_end, @started_at, CURRENT_TIMESTAMP(), @status, @rows, @sent,
-                                    @note, @error)""",
+                                    @error)""",
                         **ids,
                         run_id=("STRING", run_id),
                         dag_id=("STRING", dag_id),
@@ -302,7 +269,6 @@ def make_dag(frequency: str, cron: str):
                         status=("STRING", status),
                         rows=("INT64", rows),
                         sent=("INT64", sent),
-                        note=("STRING", note),
                         error=("STRING", error),
                     )
                 except Exception:

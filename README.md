@@ -323,27 +323,23 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   tournure de remplacement. Une version déjà publiée avec `CURRENT_DATE()` continue de tourner ; seule sa
   prochaine version devra être corrigée.
 
-  **Voyage dans le temps, ajouté par le DAG** : l'analyste écrit sa requête librement, et le DAG ajoute
-  `FOR SYSTEM_TIME AS OF @period_end` après chaque table qu'elle lit. Un run exécuté à l'heure, rattrapé ou
-  relancé voit ainsi les tables dans leur état de fin de période. C'est surtout utile aux requêtes sans
-  fenêtre de dates : sans cela, un run rattrapé remonterait aussi les commandes passées depuis, rattachées au
-  mauvais jour. La requête n'est modifiée qu'à ces endroits (module `infra/airflow/fraud_rules_sql.py`, analyse
-  par sqlglot, à installer dans l'environnement Airflow ; tests : `pytest infra/airflow`) : chaînes,
-  commentaires, noms de CTE et tables déjà datées par l'analyste ne sont pas touchés. Limites de BigQuery,
-  notées dans `rule_runs.note` : une vue, une table externe ou générique (`events_*`) est lue au présent ; un
-  run de plus de **7 jours** lit tout au présent (une fenêtre `@period_start` / `@period_end` reste juste ; une
-  requête sans fenêtre rattache alors au run rattrapé des commandes plus récentes, sans doublon ni perte). Une
-  règle qui date elle-même une table et tourne au-delà de 7 jours échoue avec un message explicite. Pour un
-  rattrapage de moins de 7 jours, `rules_registry` est aussi lue dans son état de fin de période : c'est la
-  version alors en place qui tourne. Le test dans l'IHM, lui, lit les tables au présent.
+  **Relance et rattrapage** : la requête est exécutée telle quelle, tables lues au présent. Avec une plage
+  `@period_start` / `@period_end`, elle porte sur la période d'origine : résultat exact. Sans plage, elle relit
+  toute la table : rien n'est perdu ni doublé (dédoublonnage par règle et par version), mais les commandes
+  passées depuis sont rattachées au run rejoué, ce qui décale légèrement les courbes. L'analyste reste libre
+  d'écrire sa requête sans plage ; l'éditeur l'incite à en poser une (alerte `NO_DATE_WINDOW`), ce qui évite
+  aussi de relire à chaque run un volume inutilement grand. Il peut aussi dater lui-même une table
+  (`FROM t FOR SYSTEM_TIME AS OF @period_end`) ; BigQuery ne le permet que sur 7 jours, et au-delà la tâche
+  échoue avec un message explicite. Pour un rattrapage de moins de 7 jours, le DAG lit `rules_registry` dans
+  son état de fin de période : c'est la version alors en place qui tourne.
 
-  `rule_runs` garde la période de chaque run (`period_start`, `period_end`) et la note ; des tables existantes
+  `rule_runs` garde la période de chaque run (`period_start`, `period_end`) ; des tables existantes
   reçoivent les nouvelles colonnes par
   `infra/bigquery/03_rule_upgrade_suivi.sql`. Les crons sont à garder alignés entre le DAG et
   `backend/app/periods.py`, qui calcule la période testée dans l'IHM.
 
   **Premier run d'une version** : le dédoublonnage ne joue qu'à partir du deuxième run. Une requête sans
-  fenêtre relative à la date d'exécution remonte donc, à son premier run, toutes les commandes qu'elle lit ;
+  plage de dates remonte donc, à son premier run, toutes les commandes qu'elle lit ;
   le comparatif des versions montre un pic ce jour-là. Rien n'est envoyé pour autant : toute version commence
   en observation, et l'envoi ne transmet que les commandes des runs faits après la décision. L'éditeur
   l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'utilise ni `@period_start` ni `@period_end`.
