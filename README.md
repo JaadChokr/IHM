@@ -26,7 +26,7 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   └── tests/           pytest (SQLite en mémoire + BigQuery factice)
 ├── infra/
 │   ├── airflow/         DAG de référence : un DAG par fréquence, une tâche par règle
-│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), v_rule_performance
+│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), v_rule_performance, v_rule_orders_daily
 │   └── cloudbuild.yaml  build → Artifact Registry → Cloud Run (+ job de migration)
 ├── docker-compose.yml   environnement local complet (PostgreSQL + API + front)
 ├── .github/workflows/   CI : typecheck, tests, lint, migrations sur PostgreSQL, build des images
@@ -234,7 +234,8 @@ powershell -ExecutionPolicy Bypass -File infra\bigquery\apply.ps1
 navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (Cloud Run) ──► Cloud SQL (état applicatif)
                                                            │
                                                            └──► BigQuery : dry-run / tests, rules_registry,
-                                                                v_rule_performance, rule_runs  ◄── Airflow
+                                                                v_rule_performance, v_rule_orders_daily,
+                                                                rule_runs  ◄── Airflow
 ```
 
 - Le front ne détient aucun credential BigQuery ; il ne parle qu'à l'API, sur la même origine (cookie de session first-party).
@@ -305,6 +306,17 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   v2 n'est pas amputée de ce que la v1 avait déjà remonté, sinon le comparatif serait faussé). Au prestataire,
   en revanche, le DAG ne transmet que ce que *la règle*, toutes versions confondues, ne lui a jamais transmis
   (colonne `rule_alerts.sent_to_provider`) : passer à la v2 ne renvoie pas les commandes de la v1.
+
+  **Deux vues d'indicateurs**, pour ne pas compter deux fois une commande relue par une nouvelle version :
+  - `v_rule_performance` (une ligne par règle, version et jour) sert au **comparatif des versions** : chaque
+    version y garde toutes ses commandes, y compris celles déjà remontées par la précédente ;
+  - `v_rule_orders_daily` (une ligne par règle et par jour) sert aux **chiffres de la règle** toutes versions
+    confondues : courbes et indicateurs de la page règle, totaux sur 30 jours de la vue d'ensemble. Chaque
+    commande y est comptée une seule fois, au jour où la règle l'a remontée pour la première fois.
+
+  Les chiffres du comparatif ne s'additionnent donc pas pour donner ceux de la règle ; une ligne
+  d'explication l'indique sous le tableau. Les deux vues sont créées par `apply.sh` / `apply.ps1`
+  (`04_v_rule_performance.sql`, `05_v_rule_orders_daily.sql`).
 
   **Période du run (`@period_start` / `@period_end`)** : Airflow passe à la requête les bornes `[début, fin[`
   de l'intervalle du run (`data_interval_start` / `data_interval_end`, TIMESTAMP), calées sur le cron du DAG en
@@ -386,4 +398,5 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - **Déploiement** : API en ingress interne sans IAM entre front et API (le contrôle d'accès est réseau, PRD F8).
   La topologie exacte (load balancer interne, routage `/api`) reste à arbitrer.
 - **Valeurs provisoires** : typologies de fraude (Q4, `frontend/src/lib/format.ts`),
-  colonnes de la table de feedback (Q2, `infra/bigquery/04_v_rule_performance.sql`).
+  colonnes de la table de feedback (Q2, `infra/bigquery/04_v_rule_performance.sql` et
+  `05_v_rule_orders_daily.sql`).

@@ -252,17 +252,25 @@ export function createMockApi(): Api {
     if (!start) return [];
     const by = new Map<number, DailyPerformance[]>();
     for (const d of daily(r, start, isoDate(new Date()))) by.set(d.ruleVersion!, [...(by.get(d.ruleVersion!) ?? []), d]);
-    return [...by.entries()]
-      .sort((a, b) => a[0] - b[0])
-      .map(([version, ds]) => ({
+    const sorted = [...by.entries()].sort((a, b) => a[0] - b[0]);
+    const sum = (ds: DailyPerformance[], k: 'ordersFlagged' | 'ordersProcessed' | 'ordersConfirmedFraud') => ds.reduce((s, x) => s + x[k], 0);
+    return sorted.map(([version, ds], i) => {
+      // `daily` compte chaque commande une fois par règle (v_rule_orders_daily). Une version à fenêtre
+      // glissante relit en plus, à ses premiers runs, des commandes déjà remontées par la précédente :
+      // elles comptent dans sa propre mesure (v_rule_performance), pas dans les chiffres de la règle.
+      const window = Number(/INTERVAL\s+(\d+)\s+DAY/i.exec(r.versions.find((v) => v.version === version)?.sqlQuery ?? '')?.[1] ?? 0);
+      const prev = i > 0 ? sorted[i - 1][1].slice(-window) : [];
+      const reread = (k: Parameters<typeof sum>[1]) => (window ? Math.round(sum(prev, k) * 0.8) : 0);
+      return {
         version,
         firstDate: ds[0].date,
         lastDate: ds[ds.length - 1].date,
         days: ds.length,
-        ordersFlagged: ds.reduce((s, x) => s + x.ordersFlagged, 0),
-        ordersProcessed: ds.reduce((s, x) => s + x.ordersProcessed, 0),
-        ordersConfirmedFraud: ds.reduce((s, x) => s + x.ordersConfirmedFraud, 0),
-      }));
+        ordersFlagged: sum(ds, 'ordersFlagged') + reread('ordersFlagged'),
+        ordersProcessed: sum(ds, 'ordersProcessed') + reread('ordersProcessed'),
+        ordersConfirmedFraud: sum(ds, 'ordersConfirmedFraud') + reread('ordersConfirmedFraud'),
+      };
+    });
   }
 
   function daily(r: MockRule, from: string, to: string): DailyPerformance[] {

@@ -324,8 +324,20 @@ def test_performance_par_version(client, bq):
             orders_confirmed_fraud=5,
         ),
     ]
+    # La v2 a relu 6 commandes déjà remontées par la v1 (fenêtre glissante) : comptées dans sa propre
+    # mesure, mais une seule fois dans les chiffres de la règle (v_rule_orders_daily).
+    bq.rule_daily[rid] = [
+        bq.performance[rid][0],
+        DailyPerformance(
+            date=day + timedelta(days=1),
+            rule_version=2,
+            orders_flagged=4,
+            orders_processed=4,
+            orders_confirmed_fraud=2,
+        ),
+    ]
     r = client.get(f"/rules/{rid}/performance", params={"from": str(day), "to": str(date.today())}).json()
-    assert [d["ruleVersion"] for d in r["daily"]] == [1, 2]
+    assert [(d["ruleVersion"], d["ordersFlagged"]) for d in r["daily"]] == [(1, 40), (2, 4)]
     assert [(v["version"], v["ordersFlagged"], v["ordersConfirmedFraud"]) for v in r["versions"]] == [
         (1, 40, 6),
         (2, 10, 5),

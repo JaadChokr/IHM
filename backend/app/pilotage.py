@@ -1,6 +1,9 @@
 """Pilotage, en lecture seule : indicateurs de performance (F6, F7) et journal d'audit (F8).
 
-Les indicateurs sont lus dans BigQuery (vue v_rule_performance, table rule_runs).
+Les indicateurs sont lus dans BigQuery, table rule_runs et deux vues :
+  - v_rule_orders_daily pour une règle toutes versions confondues (chaque commande comptée une fois) :
+    courbes et indicateurs de la page règle, totaux de la vue d'ensemble ;
+  - v_rule_performance pour la comparaison des versions (chaque version mesurée en entier).
 """
 
 from datetime import date, timedelta

@@ -1,7 +1,9 @@
 -- Indicateurs F6 (PRD §7.4). Colonnes de la table de feedback À CONFIRMER (PRD Q2) :
 -- order_id, is_processed, is_fraud sont l'hypothèse de travail.
 CREATE OR REPLACE VIEW `${PROJECT}.${DATASET}.v_rule_performance` AS
--- Une ligne par règle, version et jour : permet de comparer les versions d'une même règle.
+-- Une ligne par règle, version et jour : permet de comparer les versions d'une même règle. Une commande
+-- remontée par deux versions y figure pour chacune : ne pas additionner les versions pour obtenir les
+-- totaux de la règle (voir v_rule_orders_daily).
 SELECT
   a.rule_id,
   a.rule_version,

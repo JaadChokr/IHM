@@ -214,10 +214,11 @@ class RealBigQueryGateway:
         return [dict(r.items()) for r in self.client.query(sql, job_config=cfg).result()]
 
     def daily_performance(self, rule_id, start, end):
+        # Toutes versions confondues : chaque commande comptée une fois par règle (v_rule_orders_daily).
         P = self._bq.ScalarQueryParameter
         rows = self._rows(
             f"""SELECT run_date, rule_version, orders_flagged, orders_processed, orders_confirmed_fraud
-                FROM {self.ds}.v_rule_performance
+                FROM {self.ds}.v_rule_orders_daily
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end
                 ORDER BY run_date""",
             [P("rule_id", "STRING", rule_id), P("start", "DATE", start), P("end", "DATE", end)],
@@ -269,7 +270,7 @@ class RealBigQueryGateway:
         rows = self._rows(
             f"""SELECT rule_id, SUM(orders_flagged) AS flagged, SUM(orders_processed) AS processed,
                        SUM(orders_confirmed_fraud) AS confirmed
-                FROM {self.ds}.v_rule_performance
+                FROM {self.ds}.v_rule_orders_daily
                 WHERE rule_id IN UNNEST(@ids) AND run_date BETWEEN @start AND @end
                 GROUP BY rule_id""",
             [
@@ -403,7 +404,10 @@ class FakeBigQueryGateway:
     bytes_processed: int = 6 * 10**9
     next_dry_run: DryRunMeta | None = None
     next_error: QueryError | None = None
+    # Contenu simulé de v_rule_performance (une ligne par version et par jour)…
     performance: dict[str, list[DailyPerformance]] = field(default_factory=dict)
+    # … et de v_rule_orders_daily (règle toutes versions confondues) ; à défaut, le même contenu.
+    rule_daily: dict[str, list[DailyPerformance]] = field(default_factory=dict)
     # Contenu simulé de rules_registry : rule_id → (version, statut, envoi au prestataire).
     registry: dict[str, tuple[int, str, bool]] = field(default_factory=dict)
     stats: list[RunStats] = field(default_factory=list)
@@ -434,7 +438,8 @@ class FakeBigQueryGateway:
         return ExecMeta(cols, rows, 5, 1200, meta.bytes_processed, overlap)
 
     def daily_performance(self, rule_id, start, end):
-        return [d for d in self.performance.get(rule_id, []) if start <= d.date <= end]
+        rows = self.rule_daily.get(rule_id, self.performance.get(rule_id, []))
+        return [d for d in rows if start <= d.date <= end]
 
     def runs(self, rule_id, start, end, limit=20):
         return []

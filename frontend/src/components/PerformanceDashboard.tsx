@@ -303,6 +303,13 @@ function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
         <div>
           <h3>Comparaison des versions</h3>
           <p>Chaque version sur toute sa période d'exécution par Airflow, indépendamment de la période sélectionnée</p>
+          {versions.length > 1 && (
+            <p className="small muted">
+              Chaque version est mesurée sur tout ce qu'elle remonte, y compris les commandes déjà remontées par la précédente (fenêtre glissante) : ses
+              chiffres ne s'additionnent pas avec ceux des autres versions. Les courbes et indicateurs ci-dessus comptent chaque commande une seule fois
+              pour la règle.
+            </p>
+          )}
         </div>
       </div>
       <div className="table-wrap">
