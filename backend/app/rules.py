@@ -19,6 +19,7 @@ from app.auth import get_current_user
 from app.bigquery import BigQueryGateway, QueryError, get_bigquery
 from app.core import ApiError, as_utc, get_settings, now
 from app.database import Draft, Rule, RuleVersion, TestRun, User, get_db, record_audit
+from app.periods import last_period
 from app.schemas import (
     DecisionIn,
     NameAvailable,
@@ -204,7 +205,7 @@ def validate(db: Session, bq: BigQueryGateway, data: RuleInput, rule_id: str | N
     # DML/DDL rejetés dès l'enregistrement, d'après le dry-run quand il aboutit (PRD F2).
     # Les autres contraintes (order_id, test réussi) bloquent la soumission, pas le brouillon.
     try:
-        stype = bq.dry_run(data.sql_query).statement_type
+        stype = bq.dry_run(data.sql_query, last_period(data.schedule, now())).statement_type
     except QueryError:
         kw = _first_keyword(data.sql_query)
         stype = "SELECT" if kw in ("SELECT", "WITH") else kw

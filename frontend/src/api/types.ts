@@ -102,6 +102,14 @@ export interface TestTarget {
   draftId?: string;
   /** Test non rattaché d'une nouvelle version : ses propres remontées ne comptent pas comme « déjà remontées ». */
   excludeRuleId?: string;
+  /** Fréquence saisie : fixe la période testée (@period_start / @period_end). */
+  schedule?: Schedule;
+}
+
+/** Valeurs de @period_start / @period_end au test : la dernière période complète de la fréquence. */
+export interface TestPeriod {
+  start: string;
+  end: string;
 }
 
 // ---------- F3 : test de la requête ----------
@@ -130,6 +138,7 @@ export interface DryRunResult {
   issues: SqlIssue[];
   /** Dépassement du plafond : l'exécution sera refusée. */
   exceedsBytesLimit: boolean;
+  period: TestPeriod;
   testId: string;
 }
 
@@ -148,6 +157,7 @@ export interface ExecutionResult {
   ordersAlreadyFlagged?: number;
   /** Période de recherche dans rule_alerts, en jours. */
   overlapDays: number;
+  period: TestPeriod;
   testId: string;
 }
 

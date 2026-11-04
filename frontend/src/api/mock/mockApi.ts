@@ -22,6 +22,7 @@ import {
 import { buildSeed, SCHEMA_VERSION, type MockDb, type MockDraft, type MockRule } from './seed';
 import { simulateDryRun, simulateExecution } from './bigquery';
 import { queryHash } from '../../lib/sql';
+import { lastPeriod } from '../../lib/period';
 import { addDays, isoDate } from '../../lib/format';
 
 const DB_KEY = 'rm.mock.db';
@@ -195,6 +196,15 @@ export function createMockApi(): Api {
     // Le brouillon d'un collègue n'existe pas pour vous.
     if (!d || d.matricule !== u.matricule) throw new ApiError(404, 'Brouillon introuvable.');
     return d;
+  }
+
+  /** Période testée : fréquence saisie, sinon celle du brouillon ou de la règle, sinon quotidienne. */
+  function testPeriod(target: TestTarget | undefined, u: User) {
+    const schedule =
+      target?.schedule ??
+      (target?.draftId ? findDraft(target.draftId, u).schedule : db.rules.find((r) => r.ruleId === target?.ruleId)?.versions.at(-1)?.schedule) ??
+      'DAILY';
+    return lastPeriod(schedule);
   }
 
   const CONTENT = ['name', 'description', 'fraudTypology', 'criticality', 'schedule', 'sqlQuery'] as const;
@@ -515,7 +525,7 @@ export function createMockApi(): Api {
       const u = currentUser();
       if (target?.draftId) findDraft(target.draftId, u);
       const testId = uid();
-      const res = simulateDryRun(sql, GUARDRAILS, testId);
+      const res = simulateDryRun(sql, GUARDRAILS, testId, testPeriod(target, u));
       const firstError = res.issues.find((i) => i.severity === 'error');
       const rec = recordTest(u, target, sql, {
         phase: 'DRY_RUN',
@@ -528,7 +538,7 @@ export function createMockApi(): Api {
     async execute(sql, target) {
       const u = currentUser();
       if (target?.draftId) findDraft(target.draftId, u);
-      const dry = simulateDryRun(sql, GUARDRAILS, 'pre');
+      const dry = simulateDryRun(sql, GUARDRAILS, 'pre', testPeriod(target, u));
       if (!dry.ok) throw new ApiError(422, 'Le dry-run doit réussir avant toute exécution.');
       if (dry.exceedsBytesLimit) {
         throw new ApiError(

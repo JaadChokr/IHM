@@ -138,6 +138,16 @@ class QueryIn(Model):
     # Règle à ne pas compter parmi les « déjà remontées » quand le test n'est rattaché à rien
     # (nouvelle version pas encore enregistrée).
     exclude_rule_id: str | None = None
+    # Fréquence saisie dans l'éditeur : fixe la période testée (@period_start / @period_end). À défaut,
+    # celle du brouillon ou de la règle testée, sinon quotidienne.
+    schedule: Schedule | None = None
+
+
+class TestPeriod(Model):
+    """Valeurs de @period_start / @period_end au test : la dernière période complète de la fréquence."""
+
+    start: datetime
+    end: datetime
 
 
 class SqlIssue(Model):
@@ -161,6 +171,7 @@ class DryRunResult(Model):
     bytes_processed: int | None = None
     issues: list[SqlIssue]
     exceeds_bytes_limit: bool
+    period: TestPeriod
     test_id: str
 
 
@@ -176,6 +187,7 @@ class ExecutionResult(Model):
     orders_flagged: int
     orders_already_flagged: int | None = None  # None : rule_alerts indisponible
     overlap_days: int
+    period: TestPeriod
     test_id: str
 
 

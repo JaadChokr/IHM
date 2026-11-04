@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../api/client';
-import type { DryRunResult, ExecutionResult, SqlIssue, TestTarget } from '../api/types';
+import type { DryRunResult, ExecutionResult, Schedule, SqlIssue, TestTarget } from '../api/types';
 import { useAsync } from '../lib/useAsync';
-import { fmtBytes, fmtDuration, fmtInt, fmtLongDate, fmtPct, isoDate } from '../lib/format';
+import { fmtBytes, fmtDuration, fmtInt, fmtPct } from '../lib/format';
+import { fmtPeriod, lastPeriod } from '../lib/period';
 import { queryHash } from '../lib/sql';
 import { Alert, Spinner } from './ui';
 
@@ -10,6 +11,8 @@ interface Options {
   sql: string;
   /** Brouillon ou règle testée ; absent : test libre (rattaché au brouillon à son premier enregistrement). */
   target?: TestTarget;
+  /** Fréquence de la règle : fixe la période testée (dernière période complète de son DAG). */
+  schedule: Schedule;
   onIssues: (issues: SqlIssue[]) => void;
   /** Appelé après chaque test (pour rafraîchir l'historique / l'éligibilité à la soumission). */
   onTested?: () => void;
@@ -23,7 +26,8 @@ type Phase = 'idle' | 'dry-running' | 'dry-done' | 'executing' | 'exec-done';
  * État du test d'une requête, partagé entre les boutons (sous l'éditeur, `TestActions`) et le bloc de
  * résultat (à part, `TestResults`) : « Valider la syntaxe » (dry-run gratuit) puis « Tester la requête ».
  */
-export function useQueryTest({ sql, target, onIssues, onTested, onExecuted }: Options) {
+export function useQueryTest({ sql, target: base, schedule, onIssues, onTested, onExecuted }: Options) {
+  const target: TestTarget = { ...base, schedule };
   const guard = useAsync(() => api.getGuardrails(), []);
   const [phase, setPhase] = useState<Phase>('idle');
   const [dry, setDry] = useState<DryRunResult>();
@@ -72,6 +76,7 @@ export function useQueryTest({ sql, target, onIssues, onTested, onExecuted }: Op
   const busy = phase === 'dry-running' || phase === 'executing';
   return {
     sql,
+    schedule,
     phase,
     dry,
     exec,
@@ -105,9 +110,8 @@ export function TestActions({ t }: { t: QueryTest }) {
             {dry.exceedsBytesLimit ? '✕' : '✓'} Syntaxe valide · {fmtBytes(dry.bytesProcessed ?? 0)} à scanner
           </span>
         ) : (
-          <span className="muted">
-            Exécutée telle quelle aujourd'hui ({fmtLongDate(isoDate(new Date()))}) ; la veille :{' '}
-            <span className="mono">DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)</span>
+          <span className="muted" title="Valeurs de @period_start et @period_end au test : la dernière période complète du DAG de cette fréquence">
+            Période testée {fmtPeriod(lastPeriod(t.schedule))}
           </span>
         )}
       </span>
@@ -190,7 +194,7 @@ export function TestResults({ t, onGoTo }: { t: QueryTest; onGoTo: (line: number
 
         {exec && (
           <p className="small muted test-meta">
-            {fmtDuration(exec.durationMs)} · {fmtBytes(exec.bytesProcessed)} scannés
+            Période testée {fmtPeriod(exec.period)} · {fmtDuration(exec.durationMs)} · {fmtBytes(exec.bytesProcessed)} scannés
           </p>
         )}
 

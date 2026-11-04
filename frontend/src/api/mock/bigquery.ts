@@ -2,8 +2,9 @@
 // métadonnées du dry-run (`statementType`, schéma de sortie) ; ici on les
 // imite par une analyse grossière du texte, suffisante pour exercer l'IHM.
 
-import type { DryRunResult, ExecutionResult, Guardrails, SqlIssue } from '../types';
-import { checkParams, maskSql, offsetToLineCol, queryHash } from '../../lib/sql';
+import type { DryRunResult, ExecutionResult, Guardrails, SqlIssue, TestPeriod } from '../types';
+import { checkDateWindow, checkParams, maskSql, offsetToLineCol, queryHash } from '../../lib/sql';
+import { lastPeriod } from '../../lib/period';
 
 interface CatalogTable {
   bytes: number;
@@ -200,21 +201,15 @@ function analyse(sql: string): Analysis {
         m[0].length,
         'warning',
         'HARDCODED_DATE',
-        `Date en dur (${m[0]}) : normal pour un seuil fixe. Si elle désigne le jour traité, la règle relira ce même jour à chaque exécution : préférez DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) pour la veille`,
+        `Date en dur (${m[0]}) : normal pour un seuil fixe. Si elle désigne la période traitée, la règle relira ce même jour à chaque exécution : préférez created_at >= @period_start AND created_at < @period_end.`,
       ),
     );
   }
 
-  // Pas de fenêtre relative au jour d'exécution : alerte (pic au premier run d'une version)
-  if (!/\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b/i.test(masked)) {
-    issues.push({
-      severity: 'warning',
-      code: 'NO_DATE_WINDOW',
-      message: "Pas de fenêtre relative au jour d'exécution (CURRENT_DATE(), CURRENT_TIMESTAMP()…) : au premier run, la règle remontera toutes les commandes lues, d'où un pic ponctuel dans le comparatif des versions. Les runs suivants n'écrivent que les nouvelles commandes.",
-    });
-  }
+  // Fenêtre de dates : CURRENT_DATE() (faux en rattrapage) ou aucune fenêtre (pic au premier run)
+  issues.push(...checkDateWindow(sql));
 
-  // Paramètres : aucun
+  // Paramètres : seuls @period_start / @period_end
   issues.push(...checkParams(sql));
 
   // Schéma de sortie : la dernière projection SELECT de niveau 0
@@ -270,10 +265,11 @@ function rng(seed: string) {
   };
 }
 
-export function simulateDryRun(sql: string, g: Guardrails, testId: string): DryRunResult {
+/** `period` : valeurs de @period_start / @period_end (la dernière période complète de la fréquence). */
+export function simulateDryRun(sql: string, g: Guardrails, testId: string, period: TestPeriod = lastPeriod('DAILY')): DryRunResult {
   const a = analyse(sql);
   const ok = !a.issues.some((i) => i.severity === 'error');
-  if (!ok) return { ok, statementType: a.statementType, issues: a.issues, exceedsBytesLimit: false, testId };
+  if (!ok) return { ok, statementType: a.statementType, issues: a.issues, exceedsBytesLimit: false, period, testId };
   // Filtrer sur la date élague les partitions : on ne scanne qu'une fraction.
   const r = rng(queryHash(sql));
   const bytesProcessed = Math.round(a.tables.reduce((s, t) => s + CATALOG[t].bytes, 0) * (0.55 + r() * 0.5));
@@ -284,6 +280,7 @@ export function simulateDryRun(sql: string, g: Guardrails, testId: string): DryR
     bytesProcessed,
     issues: a.issues,
     exceedsBytesLimit: bytesProcessed > g.maxBytesBilled,
+    period,
     testId,
   };
 }
@@ -297,6 +294,9 @@ export function simulateExecution(sql: string, g: Guardrails, dry: DryRunResult,
   const totalRows = Math.max(0, Math.round((400 + r() * 2600) / (1 + numeric / 400)));
   const columns = (dry.outputSchema ?? []).map((c) => c.name);
   const n = Math.min(totalRows, g.maxResults);
+  // Dates des lignes simulées : dans la période testée.
+  const from = new Date(dry.period.start).getTime();
+  const span = new Date(dry.period.end).getTime() - from;
   const rows: Record<string, unknown>[] = [];
   for (let i = 0; i < n; i++) {
     const row: Record<string, unknown> = {};
@@ -310,10 +310,10 @@ export function simulateExecution(sql: string, g: Guardrails, dry: DryRunResult,
           row[c.name] = Math.round(v * 250000) / 100;
           break;
         case 'DATE':
-          row[c.name] = new Date(Date.now() - Math.floor(v * 3) * 86400000).toISOString().slice(0, 10);
+          row[c.name] = new Date(from + v * span).toISOString().slice(0, 10);
           break;
         case 'TIMESTAMP':
-          row[c.name] = new Date(Date.now() - Math.floor(v * 3 * 86400000)).toISOString();
+          row[c.name] = new Date(from + v * span).toISOString();
           break;
         case 'BOOL':
           row[c.name] = v > 0.5;
@@ -339,6 +339,7 @@ export function simulateExecution(sql: string, g: Guardrails, dry: DryRunResult,
     ordersFlagged: totalRows,
     ordersAlreadyFlagged: 0,
     overlapDays: 90,
+    period: dry.period,
     testId,
   };
 }

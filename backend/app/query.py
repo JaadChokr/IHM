@@ -9,7 +9,8 @@ from app.auth import get_current_user
 from app.bigquery import BigQueryGateway, BytesLimitExceeded, QueryError, get_bigquery
 from app.core import ApiError, Settings, get_settings, now
 from app.database import Draft, Rule, RuleVersion, TestRun, User, get_db, record_audit
-from app.schemas import DryRunResult, ExecutionResult, Guardrails, QueryIn, SqlIssue
+from app.periods import Period, last_period
+from app.schemas import DryRunResult, ExecutionResult, Guardrails, QueryIn, SqlIssue, TestPeriod
 from app.sql_checks import check_date_window, check_hardcoded_dates, check_params, query_hash
 
 router = APIRouter(tags=["test"])
@@ -55,10 +56,17 @@ def _record(db: Session, user: User, body: QueryIn, target: Target, **fields) ->
     return run
 
 
-def _analyse(bq: BigQueryGateway, body: QueryIn) -> tuple[list[SqlIssue], object | None]:
+def _period(body: QueryIn, target: Target) -> Period:
+    """Valeurs de @period_start / @period_end : la dernière période complète de la fréquence."""
+    cur, draft = target
+    schedule = body.schedule or (draft.schedule if draft else cur.schedule if cur else "DAILY")
+    return last_period(schedule, now())
+
+
+def _analyse(bq: BigQueryGateway, body: QueryIn, period: Period) -> tuple[list[SqlIssue], object | None]:
     issues = check_params(body.sql) + check_hardcoded_dates(body.sql) + check_date_window(body.sql)
     try:
-        meta = bq.dry_run(body.sql)
+        meta = bq.dry_run(body.sql, period)
     except QueryError as e:
         issues.insert(
             0, SqlIssue(severity="error", code="BIGQUERY", message=e.message, line=e.line, column=e.column)
@@ -106,7 +114,8 @@ def dry_run(
     settings: Settings = Depends(get_settings),
 ) -> DryRunResult:
     target = _target(db, user, body)
-    issues, meta = _analyse(bq, body)
+    period = _period(body, target)
+    issues, meta = _analyse(bq, body, period)
     ok = meta is not None and not any(i.severity == "error" for i in issues)
     first_error = next((i.message for i in issues if i.severity == "error"), None)
     run = _record(
@@ -126,6 +135,7 @@ def dry_run(
         bytes_processed=meta.bytes_processed if meta else None,
         issues=issues,
         exceeds_bytes_limit=bool(meta and meta.bytes_processed > settings.max_bytes_billed),
+        period=TestPeriod(start=period.start, end=period.end),
         test_id=run.id,
     )
 
@@ -139,7 +149,8 @@ def execute(
     settings: Settings = Depends(get_settings),
 ) -> ExecutionResult:
     target = _target(db, user, body)
-    issues, meta = _analyse(bq, body)
+    period = _period(body, target)
+    issues, meta = _analyse(bq, body, period)
     if meta is None or any(i.severity == "error" for i in issues):
         raise ApiError(422, "Le dry-run doit réussir avant toute exécution.")
     if meta.bytes_processed > settings.max_bytes_billed:
@@ -151,7 +162,7 @@ def execute(
         )
     try:
         own = target[0].rule_id if target[0] else target[1].rule_id if target[1] else body.exclude_rule_id
-        res = bq.execute(body.sql, exclude_rule_id=own, overlap_days=settings.overlap_days)
+        res = bq.execute(body.sql, period, exclude_rule_id=own, overlap_days=settings.overlap_days)
     except BytesLimitExceeded as e:
         _record(db, user, body, target, phase="EXECUTION", success=False, error=str(e))
         raise ApiError(422, "Exécution interrompue : plafond de volume scanné atteint.", "BYTES_LIMIT") from e
@@ -180,5 +191,6 @@ def execute(
         orders_flagged=res.overlap.orders,
         orders_already_flagged=res.overlap.already_flagged,
         overlap_days=settings.overlap_days,
+        period=TestPeriod(start=period.start, end=period.end),
         test_id=run.id,
     )

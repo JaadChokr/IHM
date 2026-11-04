@@ -1,6 +1,5 @@
 import type { SqlIssue } from '../api/types';
-
-/** Paramètre réservé, fourni par Airflow à chaque exécution (PRD F2, contrainte 3). */
+import { PERIOD_PARAMS } from './period';
 
 /**
  * Remplace commentaires et littéraux par des espaces, en conservant les
@@ -71,9 +70,11 @@ export function findParams(sql: string): ParamOccurrence[] {
   return out;
 }
 
+const ALLOWED: readonly string[] = PERIOD_PARAMS;
+
 /**
- * Paramètres de la requête : aucun. La requête s'exécute telle quelle ; les seuils s'écrivent
- * directement dans le SQL et les dates relatives avec CURRENT_DATE().
+ * Paramètres de la requête : seuls @period_start / @period_end, bornes de la période du run (fournies
+ * par Airflow, et par la plateforme au test). Les seuils s'écrivent directement dans le SQL.
  * Contrôle d'ergonomie côté front ; le back refait la vérification.
  */
 export function checkParams(sql: string): SqlIssue[] {
@@ -81,16 +82,46 @@ export function checkParams(sql: string): SqlIssue[] {
   const used = findParams(sql);
   const reported = new Set<string>();
   for (const p of used) {
-    if (reported.has(p.name)) continue;
+    if (ALLOWED.includes(p.name) || reported.has(p.name)) continue;
     reported.add(p.name);
     const { line, column } = offsetToLineCol(sql, p.offset);
     issues.push({
       severity: 'error',
       code: 'PARAM_NOT_ALLOWED',
-      message: `@${p.name} : les paramètres ne sont pas pris en charge, la requête s'exécute telle quelle. Écrivez la valeur dans la requête (ex. > 500, ou CURRENT_DATE() pour une date).`,
+      message: `@${p.name} : seuls @period_start et @period_end sont fournis (bornes de la période du run). Écrivez les autres valeurs dans la requête (ex. amount_eur > 500).`,
       line,
       column,
       length: p.name.length + 1,
+    });
+  }
+  return issues;
+}
+
+/**
+ * Alertes sur la fenêtre de dates (miroir de check_date_window côté back) :
+ * - CURRENT_DATE() et consorts donnent la date réelle d'exécution, fausse en rattrapage ou en relance ;
+ * - sans fenêtre, le premier run d'une version remonte tout ce qu'elle lit (pic dans le comparatif).
+ */
+export function checkDateWindow(sql: string): SqlIssue[] {
+  const masked = maskSql(sql);
+  const issues: SqlIssue[] = [];
+  for (const m of masked.matchAll(/\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b(?:\s*\(\s*\))?/gi)) {
+    const { line, column } = offsetToLineCol(sql, m.index ?? 0);
+    issues.push({
+      severity: 'warning',
+      code: 'CURRENT_DATE_USED',
+      message: `${m[0].trim()} donne la date réelle d'exécution : en rattrapage ou en relance d'un run passé, la requête lirait la mauvaise période. Préférez @period_start / @period_end (ex. DATE(@period_end, 'Europe/Paris') pour le jour du run).`,
+      line,
+      column,
+      length: m[0].length,
+    });
+  }
+  if (sql.trim() && issues.length === 0 && !findParams(sql).some((p) => ALLOWED.includes(p.name))) {
+    issues.push({
+      severity: 'warning',
+      code: 'NO_DATE_WINDOW',
+      message:
+        'Pas de fenêtre de dates (@period_start / @period_end) : au premier run, la règle remontera toutes les commandes lues, d\'où un pic ponctuel dans le comparatif des versions. Les runs suivants n\'écrivent que les nouvelles commandes.',
     });
   }
   return issues;

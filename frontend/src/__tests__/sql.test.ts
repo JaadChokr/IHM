@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { checkParams, findParams, maskSql, queryHash } from '../lib/sql';
+import { checkDateWindow, checkParams, findParams, maskSql, queryHash } from '../lib/sql';
+import { lastPeriod } from '../lib/period';
 import { diffLines } from '../lib/diff';
 import { totals } from '../lib/metrics';
 import { simulateDryRun } from '../api/mock/bigquery';
@@ -15,9 +16,15 @@ describe('paramètres nommés', () => {
   it('ignore les variables système @@', () => {
     expect(findParams('SELECT @@project_id, @a')).toHaveLength(1);
   });
-  it('refuse tout paramètre, @run_date compris', () => {
+  it('admet seulement @period_start / @period_end', () => {
     expect(checkParams('SELECT order_id WHERE x > @seuil AND d = @run_date').map((i) => i.code)).toEqual(['PARAM_NOT_ALLOWED', 'PARAM_NOT_ALLOWED']);
-    expect(checkParams('SELECT order_id FROM t WHERE d = CURRENT_DATE()')).toEqual([]);
+    expect(checkParams('SELECT order_id FROM t WHERE d >= @period_start AND d < @period_end')).toEqual([]);
+  });
+  it('alerte sur CURRENT_DATE() et sur une requête sans fenêtre de dates', () => {
+    const cur = checkDateWindow('SELECT order_id FROM t\nWHERE d >= current_date() -- CURRENT_DATE');
+    expect(cur.map((i) => [i.code, i.line])).toEqual([['CURRENT_DATE_USED', 2]]);
+    expect(checkDateWindow('SELECT order_id FROM t -- CURRENT_DATE()').map((i) => i.code)).toEqual(['NO_DATE_WINDOW']);
+    expect(checkDateWindow("SELECT order_id FROM t WHERE d = DATE(@period_end, 'Europe/Paris')")).toEqual([]);
   });
   it('masque en conservant les positions', () => {
     const sql = "a /* x */ 'yy' b";
@@ -57,12 +64,12 @@ describe('dry-run simulé', () => {
     expect(r.issues.find((i) => i.code === 'HARDCODED_DATE')?.severity).toBe('warning');
     expect(r.ok).toBe(true);
   });
-  it("signale l'absence de fenêtre relative au jour d'exécution sans bloquer", () => {
+  it("signale l'absence de fenêtre de dates sans bloquer", () => {
     const sans = simulateDryRun('SELECT order_id FROM `sales.orders` -- CURRENT_DATE()', G, 't');
     expect(sans.issues.find((i) => i.code === 'NO_DATE_WINDOW')?.severity).toBe('warning');
     expect(sans.ok).toBe(true);
-    const avec = simulateDryRun('SELECT order_id FROM `sales.orders` WHERE order_date >= current_date()', G, 't');
-    expect(avec.issues.some((i) => i.code === 'NO_DATE_WINDOW')).toBe(false);
+    const avec = simulateDryRun('SELECT order_id FROM `sales.orders` WHERE created_at >= @period_start AND created_at < @period_end', G, 't');
+    expect(avec.issues).toEqual([]);
   });
   it('signale un dépassement du plafond de volume', () => {
     const r = simulateDryRun('SELECT order_id FROM `tracking.web_events_raw` WHERE d = CURRENT_DATE()', G, 't');
@@ -81,5 +88,23 @@ describe('diff et indicateurs', () => {
     expect(t.precision).toBe(0.5);
     expect(t.processingRate).toBe(0.1);
     expect(t.lowSample).toBe(true);
+  });
+});
+
+describe('période testée (@period_start / @period_end)', () => {
+  const at = (iso: string) => new Date(iso);
+  it('quotidienne : de 3 h à 3 h, heure de Paris', () => {
+    // 4 nov. 2026, 2 h 30 à Paris (UTC+1) : le run de 3 h n'a pas encore eu lieu.
+    expect(lastPeriod('DAILY', at('2026-11-04T01:30:00Z'))).toEqual({ start: '2026-11-02T02:00:00.000Z', end: '2026-11-03T02:00:00.000Z' });
+  });
+  it('horaire : de h+5 à h+5', () => {
+    expect(lastPeriod('HOURLY', at('2026-11-04T13:02:00Z'))).toEqual({ start: '2026-11-04T11:05:00.000Z', end: '2026-11-04T12:05:00.000Z' });
+  });
+  it('hebdomadaire : du lundi 4 h au lundi 4 h', () => {
+    expect(lastPeriod('WEEKLY', at('2026-11-04T08:00:00Z'))).toEqual({ start: '2026-10-26T03:00:00.000Z', end: '2026-11-02T03:00:00.000Z' });
+  });
+  it("passage à l'heure d'hiver : une journée de 25 h", () => {
+    const p = lastPeriod('DAILY', at('2026-10-25T11:00:00Z'));
+    expect(p).toEqual({ start: '2026-10-24T01:00:00.000Z', end: '2026-10-25T02:00:00.000Z' });
   });
 });

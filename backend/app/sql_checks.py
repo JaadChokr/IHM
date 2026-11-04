@@ -2,16 +2,18 @@
 
 Les contraintes structurelles (SELECT unique, colonne order_id) s'appuient sur
 les métadonnées du dry-run BigQuery, pas sur le texte : voir `query.py`. Ici,
-uniquement ce que BigQuery ne dit pas : aucun paramètre (la requête s'exécute telle quelle) ; dates
-en dur et absence de fenêtre relative au jour d'exécution (simples alertes).
+uniquement ce que BigQuery ne dit pas : seuls @period_start / @period_end sont admis (fournis par
+Airflow à chaque run, et par la plateforme au test) ; dates en dur, CURRENT_DATE() et absence de
+fenêtre de dates (simples alertes).
 """
 
 import re
 
+from app.periods import PARAMS
 from app.schemas import SqlIssue
 
 _PARAM_RE = re.compile(r"(^|[^@\w])@([A-Za-z_]\w*)")
-_CLOCK_RE = re.compile(r"\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b", re.IGNORECASE)
+_CLOCK_RE = re.compile(r"\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b(?:\s*\(\s*\))?", re.IGNORECASE)
 _DATE_RE = re.compile(r"(?:\b(?:DATE|TIMESTAMP)\s*)?'\d{4}-\d{2}-\d{2}[^']*'", re.IGNORECASE)
 
 
@@ -63,12 +65,12 @@ def find_params(sql: str) -> list[tuple[str, int]]:
 
 
 def check_params(sql: str) -> list[SqlIssue]:
-    """Aucun paramètre : la requête s'exécute telle quelle (seuils en dur, dates via CURRENT_DATE())."""
+    """Seuls @period_start / @period_end : bornes de la période du run, fournies par Airflow (et par la
+    plateforme au test). Tout autre paramètre est refusé : les seuils s'écrivent en dur."""
     issues: list[SqlIssue] = []
-    used = find_params(sql)
     reported: set[str] = set()
-    for name, off in used:
-        if name in reported:
+    for name, off in find_params(sql):
+        if name in PARAMS or name in reported:
             continue
         reported.add(name)
         line, col = offset_to_line_col(sql, off)
@@ -76,8 +78,8 @@ def check_params(sql: str) -> list[SqlIssue]:
             SqlIssue(
                 severity="error",
                 code="PARAM_NOT_ALLOWED",
-                message=f"@{name} : les paramètres ne sont pas pris en charge, la requête s'exécute telle "
-                "quelle. Écrivez la valeur dans la requête (ex. > 500, ou CURRENT_DATE() pour une date).",
+                message=f"@{name} : seuls @period_start et @period_end sont fournis (bornes de la période du "
+                "run). Écrivez les autres valeurs dans la requête (ex. amount_eur > 500).",
                 line=line,
                 column=col,
                 length=len(name) + 1,
@@ -97,9 +99,9 @@ def check_hardcoded_dates(sql: str) -> list[SqlIssue]:
                 # 1er janvier 2024), mais pas comme jour traité, qui serait alors le même à chaque run.
                 severity="warning",
                 code="HARDCODED_DATE",
-                message=f"Date en dur ({m.group(0)}) : normal pour un seuil fixe. Si elle désigne le jour "
-                "traité, la règle relira ce même jour à chaque exécution : préférez "
-                "DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) pour la veille.",
+                message=f"Date en dur ({m.group(0)}) : normal pour un seuil fixe. Si elle désigne la période "
+                "traitée, la règle relira ce même jour à chaque exécution : préférez "
+                "created_at >= @period_start AND created_at < @period_end.",
                 line=line,
                 column=col,
                 length=len(m.group(0)),
@@ -109,19 +111,40 @@ def check_hardcoded_dates(sql: str) -> list[SqlIssue]:
 
 
 def check_date_window(sql: str) -> list[SqlIssue]:
-    """Alerte si la requête ne dépend pas du jour d'exécution : sans fenêtre glissante, le premier run
-    d'une version remonte tout ce qu'elle lit (le dédoublonnage ne joue qu'ensuite)."""
-    if not sql.strip() or _CLOCK_RE.search(mask_sql(sql)):
-        return []
-    return [
-        SqlIssue(
-            severity="warning",
-            code="NO_DATE_WINDOW",
-            message="Pas de fenêtre relative au jour d'exécution (CURRENT_DATE(), CURRENT_TIMESTAMP()…) : "
-            "au premier run, la règle remontera toutes les commandes lues, d'où un pic ponctuel dans le "
-            "comparatif des versions. Les runs suivants n'écrivent que les nouvelles commandes.",
+    """Alertes sur la fenêtre de dates de la requête.
+
+    - CURRENT_DATE() et consorts donnent la date réelle d'exécution : juste au run normal, faux en
+      rattrapage ou en relance d'un run passé, où seuls @period_start / @period_end suivent la période ;
+    - sans aucune fenêtre, le premier run d'une version remonte tout ce qu'elle lit (le dédoublonnage ne
+      joue qu'ensuite) : pic ponctuel dans le comparatif des versions.
+    """
+    masked = mask_sql(sql)
+    issues: list[SqlIssue] = []
+    for m in _CLOCK_RE.finditer(masked):
+        line, col = offset_to_line_col(sql, m.start())
+        issues.append(
+            SqlIssue(
+                severity="warning",
+                code="CURRENT_DATE_USED",
+                message=f"{m.group(0).strip()} donne la date réelle d'exécution : en rattrapage ou en "
+                "relance d'un run passé, la requête lirait la mauvaise période. Préférez @period_start / "
+                "@period_end (ex. DATE(@period_end, 'Europe/Paris') pour le jour du run).",
+                line=line,
+                column=col,
+                length=len(m.group(0)),
+            )
         )
-    ]
+    if sql.strip() and not issues and not any(n in PARAMS for n, _ in find_params(sql)):
+        issues.append(
+            SqlIssue(
+                severity="warning",
+                code="NO_DATE_WINDOW",
+                message="Pas de fenêtre de dates (@period_start / @period_end) : au premier run, la règle "
+                "remontera toutes les commandes lues, d'où un pic ponctuel dans le comparatif des "
+                "versions. Les runs suivants n'écrivent que les nouvelles commandes.",
+            )
+        )
+    return issues
 
 
 def query_hash(sql: str) -> str:

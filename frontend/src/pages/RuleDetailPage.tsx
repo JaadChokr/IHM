@@ -151,7 +151,7 @@ export function RuleDetailPage() {
 function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void }) {
   const editor = useRef<SqlEditorHandle>(null);
   const [issues, setIssues] = useState<SqlIssue[]>();
-  const test = useQueryTest({ sql: r.sqlQuery, target: { ruleId: r.ruleId }, onIssues: setIssues, onTested });
+  const test = useQueryTest({ sql: r.sqlQuery, target: { ruleId: r.ruleId }, schedule: r.schedule, onIssues: setIssues, onTested });
   return (
     <div className="stack">
       <div className="card card-pad stack" style={{ gap: 12 }}>

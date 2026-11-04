@@ -288,8 +288,9 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   **Contrat côté Airflow, à valider avec l'équipe data** : **un DAG par fréquence** (`fraud_rules_hourly`,
   `fraud_rules_daily`, `fraud_rules_weekly`). À chaque exécution, il lit dans `rules_registry` les règles de sa
   fréquence (une ligne par règle : sa dernière version non écartée) et lance une tâche par règle (mappage
-  dynamique d'Airflow) : une règle en échec ne bloque pas les autres et se relance seule. La requête est
-  exécutée telle quelle, sans être recopiée. Le DAG écrit dans `rule_runs` la version exécutée et son
+  dynamique d'Airflow) : une règle en échec ne bloque pas les autres et se relance seule (2 nouvelles
+  tentatives). La requête est exécutée telle quelle, sans être recopiée, avec pour seuls paramètres les bornes
+  de la période du run (voir « Période du run »). Le DAG écrit dans `rule_runs` la version exécutée et son
   `airflow_dag_id` : c'est ce qui permet à la plateforme d'afficher quelle version tourne. Une règle publiée,
   nouvelle ou nouvelle version, tourne donc **dès le run suivant, sans aucune action de l'équipe data** ; une
   règle qui change de fréquence change simplement de DAG. Les brouillons ne sont jamais exécutés. DAG de
@@ -305,27 +306,32 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   en revanche, le DAG ne transmet que ce que *la règle*, toutes versions confondues, ne lui a jamais transmis
   (colonne `rule_alerts.sent_to_provider`) : passer à la v2 ne renvoie pas les commandes de la v1.
 
-  **Relance d'un run manqué (« voyage dans le temps »)** : un run relancé après coup depuis Airflow (Clear d'un
-  run ancien) est replacé à son heure d'origine (`data_interval_end`). `CURRENT_DATE()`, `CURRENT_DATETIME()`
-  et `CURRENT_TIMESTAMP()` y renvoient la date du run (fuseau conservé :
-  `CURRENT_DATE('Europe/Paris')` → `DATE(TIMESTAMP '…', 'Europe/Paris')`), et chaque table est lue dans son état
-  d'alors (`FOR SYSTEM_TIME AS OF`), comme `rules_registry`, pour rejouer la version qui était en place. Lire
-  les tables à cette heure évite qu'une fenêtre bornée d'un seul côté (`>= veille`) relise aussi les jours
-  écoulés depuis, ce qui fausserait les comptages. La requête de l'analyste n'est modifiée qu'à ces endroits
-  (module `infra/airflow/fraud_rules_sql.py`, analysé par sqlglot, à installer dans l'environnement Airflow :
-  une chaîne ou un commentaire n'est jamais touché ; tests : `pytest infra/airflow`). Une vue ou une table
-  externe ne peut pas remonter le temps : elle est lue au présent, ce que signale `rule_runs.note`.
-  `rule_runs.replayed_as_of` marque les relances. BigQuery limite le voyage dans le temps à **7 jours** : on
-  part du principe qu'un run manqué est relancé dans la semaine, et au-delà la relance échoue avec un message
-  explicite plutôt que de produire un résultat faux. Des tables `rule_runs` / `rule_alerts` existantes
-  reçoivent les nouvelles colonnes par `infra/bigquery/03_rule_upgrade_suivi.sql`.
+  **Période du run (`@period_start` / `@period_end`)** : Airflow passe à la requête les bornes `[début, fin[`
+  de l'intervalle du run (`data_interval_start` / `data_interval_end`, TIMESTAMP), calées sur le cron du DAG en
+  heure de Paris : 1 h pour le DAG horaire (de h+5 à h+5), **de 3 h à 3 h** pour le quotidien, du lundi 4 h au
+  lundi 4 h pour l'hebdomadaire. Exemples :
+  - période exacte : `created_at >= @period_start AND created_at < @period_end` ;
+  - la veille, jour calendaire : `DATE(created_at, 'Europe/Paris') = DATE_SUB(DATE(@period_end, 'Europe/Paris'), INTERVAL 1 DAY)` ;
+  - fenêtre glissante de 7 jours : `created_at >= TIMESTAMP_SUB(@period_end, INTERVAL 7 DAY) AND created_at < @period_end`.
+
+  Un rattrapage (`catchup=True` : périodes manquées pendant un déploiement ou une panne) ou une relance d'un run
+  passé (Clear dans Airflow) repasse les bornes de la période d'origine : la requête porte sur la bonne
+  période sans être réécrite. `CURRENT_DATE()` et consorts restent permis mais donnent la date réelle
+  d'exécution, fausse dans ces deux cas : l'éditeur les signale (alerte `CURRENT_DATE_USED`). Pour lire une
+  table dans son état de fin de période : `FROM t FOR SYSTEM_TIME AS OF @period_end` ; BigQuery ne le permet que
+  sur **7 jours**, et au-delà le DAG échoue avec un message explicite (on part du principe qu'un run manqué est
+  relancé dans la semaine). Pour un rattrapage de moins de 7 jours, `rules_registry` est lue dans son état de
+  fin de période : c'est la version alors en place qui tourne. `rule_runs` garde la période de chaque run
+  (`period_start`, `period_end`) ; des tables existantes reçoivent les nouvelles colonnes par
+  `infra/bigquery/03_rule_upgrade_suivi.sql`. Les crons sont à garder alignés entre le DAG et
+  `backend/app/periods.py`, qui calcule la période testée dans l'IHM.
 
   **Premier run d'une version** : le dédoublonnage ne joue qu'à partir du deuxième run. Une requête sans
   fenêtre relative à la date d'exécution remonte donc, à son premier run, toutes les commandes qu'elle lit ;
   le comparatif des versions montre un pic ce jour-là. Rien n'est envoyé pour autant : toute version commence
   en observation, et l'envoi ne transmet que les commandes des runs faits après la décision. L'éditeur
-  l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'utilise ni `CURRENT_DATE()`, ni
-  `CURRENT_DATETIME()`, ni `CURRENT_TIMESTAMP()`.
+  l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'utilise ni `@period_start` / `@period_end`,
+  ni `CURRENT_DATE()` et consorts.
 
   Pour chaque commande remontée, le DAG écrit une ligne dans `rule_alerts`. Chaque règle renvoie ses
   propres colonnes ; seule `order_id` est obligatoire (vérifiée à la publication) et sert aux indicateurs.
@@ -334,11 +340,11 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   ```sql
   INSERT INTO `projet.fraud_rules.rule_alerts`
     (rule_id, rule_version, run_id, run_date, order_id, detected_at, details)
-  SELECT @rule_id, @rule_version, @run_id, CURRENT_DATE(),
+  SELECT @rule_id, @rule_version, @run_id, @run_date,
          CAST(t.order_id AS STRING), CURRENT_TIMESTAMP(),
          TO_JSON(t)                 -- toute la ligne de résultat (order_id compris)
   FROM (
-    /* sql_query lue dans rules_registry, exécutée telle quelle */
+    /* sql_query lue dans rules_registry, exécutée telle quelle avec @period_start / @period_end */
   ) AS t
   ```
   Une table `rule_alerts` créée avant l'ajout de `details` est mise à jour par
@@ -350,21 +356,22 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - **Contraintes SQL** : seul le DML/DDL bloque l'enregistrement d'un brouillon. Pour tester, il faut une requête
   valide pour BigQuery exposant `order_id` ; publier exige un test réussi. Les dates en
   dur ne sont qu'une alerte : légitimes comme seuil fixe (`created_at >= '2024-01-01'`), à éviter comme jour
-  traité (`order_date = '2026-10-27'` relirait ce jour à chaque exécution).
-- **Paramètres (écart au PRD F2)** : aucun. La requête s'exécute telle quelle, au test comme en production :
-  les seuils s'écrivent en dur dans le SQL (`amount_eur >= 500`), leur évolution se lit dans le comparatif
-  entre versions, et les dates sont relatives au jour d'exécution (`CURRENT_DATE()`). Tout `@paramètre` est
-  refusé. `rules_registry` n'a donc pas de colonne `parameters`. Rejouer un jour passé ne demande pas de
-  réécrire la requête : le DAG la replace à l'heure du run (voir « Relance d'un run manqué »).
+  traité (`order_date = '2026-10-27'` relirait ce jour à chaque exécution). `CURRENT_DATE()` et l'absence de
+  fenêtre de dates sont aussi de simples alertes.
+- **Paramètres (écart au PRD F2)** : seulement `@period_start` et `@period_end`, bornes de la période du run,
+  fournies par Airflow et, au test, par la plateforme ; l'analyste ne les saisit jamais. Les seuils s'écrivent
+  en dur dans le SQL (`amount_eur >= 500`) et leur évolution se lit dans le comparatif entre versions ; tout
+  autre `@paramètre` est refusé. `rules_registry` n'a donc pas de colonne `parameters`.
 - **Identité** : `owner_matricule` remplace `owner_email` dans `rules_registry`.
 - **Résultat d'un test** : nombre de commandes remontées (distinctes), et combien sont déjà remontées par une
   autre règle (table `rule_alerts`, 90 derniers jours, réglable par `RM_OVERLAP_DAYS`).
   Le recoupement relit le résultat du test (table temporaire du job BigQuery) : la requête n'est pas rejouée.
   Les versions de la même règle ne sont pas comptées. Si `rule_alerts` est illisible, seul le total s'affiche.
-- **Période d'un test** : la requête s'exécute le jour même. Le modèle de départ vise la veille, dernière journée
-  complète : `order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`. La période couverte dépend de la
-  requête (ex. `BETWEEN DATE_SUB(CURRENT_DATE(), INTERVAL 8 DAY) AND DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`).
-- **Règles horaires** : la fenêtre s'écrit avec `CURRENT_TIMESTAMP()` (ex. dernière heure écoulée).
+- **Période d'un test** : `@period_start` / `@period_end` prennent la **dernière période complète** du DAG de
+  la fréquence choisie dans l'éditeur (quotidienne testée un mercredi à 10 h : du mardi 3 h au mercredi 3 h ;
+  horaire à 14 h 02 : de 12 h 05 à 13 h 05). La requête testée voit donc ce qu'a vu le dernier run. La
+  période est affichée sous l'éditeur et dans le résultat du test. Le modèle de départ filtre
+  `created_at >= @period_start AND created_at < @period_end`.
 - **Déploiement** : API en ingress interne sans IAM entre front et API (le contrôle d'accès est réseau, PRD F8).
   La topologie exacte (load balancer interne, routage `/api`) reste à arbitrer.
 - **Valeurs provisoires** : typologies de fraude (Q4, `frontend/src/lib/format.ts`),

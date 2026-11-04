@@ -7,7 +7,7 @@ from tests.conftest import login
 SQL = """SELECT
   o.order_id
 FROM `sales.orders` o
-WHERE o.order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+WHERE o.created_at >= @period_start AND o.created_at < @period_end
   AND o.amount_eur > 500"""
 RULE = {
     "name": "Panier élevé",
@@ -153,14 +153,26 @@ def test_dry_run_controles(client, bq):
     assert issues["NO_ORDER_ID"] == issues["PARAM_NOT_ALLOWED"] == "error"
     # Une date en dur n'empêche pas de tester.
     assert issues["HARDCODED_DATE"] == "warning"
-    # Pas de CURRENT_DATE() : alerte sur le pic du premier run, sans bloquer.
+    # Pas de fenêtre de dates : alerte sur le pic du premier run, sans bloquer.
     assert issues["NO_DATE_WINDOW"] == "warning"
-    with_window = "SELECT order_id FROM t WHERE d >= current_date() -- CURRENT_DATE"
-    codes = [i["code"] for i in client.post("/query/dry-run", json={"sql": with_window}).json()["issues"]]
-    assert "NO_DATE_WINDOW" not in codes
-    commented = "SELECT order_id FROM t -- CURRENT_DATE()"
-    codes = [i["code"] for i in client.post("/query/dry-run", json={"sql": commented}).json()["issues"]]
-    assert "NO_DATE_WINDOW" in codes
+
+    def codes(sql: str) -> list[str]:
+        return [i["code"] for i in client.post("/query/dry-run", json={"sql": sql}).json()["issues"]]
+
+    # CURRENT_DATE() : juste au run normal, faux en rattrapage → alerte, avec sa position.
+    assert codes("SELECT order_id FROM t WHERE d >= current_date() -- CURRENT_DATE") == ["CURRENT_DATE_USED"]
+    assert codes("SELECT order_id FROM t -- CURRENT_DATE()") == ["NO_DATE_WINDOW"]
+    # Les bornes de la période : aucune alerte.
+    assert codes("SELECT order_id FROM t WHERE d >= DATE(@period_end, 'Europe/Paris')") == []
+
+
+def test_periode_testee_selon_la_frequence(client, bq):
+    login(client)
+    for schedule, step in (("HOURLY", timedelta(hours=1)), ("DAILY", timedelta(days=1))):
+        dry = client.post("/query/dry-run", json={"sql": SQL, "schedule": schedule}).json()
+        start, end = (datetime.fromisoformat(dry["period"][k]) for k in ("start", "end"))
+        assert end - start == step and end <= datetime.now(UTC)
+        assert (bq.last_period.start, bq.last_period.end) == (start, end)  # passée à BigQuery
 
 
 def test_date_en_dur_soumissible(client):

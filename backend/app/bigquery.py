@@ -17,6 +17,7 @@ from typing import Any, Protocol
 
 from app.core import Settings, get_settings
 from app.database import Rule, RuleVersion
+from app.periods import Period
 from app.schemas import Column, DailyPerformance, RuleRun, VersionPerformance
 from app.sql_checks import mask_sql
 
@@ -83,9 +84,13 @@ class ProductionTotals:
 
 
 class BigQueryGateway(Protocol):
-    def dry_run(self, sql: str) -> DryRunMeta: ...
+    def dry_run(self, sql: str, period: Period) -> DryRunMeta:
+        """`period` : valeurs de @period_start / @period_end (toujours fournies, utilisées ou non)."""
+        ...
 
-    def execute(self, sql: str, exclude_rule_id: str | None = None, overlap_days: int = 90) -> ExecMeta:
+    def execute(
+        self, sql: str, period: Period, exclude_rule_id: str | None = None, overlap_days: int = 90
+    ) -> ExecMeta:
         """Exécute la requête (échantillon) et compte ses commandes déjà remontées par une autre règle
         que `exclude_rule_id` dans `rule_alerts` sur `overlap_days` jours."""
         ...
@@ -126,23 +131,31 @@ class RealBigQueryGateway:
         self.ds = f"`{self.client.project}.{settings.bq_dataset}`"
 
     def _config(self, **kw):
-        # Aucun paramètre : la requête s'exécute telle quelle (dates relatives via CURRENT_DATE()).
         return self._bq.QueryJobConfig(use_query_cache=False, labels={"app": "rules-manager"}, **kw)
 
-    def dry_run(self, sql):
+    def _period(self, period: Period) -> list:
+        # Les deux paramètres sont toujours passés, comme le fait Airflow : BigQuery ignore ceux que la
+        # requête n'utilise pas.
+        P = self._bq.ScalarQueryParameter
+        return [P("period_start", "TIMESTAMP", period.start), P("period_end", "TIMESTAMP", period.end)]
+
+    def dry_run(self, sql, period):
         from google.api_core.exceptions import GoogleAPICallError
 
         try:
-            job = self.client.query(sql, job_config=self._config(dry_run=True))
+            cfg = self._config(dry_run=True, query_parameters=self._period(period))
+            job = self.client.query(sql, job_config=cfg)
         except GoogleAPICallError as e:
             raise QueryError(getattr(e, "message", str(e))) from e
         schema = [Column(name=f.name, type=f.field_type) for f in (job.schema or [])]
         return DryRunMeta(job.statement_type or "UNKNOWN", job.total_bytes_processed or 0, schema)
 
-    def execute(self, sql, exclude_rule_id=None, overlap_days=90):
+    def execute(self, sql, period, exclude_rule_id=None, overlap_days=90):
         from google.api_core.exceptions import GoogleAPICallError
 
-        cfg = self._config(maximum_bytes_billed=self.settings.max_bytes_billed)
+        cfg = self._config(
+            maximum_bytes_billed=self.settings.max_bytes_billed, query_parameters=self._period(period)
+        )
         cfg.job_timeout_ms = self.settings.job_timeout_ms
         start = time.monotonic()
         try:
@@ -395,8 +408,10 @@ class FakeBigQueryGateway:
     registry: dict[str, tuple[int, str, bool]] = field(default_factory=dict)
     stats: list[RunStats] = field(default_factory=list)
     overlap: list[tuple[str, int]] = field(default_factory=list)
+    last_period: Period | None = None  # période passée au dernier appel (contrôlée par les tests)
 
-    def dry_run(self, sql):
+    def dry_run(self, sql, period):
+        self.last_period = period
         if self.next_error:
             err, self.next_error = self.next_error, None
             raise err
@@ -409,8 +424,8 @@ class FakeBigQueryGateway:
         cols = [Column(name=c, type="STRING") for c in select_columns(sql)]
         return DryRunMeta(stype, self.bytes_processed, cols)
 
-    def execute(self, sql, exclude_rule_id=None, overlap_days=90):
-        meta = self.dry_run(sql)
+    def execute(self, sql, period, exclude_rule_id=None, overlap_days=90):
+        meta = self.dry_run(sql, period)
         cols = [c.name for c in meta.schema]
         rows = [{c: f"ORD-{1000 + i}" if c == "order_id" else f"{c}-{i}" for c in cols} for i in range(5)]
         # Commandes « déjà remontées » simulées : (rule_id, nombre) prérempli par les tests.
