@@ -78,7 +78,12 @@ dans PowerShell :
 .\run.cmd            # API + interface, navigateur ouvert sur http://localhost:5173
 .\run.cmd -Demo      # interface seule, données simulées (Python inutile)
 .\run.cmd -Install   # réinstallation propre (supprime backend\.venv et frontend\node_modules ; base et .env conservés)
+.\run.cmd -BigQuery  # met d'abord à jour les tables et vues BigQuery (infra\bigquery\apply.ps1), puis démarre
 ```
+Sans `-BigQuery`, le script ne touche jamais à BigQuery (tables partagées avec Airflow). Avec, il lit le
+projet, le dataset et la table du prestataire dans `backend\.env`, demande l'outil `bq` connecté
+(`gcloud auth login`) et s'arrête si la mise à jour échoue. Les options se combinent
+(`.\run.cmd -Install -BigQuery`), sauf avec `-Demo`.
 Le premier lancement installe tout (quelques minutes) et crée `backend\.env` (SQLite, BigQuery simulé) s'il
 n'existe pas ; les suivants démarrent directement. Journal de l'API : `backend\api.log`, `backend\api-errors.log`.
 `Ctrl+C` arrête l'interface et l'API. Si le port 8000 (API) ou 5173 (interface) est occupé, le script prend

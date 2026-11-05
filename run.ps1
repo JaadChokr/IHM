@@ -11,6 +11,11 @@
 .PARAMETER Demo
   Interface seule, données simulées dans le navigateur (pas de Python nécessaire).
 
+.PARAMETER BigQuery
+  Met aussi à jour les tables et vues BigQuery (infra\bigquery\apply.ps1) avant de démarrer : projet,
+  dataset et table du prestataire lus dans backend\.env. Demande l'outil bq connecté (gcloud auth login)
+  et des droits d'administration sur le dataset. S'arrête si la mise à jour échoue.
+
 .PARAMETER Install
   Réinstallation propre : supprime l'environnement Python (backend\.venv, ou celui créé dans
   %LOCALAPPDATA%\RulesManager si Documents est protégé) et frontend\node_modules, puis réinstalle tout.
@@ -20,6 +25,8 @@
   .\run.cmd                 # double-clic possible
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File .\run.ps1 -Demo
+.EXAMPLE
+  .\run.cmd -BigQuery      # met d'abord à jour les tables BigQuery, puis démarre
 
 .PARAMETER ApiPort
   Premier port essayé pour l'API (8000 par défaut) ; s'il est occupé, le suivant libre est pris.
@@ -30,11 +37,15 @@
 param(
   [switch]$Demo,
   [switch]$Install,
+  [switch]$BigQuery,
   [int]$ApiPort = 8000,
   [int]$WebPort = 5173
 )
 
 $ErrorActionPreference = 'Stop'
+if ($Demo -and $BigQuery) {
+  throw "-BigQuery est sans objet avec -Demo (données simulées dans le navigateur, aucun accès à BigQuery)."
+}
 $root = $PSScriptRoot
 $backend = Join-Path $root 'backend'
 $frontend = Join-Path $root 'frontend'
@@ -172,6 +183,13 @@ if (-not $Demo) {
     Step 'Mise à jour de la base (alembic upgrade head)'
     & $venvPython -m alembic upgrade head
     if ($LASTEXITCODE -ne 0) { throw 'La migration de la base a échoué (voir ci-dessus).' }
+
+    if ($BigQuery) {
+      # Tables partagées avec Airflow : seulement sur demande. apply.ps1 lève une erreur en cas d'échec,
+      # ce qui arrête le lancement avant de démarrer l'API.
+      Step 'Mise à jour des tables BigQuery (infra\bigquery\apply.ps1)'
+      & (Join-Path $root 'infra\bigquery\apply.ps1') -EnvFile (Join-Path $backend '.env')
+    }
 
     $ApiPort = Get-FreePort $ApiPort "l'API"
     Step "Démarrage de l'API sur http://127.0.0.1:$ApiPort (journal : backend\api.log)"
