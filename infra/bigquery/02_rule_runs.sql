@@ -14,6 +14,11 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_runs` (
   status        STRING    NOT NULL,      -- SUCCESS | FAILED
   rows_returned INT64,                 -- commandes écrites dans rule_alerts par ce run
   rows_to_send  INT64,                 -- dont marquées à transmettre au prestataire (0 en observation)
-  error_message STRING
+  error_message STRING,
+  -- Une ligne par TENTATIVE : une tâche qui échoue puis réussit laisse deux lignes de même run_id. Pour
+  -- l'état d'un run, prendre la dernière tentative :
+  --   QUALIFY ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY started_at DESC) = 1
+  -- Clé logique, non appliquée par BigQuery (NOT ENFORCED).
+  PRIMARY KEY (run_id, started_at) NOT ENFORCED
 )
 PARTITION BY run_date;

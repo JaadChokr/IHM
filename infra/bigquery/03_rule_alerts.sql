@@ -17,7 +17,10 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_alerts` (
   -- Date de transmission, renseignée par le script d'envoi ; vide tant que la commande n'est pas partie.
   -- Le script lit les lignes « to_send AND sent_at IS NULL » et dédoublonne par commande, toutes règles
   -- confondues.
-  sent_at      TIMESTAMP
+  sent_at      TIMESTAMP,
+  -- Clé logique : une ligne par commande et par version de règle, garantie par le dédoublonnage du DAG.
+  -- BigQuery ne l'applique pas (NOT ENFORCED).
+  PRIMARY KEY (rule_id, rule_version, order_id) NOT ENFORCED
 )
 PARTITION BY run_date
 CLUSTER BY rule_id, order_id;  -- rule_id en tête : presque toutes les lectures filtrent sur la règle

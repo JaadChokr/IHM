@@ -397,6 +397,14 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   Les statuts « Validée » et « Refusée » disparaissent : un refus passe hors plateforme et l'analyste soumet
   une nouvelle version (risque R3 : le motif n'est pas tracé). L'état des runs est recopié par
   `POST /internal/sync-runs`, à appeler périodiquement (Cloud Scheduler, toutes les heures par exemple).
+  Seuls les runs réussis comptent : une version dont le premier run a échoué reste « Publiée », et une
+  version qui échoue à chaque run devient « Inactive » après 3 périodes.
+
+  **Clés des tables BigQuery** : BigQuery n'applique aucune clé unique. Chaque table déclare sa clé logique
+  (`PRIMARY KEY … NOT ENFORCED`), qui documente l'unicité attendue et aide l'optimiseur : `rules_registry`
+  (`rule_id`), `rule_alerts` (`rule_id, rule_version, order_id`, garantie par le dédoublonnage du DAG) et
+  `rule_runs` (`run_id, started_at` : **une ligne par tentative**, la dernière donnant l'état du run). Des
+  tables existantes les reçoivent par `infra/bigquery/03_rule_upgrade_suivi.sql`.
 - **Contraintes SQL** : seul le DML/DDL bloque l'enregistrement d'un brouillon. Pour tester, il faut une requête
   valide pour BigQuery exposant `order_id` ; publier exige un test réussi. Les dates en
   dur ne sont qu'une alerte : légitimes comme seuil fixe (`created_at >= '2024-01-01'`), à éviter comme jour

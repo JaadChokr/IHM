@@ -286,9 +286,12 @@ class RealBigQueryGateway:
 
     def run_stats(self):
         rows = self._rows(
+            # Seuls les runs réussis comptent : une version dont le premier run a échoué n'a pas encore
+            # tourné (elle reste « Publiée »), et une version qui échoue à chaque run devient inactive.
             f"""SELECT rule_id, rule_version, MIN(started_at) AS first_run_at, MAX(started_at) AS last_run_at,
                        ARRAY_AGG(airflow_dag_id ORDER BY started_at DESC LIMIT 1)[OFFSET(0)] AS dag_id
                 FROM {self.ds}.rule_runs
+                WHERE status = 'SUCCESS'
                 GROUP BY rule_id, rule_version""",
             [],
         )
