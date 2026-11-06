@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_runs` (
   finished_at   TIMESTAMP,
   status        STRING    NOT NULL,      -- SUCCESS | FAILED
   rows_returned INT64,                 -- commandes écrites dans rule_alerts par ce run
-  rows_sent     INT64,                 -- dont transmises au prestataire (NULL : version en observation)
+  rows_to_send  INT64,                 -- dont marquées à transmettre au prestataire (0 en observation)
   error_message STRING
 )
 PARTITION BY run_date;

@@ -11,8 +11,13 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_alerts` (
   -- quelles par Airflow. Chaque règle a ses propres colonnes : un JSON garde le schéma commun.
   -- Facultatif : un DAG qui ne la remplit pas reste conforme. Les indicateurs n'en dépendent pas.
   details      JSON,
-  -- Transmise au prestataire par ce run. Une commande n'est transmise qu'une fois par règle.
-  sent_to_provider BOOL
+  -- À transmettre au prestataire, décision figée au moment du run par le DAG : vrai si la règle était en
+  -- production (rules_registry.send_to_provider) et ne l'avait jamais marquée, toutes versions confondues.
+  to_send      BOOL,
+  -- Date de transmission, renseignée par le script d'envoi ; vide tant que la commande n'est pas partie.
+  -- Le script lit les lignes « to_send AND sent_at IS NULL » et dédoublonne par commande, toutes règles
+  -- confondues.
+  sent_at      TIMESTAMP
 )
 PARTITION BY run_date
 CLUSTER BY rule_id, order_id;  -- rule_id en tête : presque toutes les lectures filtrent sur la règle

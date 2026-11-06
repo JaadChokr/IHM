@@ -266,8 +266,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     prestataire** (`send_to_provider = false`). On mesure son volume et son recoupement avec les autres règles ;
     la précision n'est pas représentative, le prestataire ne traitant que les commandes aussi remontées par une
     règle envoyée. L'observation n'a pas d'échéance ;
-  - *En production* : l'analyste a cliqué « Envoyer au prestataire » ; `send_to_provider` passe à vrai et le DAG
-    transmet ses commandes dès le run suivant. « Suspendre l'envoi » la ramène en observation ;
+  - *En production* : l'analyste a cliqué « Envoyer au prestataire » ; `send_to_provider` passe à vrai, et dès
+    le run suivant le DAG marque ses commandes à transmettre (`to_send`) pour le script d'envoi. « Suspendre l'envoi » la ramène en observation ;
   - *Écartée* : l'analyste a décidé de ne pas l'envoyer ; elle sort de `rules_registry` et la version
     précédente reprend sa place (avec son envoi, si elle était envoyée) ;
   - *Inactive depuis X* : plus de run depuis 3 périodes (3 h, 3 jours ou 3 semaines selon la fréquence) ;
@@ -300,7 +300,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `airflow_dag_id` : c'est ce qui permet à la plateforme d'afficher quelle version tourne. Une règle publiée,
   nouvelle ou nouvelle version, tourne donc **dès le run suivant, sans aucune action de l'équipe data** ; une
   règle qui change de fréquence change simplement de DAG. Les brouillons ne sont jamais exécutés. DAG de
-  référence à adapter : `infra/airflow/fraud_rules_dags.py` (l'envoi au prestataire y reste à implémenter). Toutes les versions restent conservées dans la plateforme : comparatif
+  référence à adapter : `infra/airflow/fraud_rules_dags.py` (l'envoi au prestataire n'y figure pas : il est
+  fait par un script externe, voir « Envoi au prestataire »). Toutes les versions restent conservées dans la plateforme : comparatif
   SQL, comparaison des performances par version (repères sur les courbes, tableau par version) et
   **restauration** d'une version antérieure, recopiée dans un brouillon à tester puis soumettre.
 
@@ -308,9 +309,24 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `rule_alerts` que les commandes que *cette version* n'a jamais remontées : une requête peut relire les mêmes
   jours (fenêtre glissante, règle horaire sur la veille) sans doublon, une fenêtre un peu plus large que la
   fréquence rattrape d'elle-même un run manqué, et chaque version est mesurée sur tout ce qu'elle trouve (une
-  v2 n'est pas amputée de ce que la v1 avait déjà remonté, sinon le comparatif serait faussé). Au prestataire,
-  en revanche, le DAG ne transmet que ce que *la règle*, toutes versions confondues, ne lui a jamais transmis
-  (colonne `rule_alerts.sent_to_provider`) : passer à la v2 ne renvoie pas les commandes de la v1.
+  v2 n'est pas amputée de ce que la v1 avait déjà remonté, sinon le comparatif serait faussé). Pour l'envoi, en
+  revanche, une commande n'est marquée à transmettre qu'une fois par *règle*, toutes versions confondues.
+
+  **Envoi au prestataire** : le DAG n'envoie rien. Au moment du run, il marque chaque commande écrite dans
+  `rule_alerts` :
+  - `to_send` (« à transmettre ») est vrai si la règle est en production à ce run (`send_to_provider` de
+    `rules_registry`) et ne l'avait jamais marquée, toutes versions confondues. La décision est figée au moment
+    du run : passer en production n'envoie pas le stock remonté en observation, suspendre l'envoi ne bloque pas
+    ce qui était déjà marqué, et passer à la v2 ne remarque pas les commandes de la v1 ;
+  - `sent_at` (date de transmission) reste vide ; c'est le **script d'envoi externe** qui le renseigne.
+
+  Le script lit les lignes `to_send AND sent_at IS NULL`, les insère dans la base du prestataire en
+  dédoublonnant par commande, toutes règles confondues (le prestataire ne reçoit jamais deux fois la même
+  commande), puis renseigne `sent_at`. Une nouvelle tentative du DAG efface et réécrit les lignes de son run
+  pas encore transmises, et garde celles qui le sont. `rule_runs.rows_to_send` donne, par run, le nombre de
+  commandes marquées. Des tables existantes reçoivent `to_send`, `sent_at` et `rows_to_send` par
+  `infra/bigquery/03_rule_upgrade_suivi.sql` ; les anciennes colonnes `sent_to_provider` et `rows_sent` ne
+  sont plus écrites (le script indique comment les supprimer).
 
   **Deux vues d'indicateurs**, pour ne pas compter deux fois une commande relue par une nouvelle version :
   - `v_rule_performance` (une ligne par règle, version et jour) sert au **comparatif des versions** : chaque
@@ -358,7 +374,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   **Premier run d'une version** : le dédoublonnage ne joue qu'à partir du deuxième run. Une requête sans
   plage de dates remonte donc, à son premier run, toutes les commandes qu'elle lit ;
   le comparatif des versions montre un pic ce jour-là. Rien n'est envoyé pour autant : toute version commence
-  en observation, et l'envoi ne transmet que les commandes des runs faits après la décision. L'éditeur
+  en observation, et seules les commandes des runs faits après la décision sont marquées à transmettre. L'éditeur
   l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'utilise ni `@period_start` ni `@period_end`.
 
   Pour chaque commande remontée, le DAG écrit une ligne dans `rule_alerts`. Chaque règle renvoie ses

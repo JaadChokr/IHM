@@ -1,6 +1,6 @@
 """DAG de référence : un DAG par fréquence de règles (horaire, quotidienne, hebdomadaire).
 
-À adapter par l'équipe data (connexion, envoi au prestataire, alertes). Chaque DAG lit `rules_registry`
+À adapter par l'équipe data (connexion, alertes). Chaque DAG lit `rules_registry`
 à chaque exécution et lance une tâche par règle de sa fréquence (mappage dynamique, Airflow 2.9 ou plus) :
 une règle publiée est prise en charge dès le run suivant, sans action manuelle.
 
@@ -15,9 +15,14 @@ Pour chaque règle, la tâche :
   1. exécute `sql_query` et écrit dans `rule_alerts` les commandes que **cette version** n'a encore jamais
      remontées (une seule fois chacune) : une fenêtre glissante ou une règle écrite avec CURRENT_DATE() ne
      crée pas de doublon, et chaque version est mesurée sur tout ce qu'elle trouve ;
-  2. si `send_to_provider` est vrai, transmet au prestataire celles que **la règle** (toutes versions
-     confondues) ne lui a jamais transmises ;
+  2. marque chacune `to_send` (« à transmettre au prestataire ») si la règle est en production à ce run
+     (`send_to_provider` de rules_registry, décision de l'analyste) et si la règle ne l'a jamais marquée,
+     toutes versions confondues : la décision est figée au moment du run ;
   3. trace l'exécution dans `rule_runs` (version, période, statut) : c'est ce que lit la plateforme.
+
+Envoi au prestataire : le DAG n'envoie rien. Un script externe lit dans `rule_alerts` les lignes
+`to_send AND sent_at IS NULL`, les transmet (dédoublonnées par commande, toutes règles confondues) et
+renseigne `sent_at`.
 
 Relance et rattrapage : la requête est exécutée telle quelle, tables lues au présent.
   - Avec une plage @period_start / @period_end, elle porte sur la période d'origine : résultat exact.
@@ -91,51 +96,6 @@ def _query(client: bigquery.Client, sql: str, **params: tuple[str, object]):
     return job
 
 
-def send_to_provider(rule: dict, orders: list[dict]) -> None:
-    """Transmet au prestataire les commandes (order_id, details JSON) : script d'insertion dans sa base
-    PostgreSQL, à écrire. L'insertion doit ignorer une commande déjà reçue (ON CONFLICT DO NOTHING) : si la
-    tâche tombe entre l'envoi et son marquage, la nouvelle tentative renvoie le même lot.
-
-    Exemple :
-        from airflow.providers.postgres.hooks.postgres import PostgresHook
-        PostgresHook("prestataire_postgres").insert_rows(
-            "alerts", [(rule["rule_id"], o["order_id"], o["details"]) for o in orders],
-            target_fields=["rule_id", "order_id", "details"], replace=False)
-
-    Échoue tant que ce n'est pas fait : une règle « en production » dans l'IHM ne doit jamais rester
-    silencieusement sans envoi."""
-    raise NotImplementedError("Envoi au prestataire à implémenter (voir send_to_provider).")
-
-
-def _send(client: bigquery.Client, ds: str, rule: dict, run_id: str) -> int:
-    """Envoie les commandes de ce run que la règle n'a jamais transmises (toutes versions) et les marque."""
-    batch = [
-        dict(r.items())
-        for r in _query(
-            client,
-            f"""SELECT order_id, TO_JSON_STRING(details) AS details FROM {ds}.rule_alerts n
-                WHERE n.rule_id = @rule_id AND n.run_id = @run_id AND NOT n.sent_to_provider
-                  AND NOT EXISTS (
-                    SELECT 1 FROM {ds}.rule_alerts s
-                    WHERE s.rule_id = @rule_id AND s.order_id = n.order_id AND s.sent_to_provider
-                  )""",
-            rule_id=("STRING", rule["rule_id"]),
-            run_id=("STRING", run_id),
-        ).result()
-    ]
-    if batch:
-        send_to_provider(rule, batch)
-        _query(
-            client,
-            f"""UPDATE {ds}.rule_alerts SET sent_to_provider = TRUE
-                WHERE rule_id = @rule_id AND run_id = @run_id AND order_id IN UNNEST(@ids)""",
-            rule_id=("STRING", rule["rule_id"]),
-            run_id=("STRING", run_id),
-            ids=("ARRAY<STRING>", [o["order_id"] for o in batch]),
-        )
-    return len(batch)
-
-
 def _emails() -> list[str]:
     raw = Variable.get("fraud_rules_alert_emails", default_var="")
     return [e.strip() for e in raw.split(",") if e.strip()]
@@ -191,7 +151,7 @@ def make_dag(frequency: str, cron: str):
             client, ds = _bq()
             dag_id = context["dag"].dag_id
             # Identifiant stable entre deux tentatives : une nouvelle tentative remplace les commandes
-            # (non encore envoyées) de la tentative ratée.
+            # (pas encore transmises) de la tentative ratée.
             run_id = f"{context['run_id']}__{rule['rule_id']}"
             period_start = context["data_interval_start"]
             period_end = context["data_interval_end"]
@@ -199,7 +159,7 @@ def make_dag(frequency: str, cron: str):
             started = datetime.now(UTC)
             ids = {"rule_id": ("STRING", rule["rule_id"]), "version": ("INT64", rule["version"])}
             sql = rule["sql_query"].strip().rstrip(";")
-            status, rows, sent, error = "SUCCESS", None, None, None
+            status, rows, to_send, error = "SUCCESS", None, None, None
             try:
                 if _TIME_TRAVEL.search(sql) and started - period_end > TIME_TRAVEL_MAX:
                     raise AirflowException(
@@ -211,7 +171,7 @@ def make_dag(frequency: str, cron: str):
                     client,
                     f"""DELETE FROM {ds}.rule_alerts
                         WHERE rule_id = @rule_id AND run_id = @run_id
-                          AND NOT IFNULL(sent_to_provider, FALSE)""",
+                          AND sent_at IS NULL  -- déjà transmises par le script d'envoi : gardées""",
                     rule_id=ids["rule_id"],
                     run_id=("STRING", run_id),
                 )
@@ -222,15 +182,22 @@ def make_dag(frequency: str, cron: str):
                 job = _query(
                     client,
                     f"""INSERT INTO {ds}.rule_alerts
-                          (rule_id, rule_version, run_id, run_date, order_id, detected_at, details,
-                           sent_to_provider)
+                          (rule_id, rule_version, run_id, run_date, order_id, detected_at, details, to_send)
                         SELECT @rule_id, @version, @run_id, @run_date,
-                               CAST(t.order_id AS STRING), CURRENT_TIMESTAMP(), TO_JSON(t), FALSE
+                               CAST(t.order_id AS STRING), CURRENT_TIMESTAMP(), TO_JSON(t),
+                               -- À transmettre : règle en production à ce run, et commande jamais
+                               -- marquée par la règle (une autre version a pu la remonter avant).
+                               @send AND NOT EXISTS (
+                                 SELECT 1 FROM {ds}.rule_alerts s
+                                 WHERE s.rule_id = @rule_id AND s.order_id = CAST(t.order_id AS STRING)
+                                   AND s.to_send
+                               )
                         FROM (
                     {sql}
                         ) AS t
                         -- Une commande n'est écrite qu'une fois par version de règle.
-                        WHERE NOT EXISTS (
+                        WHERE t.order_id IS NOT NULL
+                          AND NOT EXISTS (
                           SELECT 1 FROM {ds}.rule_alerts a
                           WHERE a.rule_id = @rule_id AND a.rule_version = @version
                             AND a.order_id = CAST(t.order_id AS STRING)
@@ -239,12 +206,21 @@ def make_dag(frequency: str, cron: str):
                     **ids,
                     run_id=("STRING", run_id),
                     run_date=("DATE", run_date),
+                    send=("BOOL", bool(rule["send_to_provider"])),
                     period_start=("TIMESTAMP", period_start),
                     period_end=("TIMESTAMP", period_end),
                 )
                 rows = job.num_dml_affected_rows
-                if rule["send_to_provider"]:
-                    sent = _send(client, ds, rule, run_id)
+                to_send = list(
+                    _query(
+                        client,
+                        f"""SELECT COUNTIF(to_send) AS n FROM {ds}.rule_alerts
+                            WHERE run_date = @run_date AND rule_id = @rule_id AND run_id = @run_id""",
+                        rule_id=ids["rule_id"],
+                        run_id=("STRING", run_id),
+                        run_date=("DATE", run_date),
+                    ).result()
+                )[0]["n"]
             except Exception as e:  # tracé dans rule_runs, puis relancé pour qu'Airflow le voie
                 status, error = "FAILED", str(e)[:2000]
                 raise AirflowException(error) from e
@@ -254,11 +230,11 @@ def make_dag(frequency: str, cron: str):
                         client,
                         f"""INSERT INTO {ds}.rule_runs
                               (run_id, rule_id, rule_version, airflow_dag_id, run_date, period_start,
-                               period_end, started_at, finished_at, status, rows_returned, rows_sent,
+                               period_end, started_at, finished_at, status, rows_returned, rows_to_send,
                                error_message)
                             VALUES (@run_id, @rule_id, @version, @dag_id, @run_date, @period_start,
-                                    @period_end, @started_at, CURRENT_TIMESTAMP(), @status, @rows, @sent,
-                                    @error)""",
+                                    @period_end, @started_at, CURRENT_TIMESTAMP(), @status, @rows,
+                                    @to_send, @error)""",
                         **ids,
                         run_id=("STRING", run_id),
                         dag_id=("STRING", dag_id),
@@ -268,7 +244,7 @@ def make_dag(frequency: str, cron: str):
                         started_at=("TIMESTAMP", started),
                         status=("STRING", status),
                         rows=("INT64", rows),
-                        sent=("INT64", sent),
+                        to_send=("INT64", to_send),
                         error=("STRING", error),
                     )
                 except Exception:
