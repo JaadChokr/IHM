@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { fmtDate } from '../lib/format';
 
 /** Une courbe : une version de la règle, ses valeurs alignées sur les dates du graphique. */
@@ -52,6 +52,7 @@ export function LineChart({ label, dates, series, format, yMax, markers = [], he
   const wrap = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
+  const gid = useId().replace(/[^a-zA-Z0-9]/g, '');
 
   useEffect(() => {
     const el = wrap.current;
@@ -93,6 +94,26 @@ export function LineChart({ label, dates, series, format, yMax, markers = [], he
         }
         last = { i, v };
       });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [series, width, max, n]);
+
+  // Aplat dégradé sous chaque courbe (une ou deux versions ; au-delà, il brouillerait la lecture).
+  const areas = useMemo(() => {
+    const out: { version: number; d: string }[] = [];
+    for (const s of series) {
+      let run: number[] = [];
+      const flush = () => {
+        if (run.length > 1) {
+          const top = run.map((i, k) => `${k ? 'L' : 'M'}${x(i).toFixed(1)},${y(s.values[i]!).toFixed(1)}`).join('');
+          const base = y(0).toFixed(1);
+          out.push({ version: s.version, d: `${top}L${x(run[run.length - 1]).toFixed(1)},${base}L${x(run[0]).toFixed(1)},${base}Z` });
+        }
+        run = [];
+      };
+      s.values.forEach((v, i) => (v === null ? flush() : run.push(i)));
+      flush();
     }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,6 +190,14 @@ export function LineChart({ label, dates, series, format, yMax, markers = [], he
         onKeyDown={onKey}
         onBlur={() => setHover(null)}
       >
+        <defs>
+          {shown.map((s) => (
+            <linearGradient key={s.version} id={`${gid}-v${s.version}`} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={versionColor(s.version)} stopOpacity={0.2} />
+              <stop offset="100%" stopColor={versionColor(s.version)} stopOpacity={0} />
+            </linearGradient>
+          ))}
+        </defs>
         <g className="axis">
           {ticks.map((t) => (
             <g key={t}>
@@ -196,6 +225,7 @@ export function LineChart({ label, dates, series, format, yMax, markers = [], he
             </g>
           );
         })}
+        {shown.length <= 2 && areas.map((a, k) => <path key={`a${k}`} className="area" d={a.d} fill={`url(#${gid}-v${a.version})`} />)}
         {paths.map((p, k) => (
           <path key={k} className={`line${p.observed ? ' observed' : ''}`} d={p.d} style={{ stroke: versionColor(p.version) }} />
         ))}

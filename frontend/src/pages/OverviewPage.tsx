@@ -67,7 +67,7 @@ export function OverviewPage() {
 
       <div className="stack">
         <div className="overview-kpis">
-          <button type="button" className="card kpi kpi-link" onClick={() => openList({ status: 'IN_PRODUCTION' })}>
+          <button type="button" className="card kpi kpi-link kpi-featured" onClick={() => openList({ status: 'IN_PRODUCTION' })}>
             <span className="kpi-label">En production</span>
             <span className="kpi-value">{fmtInt(count('IN_PRODUCTION'))}</span>
             <span className="kpi-sub">

@@ -20,9 +20,6 @@ export function DraftsPage() {
           <h1>Mes brouillons</h1>
           <p>Votre travail en cours, visible de vous seul. Une règle n'apparaît dans le référentiel qu'une fois publiée.</p>
         </div>
-        <Link to="/rules/new" className="btn btn-primary">
-          + Nouvelle règle
-        </Link>
       </div>
 
       <div className="stack">

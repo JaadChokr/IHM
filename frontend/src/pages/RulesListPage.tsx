@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import { CRITICALITIES, RULE_STATUSES, type RuleFilters } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
@@ -16,6 +16,12 @@ export function RulesListPage() {
   const { user } = useAuth();
   const [filters, setFilters] = usePref<RuleFilters>('rulesFilters', DEFAULT_FILTERS);
   const [q, setQ] = useState(filters.q ?? '');
+  // Recherche lancée depuis la barre supérieure (navigation avec { q }).
+  const location = useLocation();
+  useEffect(() => {
+    const asked = (location.state as { q?: string } | null)?.q;
+    if (asked !== undefined) setQ(asked);
+  }, [location.key, location.state]);
   const users = useAsync(() => api.listUsers(), []);
   const rules = useAsync(() => api.listRules(filters), [JSON.stringify(filters)]);
 
@@ -37,9 +43,6 @@ export function RulesListPage() {
           <h1>Règles de détection</h1>
           <p>Référentiel de toutes les règles, quel que soit leur statut.</p>
         </div>
-        <Link to="/rules/new" className="btn btn-primary">
-          + Nouvelle règle
-        </Link>
       </div>
 
       <div className="card rules-card">

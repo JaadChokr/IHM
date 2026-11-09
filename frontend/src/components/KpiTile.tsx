@@ -9,12 +9,14 @@ interface Props {
   delta?: { text: string; direction: 'up' | 'down' | 'flat' } | null;
   /** Explication en infobulle, à côté du libellé. */
   info?: ReactNode;
+  /** Chiffre clé mis en avant (fond anthracite). */
+  featured?: boolean;
 }
 
 /** Tuile d'indicateur : le chiffre, sa variation (libellée, pas seulement colorée). */
-export function KpiTile({ label, value, sub, delta, info }: Props) {
+export function KpiTile({ label, value, sub, delta, info, featured }: Props) {
   return (
-    <div className="card kpi">
+    <div className={`card kpi${featured ? ' kpi-featured' : ''}`}>
       <span className="kpi-label">
         {label}
         {info && <InfoTip label={`À propos : ${label}`}>{info}</InfoTip>}
@@ -26,7 +28,9 @@ export function KpiTile({ label, value, sub, delta, info }: Props) {
             <span className="muted">— pas de période de comparaison</span>
           ) : (
             <>
-              <span aria-hidden="true">{delta.direction === 'up' ? '▲' : delta.direction === 'down' ? '▼' : '■'}</span> {delta.text}{' '}
+              <span className={`kpi-pill ${delta.direction}`}>
+                <span aria-hidden="true">{delta.direction === 'up' ? '↗' : delta.direction === 'down' ? '↘' : '→'}</span> {delta.text}
+              </span>
               <span className="muted">vs période précédente</span>
             </>
           )}

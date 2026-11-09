@@ -176,6 +176,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
         <>
           <div className="grid-3">
             <KpiTile
+              featured
               label="Volume remonté"
               value={fmtInt(view.cur.flagged)}
               delta={fmtDelta(delta(view.cur.flagged, view.prev.flagged, 'relative'), 'relative')}

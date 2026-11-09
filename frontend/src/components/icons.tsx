@@ -50,10 +50,9 @@ export const IconAudit = () => (
     <path d="M12 7.5V12l3 2" />
   </svg>
 );
-export const IconCollapse = ({ collapsed }: { collapsed: boolean }) => (
-  <svg {...base}>
-    <rect x="3.5" y="4.5" width="17" height="15" rx="3" />
-    <path d="M9 4.5v15" />
-    <path d={collapsed ? 'M13 10l2 2-2 2' : 'M15 10l-2 2 2 2'} />
+export const IconSearch = () => (
+  <svg {...base} width={18} height={18}>
+    <circle cx="11" cy="11" r="6.5" />
+    <path d="m20 20-4.2-4.2" />
   </svg>
 );
