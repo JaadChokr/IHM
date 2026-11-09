@@ -301,8 +301,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   a pas), elle redevient son brouillon, puis elle doit être retestée et republiée (même numéro). Dès qu'une version a
   tourné, elle est figée : toute modification passe par un brouillon de nouvelle version.
 
-  **Contrat côté Airflow, à valider avec l'équipe data** : **un DAG par fréquence** (`fraud_rules_hourly`,
-  `fraud_rules_daily`, `fraud_rules_weekly`). À chaque exécution, il lit dans `rules_registry` les règles de sa
+  **Contrat côté Airflow, à valider avec l'équipe data** : **un DAG par fréquence** (`FRAUD_RULES_HOURLY`,
+  `FRAUD_RULES_DAILY`, `FRAUD_RULES_WEEKLY`). À chaque exécution, il lit dans `rules_registry` les règles de sa
   fréquence (une ligne par version à exécuter : la version en production et une éventuelle candidate) et lance
   une tâche par ligne (mappage dynamique d'Airflow) : une règle en échec ne bloque pas les autres et se relance
   seule (2 nouvelles tentatives). L'identifiant de run d'une tâche contient la version, puisqu'une règle peut
@@ -397,8 +397,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   d'écrire sa requête sans plage ; l'éditeur l'incite à en poser une (alerte `NO_DATE_WINDOW`), ce qui évite
   aussi de relire à chaque run un volume inutilement grand. Il peut aussi dater lui-même une table
   (`FROM t FOR SYSTEM_TIME AS OF @period_end`) ; BigQuery ne le permet que sur 7 jours, et au-delà la tâche
-  échoue avec un message explicite. Pour un rattrapage de moins de 7 jours, le DAG lit `rules_registry` dans
-  son état de fin de période : c'est la version alors en place qui tourne.
+  échoue (erreur BigQuery). Le DAG lit `rules_registry` au présent : un rattrapage exécute les versions
+  actuelles.
 
   `rule_runs` garde la période de chaque run (`period_start`, `period_end`) ; des tables existantes
   reçoivent les nouvelles colonnes par

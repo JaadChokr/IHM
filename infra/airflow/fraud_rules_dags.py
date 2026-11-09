@@ -1,8 +1,8 @@
 """DAG de référence : un DAG par fréquence de règles (horaire, quotidienne, hebdomadaire).
 
-À adapter par l'équipe data (connexion, alertes). Chaque DAG lit `rules_registry`
-à chaque exécution et lance une tâche par règle de sa fréquence (mappage dynamique, Airflow 2.9 ou plus) :
-une règle publiée est prise en charge dès le run suivant, sans action manuelle.
+À adapter par l'équipe data : GCP_CONN_ID, RULES_DS et ALERT_EMAILS ci-dessous. Chaque DAG lit
+`rules_registry` à chaque exécution et lance une tâche par version à exécuter (mappage dynamique, Airflow 2.9
+ou plus) : une règle publiée est prise en charge dès le run suivant, sans action manuelle.
 
 Période du run : la requête de la règle reçoit `@period_start` / `@period_end` (TIMESTAMP), bornes
 [début, fin[ de l'intervalle du run, calées par Airflow sur le cron du DAG (heure de Paris) : 1 h en
@@ -12,142 +12,133 @@ L'IHM teste la requête avec la dernière période complète du même calendrier
 garder les crons alignés).
 
 rules_registry a une ligne par version à exécuter (au plus deux par règle : la version en production et
-une candidate). Le DAG en lance une tâche par ligne, sans logique propre aux versions : c'est la
-plateforme qui décide des lignes et de leurs colonnes.
-
-Pour chaque version, la tâche :
+une candidate). Le DAG lance une tâche par ligne, sans logique propre aux versions. Pour chaque version :
   1. exécute `sql_query` et écrit dans `rule_alerts` les commandes que **cette version** n'a encore jamais
-     remontées (une seule fois chacune) : une fenêtre glissante ou une règle écrite avec CURRENT_DATE() ne
-     crée pas de doublon, et chaque version est mesurée sur tout ce qu'elle trouve ;
-  2. recopie sur chaque commande `send_to_provider` de rules_registry, sans l'interpréter : `to_send`
-     (« à transmettre au prestataire » : la version est en production à ce run) ; la décision est figée
-     au moment du run ;
-  3. trace l'exécution dans `rule_runs` (version, période, statut) : c'est ce que lit la plateforme.
+     remontées (une seule fois chacune) ;
+  2. recopie sur chaque commande `send_to_provider` de rules_registry dans `to_send` (version en
+     production à ce run : à transmettre) ; la décision est figée au moment du run ;
+  3. trace l'exécution dans `rule_runs` (version, période, statut, volumes) : c'est ce que lit la plateforme.
 
 Envoi au prestataire : le DAG n'envoie rien. Un script externe lit dans `rule_alerts` les lignes
 `to_send AND sent_at IS NULL`, les transmet (dédoublonnées par commande, toutes règles confondues) et
-renseigne `sent_at`.
+renseigne `sent_at`. Une nouvelle tentative du DAG ne touche pas aux commandes déjà transmises.
 
-Relance et rattrapage : la requête est exécutée telle quelle, tables lues au présent.
-  - Avec une plage @period_start / @period_end, elle porte sur la période d'origine : résultat exact.
-  - Sans plage, elle relit toute la table : rien n'est perdu ni doublé (dédoublonnage par règle et par
-    version), mais les commandes passées depuis sont rattachées au run rejoué. L'IHM incite à poser une
-    plage, qui évite aussi de relire chaque fois un volume inutilement grand.
-L'analyste peut dater lui-même une table (FOR SYSTEM_TIME AS OF @period_end) ; BigQuery ne le permet que
-sur 7 jours : au-delà, la tâche échoue avec un message explicite.
-
-Variables Airflow : fraud_rules_gcp_conn_id (google_cloud_default), fraud_rules_project (obligatoire),
-fraud_rules_dataset (fraud_rules), fraud_rules_alert_emails (adresses séparées par des virgules, facultatif).
+Relance et rattrapage : la requête est exécutée telle quelle, tables lues au présent, avec les versions
+actuelles de rules_registry. Avec une plage @period_start / @period_end, elle porte sur la période
+d'origine. Sans plage, rien n'est perdu ni doublé (dédoublonnage par règle et par version), mais les
+commandes passées depuis sont rattachées au run rejoué.
 """
 
 from __future__ import annotations
 
-import logging
-import re
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from functools import partial
 
 import pendulum
 from airflow.decorators import dag, task
 from airflow.exceptions import AirflowException
-from airflow.models import Variable
 from airflow.operators.python import get_current_context
 from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
+from airflow.utils.email import send_email
 from google.cloud import bigquery
 
-log = logging.getLogger("airflow.task")
+# --- À adapter ---------------------------------------------------------------------------------------
+GCP_CONN_ID = "google_cloud_default"  # connexion Airflow vers BigQuery
+RULES_DS = "mon-projet.fraud_rules"  # projet.dataset des tables de la plateforme
+ALERT_EMAILS: list[str] = []  # destinataires des e-mails d'échec et de succès
+# -----------------------------------------------------------------------------------------------------
 
 TZ = "Europe/Paris"
-# Fréquence de la règle (colonne `schedule` de rules_registry) → cron du DAG, en heure de Paris.
-# À garder alignés sur backend/app/periods.py (période testée dans l'IHM).
+
+default_args = {
+    "owner": "fraud-rules",
+    # Deux DELETE simultanés sur rule_alerts peuvent échouer (mise à jour concurrente) : une nouvelle
+    # tentative suffit, et l'identifiant de run stable la rend sans effet de bord.
+    "retries": 2,
+    "retry_delay": timedelta(minutes=5),
+    "email": ALERT_EMAILS,
+    "email_on_failure": bool(ALERT_EMAILS),
+    "email_on_retry": False,
+}
+
+
+def send_success_email(context, to: list[str]) -> None:
+    """E-mail de fin de run réussi (on_success_callback du DAG)."""
+    if not to:
+        return
+    run = context["dag_run"]
+    send_email(
+        to=to,
+        subject=f"[Airflow] {run.dag_id} : run réussi",
+        html_content=f"Run {run.run_id} terminé avec succès "
+        f"(période du {context['data_interval_start']} au {context['data_interval_end']}).",
+    )
+
+
 SCHEDULES = {
     "HOURLY": "5 * * * *",  # toutes les heures, à h+5
-    "DAILY": "0 3 * * *",  # chaque nuit à 3 h
+    "DAILY": "0 3 * * *",  # chaque nuit à 3 h (la veille est complète)
     "WEEKLY": "0 4 * * 1",  # le lundi à 4 h
 }
+
 # Garde-fou : le SQL des règles est saisi dans l'IHM, pas relu ici.
-MAX_BYTES_BILLED = 200 * 1024**3  # 200 Gio par requête
-# Un run qui démarre plus tard que ça après la fin de sa période est un rattrapage ou une relance.
-LATE_AFTER = timedelta(minutes=30)
-# Voyage dans le temps de BigQuery : 7 jours au plus (marge pour la durée du run).
-TIME_TRAVEL_MAX = timedelta(days=7) - timedelta(hours=1)
-_TIME_TRAVEL = re.compile(r"\bFOR\s+SYSTEM_TIME\s+AS\s+OF\b", re.IGNORECASE)
+MAX_BYTES_BILLED = 200 * 1024**3  # 200 Gio par règle
 
 
-def _bq() -> tuple[bigquery.Client, str]:
-    """Client BigQuery issu de la connexion Airflow, et dataset des règles. Créé à l'exécution de la
-    tâche, jamais à l'analyse du fichier (pas de connexion GCP à chaque passage du scheduler)."""
-    hook = BigQueryHook(
-        gcp_conn_id=Variable.get("fraud_rules_gcp_conn_id", default_var="google_cloud_default"),
-        use_legacy_sql=False,
+def _bq():
+    """Client BigQuery issu de la connexion Airflow + dataset des règles.
+
+    Instancié à l'exécution de la tâche (jamais au parse du DAG) pour ne pas
+    ouvrir une connexion GCP à chaque scan du scheduler.
+    """
+    hook = BigQueryHook(gcp_conn_id=GCP_CONN_ID, use_legacy_sql=False)
+    return hook.get_client(), RULES_DS
+
+
+def _query(client, sql, **params):
+    """client.query() avec paramètres nommés : _query(c, sql, rule_id=("STRING", x)).
+
+    Attend la fin du job avant de rendre la main : sans ça le job suivant
+    démarrerait avant que celui-ci ait écrit, et num_dml_affected_rows serait None.
+    """
+    job = client.query(
+        sql,
+        job_config=bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ScalarQueryParameter(name, type_, value) for name, (type_, value) in params.items()
+            ],
+            maximum_bytes_billed=MAX_BYTES_BILLED,
+        ),
     )
-    project = Variable.get("fraud_rules_project")
-    dataset = Variable.get("fraud_rules_dataset", default_var="fraud_rules")
-    return hook.get_client(project_id=project), f"`{project}.{dataset}`"
-
-
-def _query(client: bigquery.Client, sql: str, **params: tuple[str, object]):
-    """Requête paramétrée, attendue jusqu'au bout (num_dml_affected_rows n'est connu qu'après) : chaque
-    paramètre est (type BigQuery, valeur) ; « ARRAY<STRING> » pour un tableau."""
-    qp = [
-        bigquery.ArrayQueryParameter(k, t[6:-1], v)
-        if t.startswith("ARRAY<")
-        else bigquery.ScalarQueryParameter(k, t, v)
-        for k, (t, v) in params.items()
-    ]
-    cfg = bigquery.QueryJobConfig(query_parameters=qp, maximum_bytes_billed=MAX_BYTES_BILLED)
-    job = client.query(sql, job_config=cfg)
     job.result()
     return job
 
 
-def _emails() -> list[str]:
-    raw = Variable.get("fraud_rules_alert_emails", default_var="")
-    return [e.strip() for e in raw.split(",") if e.strip()]
-
-
 def make_dag(frequency: str, cron: str):
     @dag(
-        dag_id=f"fraud_rules_{frequency.lower()}",
+        dag_id=f"FRAUD_RULES_{frequency.upper()}",
         schedule=cron,
-        # Fuseau de Paris : le cron suit l'heure locale, changements d'heure compris.
         start_date=pendulum.datetime(2026, 11, 1, tz=TZ),
-        # Rattrapage des périodes manquées (déploiement, panne) : sans doublon grâce au dédoublonnage par
-        # version, et chaque run reçoit les bornes de sa propre période.
         catchup=True,
-        # Un run à la fois : deux runs simultanés d'une même règle (rattrapage) passeraient tous deux le
-        # dédoublonnage avant que l'autre ait écrit. Les règles d'un même run restent en parallèle.
+        # Un run à la fois : deux runs simultanés d'une même règle (rattrapage) passeraient tous deux
+        # le dédoublonnage avant que l'autre ait écrit. Les règles d'un même run restent en parallèle.
         max_active_runs=1,
-        max_active_tasks=8,  # règles exécutées en parallèle
-        default_args={
-            "owner": "fraud-rules",
-            # Deux DELETE simultanés sur rule_alerts peuvent échouer (mise à jour concurrente) : une
-            # nouvelle tentative suffit, et l'identifiant de run stable la rend sans effet de bord.
-            "retries": 2,
-            "retry_delay": timedelta(minutes=5),
-            "email_on_failure": True,
-            "email_on_retry": False,
-            "email": _emails(),
-        },
-        # Pas d'e-mail de succès : 24 par jour pour le DAG horaire, et une rafale à chaque rattrapage.
+        max_active_tasks=8,
+        default_args=default_args,
         tags=["fraud-rules"],
+        on_success_callback=partial(send_success_email, to=default_args["email"]),
     )
     def fraud_rules():
         @task
         def get_rules() -> list[dict]:
-            """Versions à exécuter pour cette fréquence : une ligne par version (production, candidate).
-            Pour un rattrapage de moins de 7 jours, le référentiel tel qu'il était en fin de période : ce
-            sont les versions alors en place qui sont exécutées (au-delà : les versions actuelles)."""
+            """Versions à exécuter pour cette fréquence : une ligne par version (celle en production
+            et, le cas échéant, une candidate en observation)."""
             client, ds = _bq()
-            end = get_current_context()["data_interval_end"]
-            late = datetime.now(UTC) - end
-            when = " FOR SYSTEM_TIME AS OF @period_end" if LATE_AFTER < late < TIME_TRAVEL_MAX else ""
             rows = _query(
                 client,
-                "SELECT rule_id, version, name, sql_query, send_to_provider"
-                f" FROM {ds}.rules_registry{when}"
+                f"SELECT rule_id, version, name, sql_query, send_to_provider FROM `{ds}.rules_registry`"
                 " WHERE schedule = @schedule",
                 schedule=("STRING", frequency),
-                **({"period_end": ("TIMESTAMP", end)} if when else {}),
             ).result()
             return [dict(r.items()) for r in rows]
 
@@ -157,91 +148,82 @@ def make_dag(frequency: str, cron: str):
             context["rule_name"] = f"{rule['name']} (v{rule['version']})"  # nom affiché dans Airflow
             client, ds = _bq()
             dag_id = context["dag"].dag_id
-            # Identifiant stable entre deux tentatives : une nouvelle tentative remplace les commandes
-            # (pas encore transmises) de la tentative ratée. La version y figure : une règle peut tourner
-            # en deux versions dans le même run (production et candidate).
+            # Identifiant stable entre deux tentatives : une relance remplace les commandes du run raté.
+            # La version y figure : une règle peut tourner en deux versions dans le même run
+            # (production et candidate).
             run_id = f"{context['run_id']}__{rule['rule_id']}__v{rule['version']}"
+            # Fenêtre d'analyse du run
             period_start = context["data_interval_start"]
             period_end = context["data_interval_end"]
             run_date = period_end.in_timezone(TZ).date()
-            started = datetime.now(UTC)
-            ids = {"rule_id": ("STRING", rule["rule_id"]), "version": ("INT64", rule["version"])}
+            started = datetime.now(timezone.utc)
             sql = rule["sql_query"].strip().rstrip(";")
+            # Décision d'envoi de la version, figée sur chaque commande au moment du run.
+            send = bool(rule["send_to_provider"])
             status, rows, to_send, error = "SUCCESS", None, None, None
+
             try:
-                if _TIME_TRAVEL.search(sql) and started - period_end > TIME_TRAVEL_MAX:
-                    raise AirflowException(
-                        f"Période terminée le {period_end.in_timezone(TZ):%d/%m/%Y %H:%M} : la règle date "
-                        "elle-même une table (FOR SYSTEM_TIME AS OF), ce que BigQuery ne permet que sur "
-                        "7 jours. Run à traiter à la main (ou à laisser de côté)."
-                    )
                 _query(
                     client,
-                    f"""DELETE FROM {ds}.rule_alerts
+                    f"""DELETE FROM `{ds}.rule_alerts`
                         WHERE rule_id = @rule_id AND run_id = @run_id
-                          AND sent_at IS NULL  -- déjà transmises par le script d'envoi : gardées""",
-                    rule_id=ids["rule_id"],
+                          AND sent_at IS NULL  -- déjà transmises au prestataire : on les garde""",
+                    rule_id=("STRING", rule["rule_id"]),
                     run_id=("STRING", run_id),
                 )
-                # @period_start / @period_end sont destinés à la requête de la règle : un paramètre est
-                # visible dans toute la requête, sous-requête comprise. Filtrer à l'intérieur de {sql}
-                # permet l'élagage des partitions. Retour à la ligne avant la parenthèse fermante : une
-                # requête qui finit par un commentaire « -- … » ne la commente pas.
                 job = _query(
                     client,
-                    f"""INSERT INTO {ds}.rule_alerts
+                    f"""INSERT INTO `{ds}.rule_alerts`
                           (rule_id, rule_version, run_id, run_date, order_id, detected_at, details, to_send)
                         SELECT @rule_id, @version, @run_id, @run_date,
                                CAST(t.order_id AS STRING), CURRENT_TIMESTAMP(), TO_JSON(t),
-                               -- Recopié de rules_registry : version en production à ce run (à
-                               -- transmettre). Le script d'envoi dédoublonne par commande ; les chiffres
-                               -- d'une règle comptent les commandes distinctes.
+                               -- Recopié de rules_registry.send_to_provider : version en production
+                               -- (à transmettre) ou en observation.
                                @send
                         FROM (
                     {sql}
                         ) AS t
-                        -- Une commande n'est écrite qu'une fois par version de règle.
                         WHERE t.order_id IS NOT NULL
+                          -- Dédoublonnage historique : une commande n'est alertée qu'une seule fois
+                          -- pour une même règle et une même version.
                           AND NOT EXISTS (
-                          SELECT 1 FROM {ds}.rule_alerts a
-                          WHERE a.rule_id = @rule_id AND a.rule_version = @version
-                            AND a.order_id = CAST(t.order_id AS STRING)
-                        )
+                              SELECT 1
+                              FROM `{ds}.rule_alerts` a
+                              WHERE a.rule_id = @rule_id
+                                AND a.rule_version = @version
+                                AND a.order_id = CAST(t.order_id AS STRING)
+                          )
+                        -- Dédoublonnage intra-requête : au cas où le SQL de la règle renvoie
+                        -- plusieurs lignes avec le même order_id dans ce même run.
                         QUALIFY ROW_NUMBER() OVER (PARTITION BY CAST(t.order_id AS STRING)) = 1""",
-                    **ids,
+                    rule_id=("STRING", rule["rule_id"]),
+                    version=("INT64", rule["version"]),
                     run_id=("STRING", run_id),
                     run_date=("DATE", run_date),
-                    send=("BOOL", bool(rule["send_to_provider"])),
+                    send=("BOOL", send),
                     period_start=("TIMESTAMP", period_start),
                     period_end=("TIMESTAMP", period_end),
                 )
                 rows = job.num_dml_affected_rows
-                to_send = list(
-                    _query(
-                        client,
-                        f"""SELECT COUNTIF(to_send) AS n FROM {ds}.rule_alerts
-                            WHERE run_date = @run_date AND rule_id = @rule_id AND run_id = @run_id""",
-                        rule_id=ids["rule_id"],
-                        run_id=("STRING", run_id),
-                        run_date=("DATE", run_date),
-                    ).result()
-                )[0]["n"]
-            except Exception as e:  # tracé dans rule_runs, puis relancé pour qu'Airflow le voie
+                # Toutes les commandes du run portent la même décision d'envoi.
+                to_send = rows if send else 0
+            except Exception as e:
                 status, error = "FAILED", str(e)[:2000]
                 raise AirflowException(error) from e
             finally:
                 try:
                     _query(
                         client,
-                        f"""INSERT INTO {ds}.rule_runs
+                        f"""INSERT INTO `{ds}.rule_runs`
                               (run_id, rule_id, rule_version, airflow_dag_id, run_date, period_start,
                                period_end, started_at, finished_at, status, rows_returned, rows_to_send,
                                error_message)
                             VALUES (@run_id, @rule_id, @version, @dag_id, @run_date, @period_start,
                                     @period_end, @started_at, CURRENT_TIMESTAMP(), @status, @rows,
                                     @to_send, @error)""",
-                        **ids,
                         run_id=("STRING", run_id),
+                        rule_id=("STRING", rule["rule_id"]),
+                        version=("INT64", rule["version"]),
                         dag_id=("STRING", dag_id),
                         run_date=("DATE", run_date),
                         period_start=("TIMESTAMP", period_start),
@@ -252,13 +234,15 @@ def make_dag(frequency: str, cron: str):
                         to_send=("INT64", to_send),
                         error=("STRING", error),
                     )
-                except Exception:
-                    # Run déjà en échec : on garde son erreur d'origine. Run réussi : sans trace, la
-                    # plateforme ne le verrait pas ; l'échec provoque une nouvelle tentative.
-                    if status == "FAILED":
-                        log.exception("Trace dans rule_runs impossible")
-                    else:
-                        raise
+                except Exception as trace_error:
+                    print(f"Trace dans rule_runs impossible : {trace_error}")
+                    # Si le run était un succès, l'absence de trace d'audit est anormale :
+                    # on lève l'exception pour qu'Airflow retente la tâche.
+                    # Si le run était déjà FAILED, on ne lève rien pour ne pas masquer l'erreur SQL d'origine.
+                    if status == "SUCCESS":
+                        raise AirflowException(
+                            f"Échec de l'enregistrement dans rule_runs : {trace_error}"
+                        ) from trace_error
 
         run_rule.expand(rule=get_rules())
 
@@ -266,4 +250,4 @@ def make_dag(frequency: str, cron: str):
 
 
 for _frequency, _cron in SCHEDULES.items():
-    globals()[f"fraud_rules_{_frequency.lower()}"] = make_dag(_frequency, _cron)
+    globals()[f"FRAUD_RULES_{_frequency.upper()}"] = make_dag(_frequency, _cron)

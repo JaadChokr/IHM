@@ -37,7 +37,7 @@ export interface MockDb {
   audit: AuditEvent[];
 }
 
-export const SCHEMA_VERSION = 15;
+export const SCHEMA_VERSION = 16;
 
 /** Marqueur : la version a tourné ; v() le remplace par le DAG de sa fréquence. */
 const dag = 'dag';
@@ -101,8 +101,8 @@ function v(def: Def, version: number, created: number, extra: Partial<RuleVersio
     updatedAt: daysAgo(Math.max(0, created - 1)),
     submittedAt: daysAgo(Math.max(0, created - 1)),
     ...extra,
-    // Un DAG par fréquence : toutes les règles quotidiennes tournent dans fraud_rules_daily, etc.
-    ...(extra.airflowDagId ? { airflowDagId: `fraud_rules_${def.schedule.toLowerCase()}` } : {}),
+    // Un DAG par fréquence : toutes les règles quotidiennes tournent dans FRAUD_RULES_DAILY, etc.
+    ...(extra.airflowDagId ? { airflowDagId: `FRAUD_RULES_${def.schedule}` } : {}),
   };
 }
 
