@@ -47,7 +47,7 @@ function byVersion(dates: string[], rows: VersionDaily[]) {
       vol.observed[i] = !sent[i];
       if (processed[i] > 0) {
         pre.values[i] = confirmed[i] / processed[i];
-        pre.details![i] = `${fmtInt(confirmed[i])} confirmées / ${fmtInt(processed[i])} avec retour`;
+        pre.details![i] = `${fmtInt(confirmed[i])} confirmées / ${fmtInt(processed[i])} vérifiées`;
       }
     });
     volume.push(vol);
@@ -131,7 +131,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
       {observing && (
         <Alert kind="info" title="En observation : ses commandes ne sont pas envoyées au prestataire.">
           Le volume remonté est réel. La précision ne porte que sur les commandes aussi remontées par une règle envoyée au prestataire,
-          les seules présentes dans sa table de retour : elle n'est pas représentative tant que la règle n'est pas envoyée.
+          les seules qu'il vérifie : elle n'est pas représentative tant que la règle n'est pas envoyée.
         </Alert>
       )}
       <div className="row">
@@ -182,24 +182,24 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               sub={`${fmtInt(view.toSend)} envoyées au prestataire · ${fmtInt(view.observed)} remontées en observation`}
             />
             <KpiTile
-              label="En attente de retour"
+              label="En attente de vérification"
               value={fmtInt(view.cur.pending)}
-              sub={`Remontées pas encore présentes dans la table du prestataire (${fmtInt(view.cur.processed)} y figurent)`}
+              sub={`Remontées pas encore vérifiées par le prestataire (${fmtInt(view.cur.processed)} vérifiées)`}
             />
             <KpiTile
               label="Taux de précision"
               value={fmtPct(view.cur.precision)}
               delta={fmtDelta(delta(view.cur.precision, view.prev.precision, 'points'), 'points')}
-              sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} avec retour du prestataire`}
-              flag={view.cur.lowSample ? `Échantillon trop faible (moins de ${MIN_PROCESSED_ORDERS} commandes avec retour)` : undefined}
+              sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} vérifiées`}
+              flag={view.cur.lowSample ? `Échantillon trop faible (moins de ${MIN_PROCESSED_ORDERS} commandes vérifiées)` : undefined}
             />
           </div>
 
           <Alert kind="info" title="Comment lire ces indicateurs">
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
               <li>
-                Le prestataire traite toutes les commandes qu'il reçoit. Le <strong>taux de précision</strong> est calculé sur celles déjà
-                présentes dans sa <strong>table de retour</strong> ; les autres sont comptées <strong>en attente de retour</strong>.
+                Le prestataire vérifie toutes les commandes qu'il reçoit. Le <strong>taux de précision</strong> est calculé sur les commandes
+                <strong>vérifiées</strong> (présentes dans sa table de retour) ; les autres sont comptées <strong>en attente de vérification</strong>.
               </li>
               <li>
                 Le <strong>rappel</strong> (fraudes que la règle n'a pas détectées) n'est pas mesurable dans ce dispositif.
@@ -233,7 +233,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             <div className="card-head">
               <div>
                 <h3>Taux de précision par jour</h3>
-                <p>Confirmées frauduleuses ÷ commandes avec retour du prestataire, versions en production uniquement — pas de point les jours sans retour</p>
+                <p>Confirmées frauduleuses ÷ commandes vérifiées, versions en production uniquement — pas de point les jours sans commande vérifiée</p>
               </div>
             </div>
             <div className="card-pad">
@@ -353,7 +353,7 @@ function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
               <th>Version</th>
               <th>Période d'exécution</th>
               <th className="num">Remontées / jour</th>
-              <th className="num">En attente de retour</th>
+              <th className="num">En attente de vérification</th>
               <th className="num">Taux de précision</th>
             </tr>
           </thead>

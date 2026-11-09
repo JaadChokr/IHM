@@ -92,7 +92,7 @@ export function ProductionPage() {
                     {th('name', 'Règle', false)}
                     <th className="col-crit">Criticité</th>
                     {th('volume', 'Volume remonté')}
-                    {th('pending', 'En attente de retour')}
+                    {th('pending', 'En attente de vérification')}
                     {th('precision', 'Taux de précision')}
                     <th>À surveiller</th>
                   </tr>
@@ -119,7 +119,7 @@ export function ProductionPage() {
                       <td className="num">
                         <strong>{fmtPct(r.precision)}</strong>
                         {r.lowSample && r.precision !== null && (
-                          <div className="small" style={{ color: 'var(--warn)' }} title="Moins de 20 commandes avec retour du prestataire">
+                          <div className="small" style={{ color: 'var(--warn)' }} title="Moins de 20 commandes vérifiées par le prestataire">
                             ⚠ échantillon faible
                           </div>
                         )}

@@ -103,7 +103,7 @@ export function OverviewPage() {
             <div className="card-head">
               <div>
                 <h2 id="ov-precision">Précision des règles en production</h2>
-                <p>30 derniers jours · confirmées frauduleuses ÷ commandes traitées · la moins précise en premier</p>
+                <p>30 derniers jours · confirmées frauduleuses ÷ commandes vérifiées · la moins précise en premier</p>
               </div>
             </div>
             <div className="card-pad card-body centered">
@@ -243,7 +243,7 @@ function PrecisionBars({ rows, threshold }: { rows: ProductionHealth[]; threshol
             ? r.ordersFlagged30d === 0
               ? 'Aucune remontée'
               : 'Aucune commande traitée'
-            : `${fmtPct(r.precision)} — ${fmtInt(r.ordersConfirmed30d)} confirmées / ${fmtInt(r.ordersProcessed30d)} traitées`;
+            : `${fmtPct(r.precision)} — ${fmtInt(r.ordersConfirmed30d)} confirmées / ${fmtInt(r.ordersProcessed30d)} vérifiées`;
         return (
           <div className="pbar-row" role="row" key={r.ruleId}>
             <Link to={`/rules/${r.ruleId}`} className="pbar-name" role="rowheader" title={r.name}>
@@ -262,7 +262,7 @@ function PrecisionBars({ rows, threshold }: { rows: ProductionHealth[]; threshol
                 <>
                   <strong>{fmtPct(r.precision)}</strong>
                   {r.lowSample && (
-                    <span className="small" style={{ color: 'var(--warn)' }} title="Moins de 20 commandes avec retour du prestataire">
+                    <span className="small" style={{ color: 'var(--warn)' }} title="Moins de 20 commandes vérifiées par le prestataire">
                       {' '}
                       ⚠ échantillon faible
                     </span>

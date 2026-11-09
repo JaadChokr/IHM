@@ -455,9 +455,9 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`.
 - **Retour du prestataire** : on considère que le prestataire **traite toutes les commandes** qu'il reçoit ; il
   n'y a donc plus de taux de traitement. Une commande peut toutefois n'apparaître dans sa table de retour qu'un
-  peu plus tard : la **précision** porte sur les commandes déjà présentes dans cette table (confirmées ÷ avec
-  retour), et les autres sont affichées **en attente de retour** (page règle, comparatif des versions, page
-  Production). Dans les vues, une commande est traitée dès qu'elle figure dans la table de retour
+  peu plus tard : la **précision** porte sur les **commandes vérifiées**, déjà présentes dans cette table
+  (confirmées ÷ vérifiées), et les autres sont affichées **en attente de vérification** (page règle, comparatif
+  des versions, page Production). Dans les vues, une commande est vérifiée dès qu'elle figure dans la table de retour
   (`f.order_id IS NOT NULL`) : seules les colonnes `order_id` et `is_fraud` de cette table sont utilisées.
 - **Déploiement** : API en ingress interne sans IAM entre front et API (le contrôle d'accès est réseau, PRD F8).
   La topologie exacte (load balancer interne, routage `/api`) reste à arbitrer.

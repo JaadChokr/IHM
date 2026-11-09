@@ -3,15 +3,15 @@ import { fmtDate, fmtPct } from './format';
 
 /**
  * Seuil de fiabilité du taux de précision (PRD F6, point d'attention). Le prestataire traite toutes les
- * commandes qu'il reçoit ; la précision porte sur celles déjà présentes dans sa table de retour.
+ * commandes qu'il reçoit ; la précision porte sur les commandes vérifiées (présentes dans sa table de retour).
  */
 export const MIN_PROCESSED_ORDERS = 20;
 
 export interface Totals {
   flagged: number;
-  /** Présentes dans la table de retour du prestataire. */
+  /** Vérifiées : présentes dans la table de retour du prestataire. */
   processed: number;
-  /** Remontées mais pas encore présentes dans la table de retour. */
+  /** En attente de vérification : remontées mais pas encore dans la table de retour. */
   pending: number;
   confirmed: number;
   precision: number | null;
@@ -38,7 +38,7 @@ export function delta(cur: number | null, prev: number | null, kind: 'relative' 
 export const DEFAULT_WATCH_THRESHOLD = 0.15;
 
 export interface ProductionHealth extends ConsolidatedRow {
-  /** Remontées sur 30 jours pas encore présentes dans la table de retour du prestataire. */
+  /** Remontées sur 30 jours en attente de vérification (pas encore dans la table de retour). */
   pending: number;
   precision: number | null;
   lowSample: boolean;

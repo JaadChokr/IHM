@@ -84,7 +84,7 @@ describe('diff et indicateurs', () => {
     const d = diffLines('a\nb\nc', 'a\nB\nc');
     expect(d.map((l) => l.kind)).toEqual(['same', 'del', 'add', 'same']);
   });
-  it('précision calculée sur les commandes avec retour, en attente et échantillon faible signalés', () => {
+  it('précision calculée sur les commandes vérifiées, en attente et échantillon faible signalés', () => {
     const t = totals([{ date: '2026-01-01', ordersFlagged: 100, ordersProcessed: 10, ordersConfirmedFraud: 5 }]);
     expect(t.precision).toBe(0.5);
     expect(t.pending).toBe(90);

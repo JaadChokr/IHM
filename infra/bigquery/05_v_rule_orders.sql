@@ -6,7 +6,8 @@
 -- n'est comptée qu'une fois. Une version précise (une candidate, par exemple) se lit dans le comparatif
 -- des versions, v_rule_performance, où chaque version est mesurée en entier.
 -- Colonnes de la table de feedback : même hypothèse que v_rule_performance (PRD Q2). has_feedback : la
--- commande figure dans la table de retour du prestataire (traitée) ; sinon elle est en attente de retour.
+-- commande figure dans la table de retour du prestataire (vérifiée) ; sinon elle est en attente de
+-- vérification.
 DROP VIEW IF EXISTS `${PROJECT}.${DATASET}.v_rule_orders_daily`;  -- remplacée par cette vue
 CREATE OR REPLACE VIEW `${PROJECT}.${DATASET}.v_rule_orders` AS
 SELECT
