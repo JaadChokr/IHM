@@ -99,19 +99,26 @@ class BigQueryGateway(Protocol):
         que `exclude_rule_id` dans `rule_alerts` sur `overlap_days` jours."""
         ...
 
-    def daily_performance(self, rule_id: str, start: date, end: date) -> list[DailyPerformance]: ...
+    def daily_performance(
+        self, rule_id: str, start: date, end: date, sent: bool = False
+    ) -> list[DailyPerformance]:
+        """Chiffres quotidiens d'une règle : ses commandes à transmettre (`sent`, règle en production) ou
+        ses commandes en observation (règle en observation)."""
+        ...
 
     def runs(self, rule_id: str, start: date, end: date, limit: int = 20) -> list[RuleRun]: ...
 
     def version_totals(self, rule_id: str) -> list[VersionPerformance]: ...
 
-    def production_totals(self, rule_ids: list[str], start: date, end: date) -> list[ProductionTotals]: ...
+    def production_totals(self, rules: dict[str, bool], start: date, end: date) -> list[ProductionTotals]:
+        """Totaux de chaque règle sur la période, `rules` : rule_id → en production ?"""
+        ...
 
     def run_stats(self) -> list[RunStats]: ...
 
-    def set_registry(self, rule: Rule, rows: list[tuple[RuleVersion, str, bool, bool]]) -> None:
+    def set_registry(self, rule: Rule, rows: list[tuple[RuleVersion, str, bool]]) -> None:
         """Aligne les lignes de la règle dans `rules_registry` : une par version qu'Airflow exécute, donnée
-        par (version, statut, send_to_provider, candidate). Les lignes des autres versions de la règle sont
+        par (version, statut, send_to_provider). Les lignes des autres versions de la règle sont
         supprimées ; une liste vide retire la règle du registre."""
         ...
 
@@ -213,31 +220,32 @@ class RealBigQueryGateway:
         cfg = self._bq.QueryJobConfig(query_parameters=params)
         return [dict(r.items()) for r in self.client.query(sql, job_config=cfg).result()]
 
-    def daily_performance(self, rule_id, start, end):
-        # Chiffres de la règle : version en production (ou seule version qui tourne), jamais la candidate ;
-        # « envoyées » = commandes marquées à transmettre. Commandes distinctes de chaque jour.
+    def daily_performance(self, rule_id, start, end, sent=False):
+        # Une règle en production : ses commandes à transmettre (to_send) ; en observation : les autres.
+        # Une version précise, candidate comprise, se lit dans le comparatif (version_totals).
         P = self._bq.ScalarQueryParameter
         rows = self._rows(
-            f"""SELECT run_date,
-                       MAX(IF(NOT candidate, rule_version, NULL)) AS rule_version,
-                       COUNT(DISTINCT IF(NOT candidate, order_id, NULL)) AS orders_flagged,
-                       COUNT(DISTINCT IF(to_send, order_id, NULL)) AS orders_to_send,
-                       COUNT(DISTINCT IF(NOT candidate AND is_processed, order_id, NULL)) AS orders_processed,
-                       COUNT(DISTINCT IF(NOT candidate AND is_fraud, order_id, NULL))
-                         AS orders_confirmed_fraud
+            f"""SELECT run_date, MAX(rule_version) AS rule_version,
+                       COUNT(DISTINCT order_id) AS orders_flagged,
+                       COUNT(DISTINCT IF(is_processed, order_id, NULL)) AS orders_processed,
+                       COUNT(DISTINCT IF(is_fraud, order_id, NULL)) AS orders_confirmed_fraud
                 FROM {self.ds}.v_rule_orders
-                WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end
+                WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end AND to_send = @sent
                 GROUP BY run_date
-                HAVING orders_flagged > 0
                 ORDER BY run_date""",
-            [P("rule_id", "STRING", rule_id), P("start", "DATE", start), P("end", "DATE", end)],
+            [
+                P("rule_id", "STRING", rule_id),
+                P("start", "DATE", start),
+                P("end", "DATE", end),
+                P("sent", "BOOL", sent),
+            ],
         )
         return [
             DailyPerformance(
                 date=r["run_date"],
                 rule_version=r["rule_version"],
                 orders_flagged=r["orders_flagged"],
-                orders_to_send=r["orders_to_send"],
+                orders_to_send=r["orders_flagged"] if sent else 0,
                 orders_processed=r["orders_processed"],
                 orders_confirmed_fraud=r["orders_confirmed_fraud"],
             )
@@ -273,30 +281,36 @@ class RealBigQueryGateway:
         )
         return [RuleRun.model_validate(r) for r in rows]
 
-    def production_totals(self, rule_ids, start, end):
-        if not rule_ids:
+    def production_totals(self, rules, start, end):
+        if not rules:
             return []
         P = self._bq.ScalarQueryParameter
+        A = self._bq.ArrayQueryParameter
         rows = self._rows(
             # Commandes distinctes sur toute la période : exact même si deux versions ont remonté la même
-            # commande à des jours différents.
-            f"""SELECT rule_id,
-                       COUNT(DISTINCT IF(NOT candidate, order_id, NULL)) AS flagged,
-                       COUNT(DISTINCT IF(to_send, order_id, NULL)) AS to_send,
-                       COUNT(DISTINCT IF(NOT candidate AND is_processed, order_id, NULL)) AS processed,
-                       COUNT(DISTINCT IF(NOT candidate AND is_fraud, order_id, NULL)) AS confirmed
+            # commande à des jours différents. En production : commandes à transmettre ; sinon les autres.
+            f"""SELECT rule_id, COUNT(DISTINCT order_id) AS flagged,
+                       COUNT(DISTINCT IF(is_processed, order_id, NULL)) AS processed,
+                       COUNT(DISTINCT IF(is_fraud, order_id, NULL)) AS confirmed
                 FROM {self.ds}.v_rule_orders
-                WHERE rule_id IN UNNEST(@ids) AND run_date BETWEEN @start AND @end
+                WHERE run_date BETWEEN @start AND @end
+                  AND ((rule_id IN UNNEST(@sent_ids) AND to_send)
+                       OR (rule_id IN UNNEST(@observed_ids) AND NOT to_send))
                 GROUP BY rule_id""",
             [
-                self._bq.ArrayQueryParameter("ids", "STRING", rule_ids),
+                A("sent_ids", "STRING", [r for r, sent in rules.items() if sent]),
+                A("observed_ids", "STRING", [r for r, sent in rules.items() if not sent]),
                 P("start", "DATE", start),
                 P("end", "DATE", end),
             ],
         )
         return [
             ProductionTotals(
-                r["rule_id"], r["flagged"] or 0, r["processed"] or 0, r["confirmed"] or 0, r["to_send"] or 0
+                r["rule_id"],
+                r["flagged"] or 0,
+                r["processed"] or 0,
+                r["confirmed"] or 0,
+                (r["flagged"] or 0) if rules.get(r["rule_id"]) else 0,
             )
             for r in rows
         ]
@@ -327,7 +341,7 @@ class RealBigQueryGateway:
         sql = f"""DELETE FROM {self.ds}.rules_registry
                   WHERE rule_id = @rule_id AND version NOT IN UNNEST(@keep)"""
         self.client.query(sql, job_config=cfg).result()
-        for v, status, send, candidate in rows:
+        for v, status, send in rows:
             params = [
                 P("rule_id", "STRING", v.rule_id),
                 P("version", "INT64", v.version),
@@ -339,12 +353,11 @@ class RealBigQueryGateway:
                 P("sql_query", "STRING", v.sql_query),
                 P("status", "STRING", status),
                 P("send_to_provider", "BOOL", send),
-                P("candidate", "BOOL", candidate),
                 P("owner_matricule", "STRING", rule.owner_matricule),
                 P("created_at", "TIMESTAMP", rule.created_at),
                 P("updated_at", "TIMESTAMP", v.updated_at),
             ]
-            # Clé : (rule_id, version). Au plus deux lignes par règle : la version en production et sa
+            # Clé : (rule_id, version). Au plus deux lignes par règle : la version en production et une
             # candidate. L'historique des versions reste dans la base de la plateforme (rule_versions).
             sql = f"""
             MERGE {self.ds}.rules_registry t
@@ -353,13 +366,12 @@ class RealBigQueryGateway:
             WHEN MATCHED THEN UPDATE SET
               name = @name, description = @description, fraud_typology = @fraud_typology,
               criticality = @criticality, schedule = @schedule, sql_query = @sql_query, status = @status,
-              send_to_provider = @send_to_provider, candidate = @candidate, updated_at = @updated_at
+              send_to_provider = @send_to_provider, updated_at = @updated_at
             WHEN NOT MATCHED THEN INSERT
               (rule_id, version, name, description, fraud_typology, criticality, schedule, sql_query,
-               status, send_to_provider, candidate, owner_matricule, created_at, updated_at)
+               status, send_to_provider, owner_matricule, created_at, updated_at)
             VALUES (@rule_id, @version, @name, @description, @fraud_typology, @criticality, @schedule,
-                    @sql_query, @status, @send_to_provider, @candidate, @owner_matricule, @created_at,
-                    @updated_at)
+                    @sql_query, @status, @send_to_provider, @owner_matricule, @created_at, @updated_at)
             """
             self.client.query(sql, job_config=self._bq.QueryJobConfig(query_parameters=params)).result()
 
@@ -434,8 +446,8 @@ class FakeBigQueryGateway:
     performance: dict[str, list[DailyPerformance]] = field(default_factory=dict)
     # … et de v_rule_orders_daily (règle toutes versions confondues) ; à défaut, le même contenu.
     rule_daily: dict[str, list[DailyPerformance]] = field(default_factory=dict)
-    # Contenu simulé de rules_registry : rule_id → [(version, statut, envoi au prestataire, candidate)].
-    registry: dict[str, list[tuple[int, str, bool, bool]]] = field(default_factory=dict)
+    # Contenu simulé de rules_registry : rule_id → [(version, statut, envoi au prestataire)].
+    registry: dict[str, list[tuple[int, str, bool]]] = field(default_factory=dict)
     stats: list[RunStats] = field(default_factory=list)
     overlap: list[tuple[str, int]] = field(default_factory=list)
     last_period: Period | None = None  # période passée au dernier appel (contrôlée par les tests)
@@ -463,7 +475,7 @@ class FakeBigQueryGateway:
         overlap = Overlap(5, min(5, sum(n for _, n in hits)))
         return ExecMeta(cols, rows, 5, 1200, meta.bytes_processed, overlap)
 
-    def daily_performance(self, rule_id, start, end):
+    def daily_performance(self, rule_id, start, end, sent=False):
         rows = self.rule_daily.get(rule_id, self.performance.get(rule_id, []))
         return [d for d in rows if start <= d.date <= end]
 
@@ -487,9 +499,9 @@ class FakeBigQueryGateway:
             for v, ds in sorted(by.items())
         ]
 
-    def production_totals(self, rule_ids, start, end):
+    def production_totals(self, rules, start, end):
         out = []
-        for rid in rule_ids:
+        for rid in rules:
             d = self.daily_performance(rid, start, end)
             out.append(
                 ProductionTotals(
@@ -506,9 +518,9 @@ class FakeBigQueryGateway:
         return list(self.stats)
 
     def set_registry(self, rule, rows):
-        log.info("rules_registry ← %s %s", rule.rule_id, [(v.version, st, s, c) for v, st, s, c in rows])
+        log.info("rules_registry ← %s %s", rule.rule_id, [(v.version, st, s) for v, st, s in rows])
         if rows:
-            self.registry[rule.rule_id] = [(v.version, st, send, cand) for v, st, send, cand in rows]
+            self.registry[rule.rule_id] = [(v.version, st, send) for v, st, send in rows]
         else:
             self.registry.pop(rule.rule_id, None)
 

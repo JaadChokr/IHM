@@ -24,7 +24,7 @@ interface Props {
   firstRunDate?: string;
   /** Nombre de versions qui ont tourné : à partir de 2, l'historique complet est affiché d'emblée pour les comparer. */
   versionsRun: number;
-  /** Version courante en observation : ses commandes ne sont pas envoyées au prestataire. */
+  /** Règle en observation (aucune version en production) : ses chiffres sont ses commandes observées. */
   observing?: boolean;
 }
 
@@ -51,7 +51,6 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
         : totals(rows);
     const cur = exact(data.totals, data.daily);
     const prev = exact(data.previousTotals, data.previous);
-    const toSend = data.totals?.ordersToSend ?? data.daily.reduce((s, r) => s + (r.ordersToSend ?? 0), 0);
     const days = fill(data.from, data.to, data.daily);
     const volume: Point[] = days.map(({ date, row }) => ({ date, value: row ? row.ordersFlagged : null, version: row?.ruleVersion }));
     const precision: Point[] = days.map(({ date, row }) => ({
@@ -69,7 +68,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
       }
       if (d.ruleVersion !== undefined) prevVersion = d.ruleVersion;
     }
-    return { cur, prev, toSend, volume, precision, markers };
+    return { cur, prev, volume, precision, markers };
   }, [data, today]);
 
   if (!everInProduction) {
@@ -145,9 +144,9 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               value={fmtInt(view.cur.flagged)}
               delta={fmtDelta(delta(view.cur.flagged, view.prev.flagged, 'relative'), 'relative')}
               sub={
-                view.toSend > 0
-                  ? `Commandes remontées par la règle, dont ${fmtInt(view.toSend)} envoyées au prestataire`
-                  : 'Commandes remontées par la règle (aucune envoyée au prestataire sur la période)'
+                observing
+                  ? 'Commandes remontées en observation (rien n\'est envoyé au prestataire)'
+                  : 'Commandes envoyées au prestataire (version en production)'
               }
             />
             <KpiTile

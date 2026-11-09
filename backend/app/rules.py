@@ -256,12 +256,12 @@ def sync_registry(bq: BigQueryGateway, rule: Rule) -> None:
 
     Une ligne par version qui tourne (clé rule_id, version) : la version en production, et à côté une
     éventuelle candidate. `send_to_provider` dit si ses commandes sont à transmettre au prestataire (vrai
-    seulement pour la version en production) ; `candidate` la distingue. L'historique reste dans
+    seulement pour la version en production) : c'est tout ce que le DAG en recopie. L'historique reste dans
     `rule_versions` ; les brouillons n'y vont jamais.
     """
     bq.set_registry(
         rule,
-        [(v, derive_status(rule, v), v.decision == "SENT", cand) for v, cand in registry_versions(rule)],
+        [(v, derive_status(rule, v), v.decision == "SENT") for v, _ in registry_versions(rule)],
     )
 
 

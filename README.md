@@ -332,7 +332,6 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     version est en production à ce run. La décision est figée au moment du run : passer en production n'envoie
     pas le stock remonté en observation, et suspendre l'envoi ne bloque pas ce qui était déjà marqué. Une
     commande remontée par la v1 puis par la v2 est marquée par les deux ; le script ne l'envoie qu'une fois ;
-  - `candidate` recopie la colonne du même nom : commande remontée par une version candidate ;
   - `sent_at` (date de transmission) reste vide ; c'est le **script d'envoi externe** qui le renseigne.
 
   Le script lit les lignes `to_send AND sent_at IS NULL`, les insère dans la base du prestataire en
@@ -340,7 +339,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   même commande), puis renseigne `sent_at` sur **toutes** les lignes en attente, y compris celles qu'il écarte
   parce que la commande est déjà partie (sinon il les relirait à chaque passage). Une nouvelle tentative du DAG efface et réécrit les lignes de son run
   pas encore transmises, et garde celles qui le sont. `rule_runs.rows_to_send` donne, par run, le nombre de
-  commandes marquées. Des tables existantes reçoivent `to_send`, `candidate`, `sent_at` et `rows_to_send` par
+  commandes marquées. Des tables existantes reçoivent `to_send`, `sent_at` et `rows_to_send` par
   `infra/bigquery/03_rule_upgrade_suivi.sql` ; les anciennes colonnes `sent_to_provider` et `rows_sent` ne
   sont plus écrites (le script indique comment les supprimer).
 
@@ -349,10 +348,13 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     version y garde toutes ses commandes, candidate comprise, y compris celles déjà remontées par une autre
     version ;
   - `v_rule_orders` (une ligne par commande et par version, avec le retour du prestataire) sert aux **chiffres
-    de la règle** : courbes et indicateurs de la page règle, totaux sur 30 jours. La plateforme y compte les
-    commandes **distinctes** des versions non candidates (« remontées ») et des commandes `to_send`
-    (« envoyées au prestataire ») : une commande remontée par deux versions n'est comptée qu'une fois, et la
-    candidate n'entre pas dans les chiffres de la règle tant qu'elle n'est pas en production.
+    de la règle** : courbes et indicateurs de la page règle, totaux sur 30 jours. Ils dépendent de l'état de la
+    règle : **en production**, ses commandes à transmettre (`to_send`), c'est-à-dire celles de la version en
+    production ; **en observation**, ses autres commandes. La plateforme compte les commandes **distinctes** :
+    une commande remontée par deux versions n'est comptée qu'une fois. Une candidate n'entre donc jamais dans
+    les chiffres d'une règle en production ; pour une version précise, candidate comprise, on lit le
+    comparatif des versions. Pour une règle aujourd'hui en production, ses jours d'observation n'apparaissent
+    plus sur sa courbe (ils restent dans le comparatif).
 
   Les chiffres du comparatif ne s'additionnent donc pas pour donner ceux de la règle ; une ligne
   d'explication l'indique sous le tableau. Les deux vues sont créées par `apply.sh` / `apply.ps1`

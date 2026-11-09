@@ -282,7 +282,7 @@ export function createMockApi(): Api {
     const flagged = broken ? 0 : Math.round(p.dailyVolume * weekly * (0.55 + rnd(s + 'f') * 0.9));
     // En observation, rien n'est envoyé au prestataire : seules les commandes aussi remontées par une
     // règle envoyée sont traitées (environ un tiers).
-    const sent = r.versions.find((v) => v.version === version)?.decision === 'SENT' || !!r.wasSent?.includes(version);
+    const sent = sentVersion(r, version);
     const rate = p.processingRate * (sent ? 1 : 0.3);
     // Le prestataire traite les commandes sans délai : les jours récents sont complets.
     const processed = Math.min(flagged, Math.round(flagged * rate * (0.85 + rnd(s + 'p') * 0.3)));
@@ -322,13 +322,21 @@ export function createMockApi(): Api {
     });
   }
 
-  /** Chiffres de la règle : chaque jour, la version qui la représente, jamais la candidate (v_rule_orders). */
+  /** La version a été envoyée au prestataire (ses commandes sont « to_send »). */
+  const sentVersion = (r: MockRule, version: number) =>
+    r.versions.find((v) => v.version === version)?.decision === 'SENT' || !!r.wasSent?.includes(version);
+
+  /**
+   * Chiffres de la règle selon son état (v_rule_orders) : en production, ses commandes envoyées ; en
+   * observation, ses commandes observées. Une version précise se lit dans le comparatif (versionTotals).
+   */
   function daily(r: MockRule, from: string, to: string): DailyPerformance[] {
     const out: DailyPerformance[] = [];
     const today = isoDate(new Date());
+    const inProduction = !!productionVersion(r);
     for (let d = from; d <= to && d <= today; d = addDays(d, 1)) {
       const version = versionAt(r, d);
-      if (r.profile && version !== undefined) out.push(dayPerf(r, d, version));
+      if (r.profile && version !== undefined && sentVersion(r, version) === inProduction) out.push(dayPerf(r, d, version));
     }
     return out;
   }

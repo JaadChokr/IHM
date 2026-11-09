@@ -19,10 +19,9 @@ Pour chaque version, la tâche :
   1. exécute `sql_query` et écrit dans `rule_alerts` les commandes que **cette version** n'a encore jamais
      remontées (une seule fois chacune) : une fenêtre glissante ou une règle écrite avec CURRENT_DATE() ne
      crée pas de doublon, et chaque version est mesurée sur tout ce qu'elle trouve ;
-  2. recopie sur chaque commande deux colonnes de rules_registry, sans les interpréter : `to_send`
-     (« à transmettre au prestataire » : la version est en production à ce run) et `candidate` (version
-     candidate, qui tourne en parallèle de la version en production) ; la décision est figée au moment
-     du run ;
+  2. recopie sur chaque commande `send_to_provider` de rules_registry, sans l'interpréter : `to_send`
+     (« à transmettre au prestataire » : la version est en production à ce run) ; la décision est figée
+     au moment du run ;
   3. trace l'exécution dans `rule_runs` (version, période, statut) : c'est ce que lit la plateforme.
 
 Envoi au prestataire : le DAG n'envoie rien. Un script externe lit dans `rule_alerts` les lignes
@@ -144,8 +143,8 @@ def make_dag(frequency: str, cron: str):
             when = " FOR SYSTEM_TIME AS OF @period_end" if LATE_AFTER < late < TIME_TRAVEL_MAX else ""
             rows = _query(
                 client,
-                "SELECT rule_id, version, name, sql_query, send_to_provider,"
-                f" IFNULL(candidate, FALSE) AS candidate FROM {ds}.rules_registry{when}"
+                "SELECT rule_id, version, name, sql_query, send_to_provider"
+                f" FROM {ds}.rules_registry{when}"
                 " WHERE schedule = @schedule",
                 schedule=("STRING", frequency),
                 **({"period_end": ("TIMESTAMP", end)} if when else {}),
@@ -191,14 +190,13 @@ def make_dag(frequency: str, cron: str):
                 job = _query(
                     client,
                     f"""INSERT INTO {ds}.rule_alerts
-                          (rule_id, rule_version, run_id, run_date, order_id, detected_at, details, to_send,
-                           candidate)
+                          (rule_id, rule_version, run_id, run_date, order_id, detected_at, details, to_send)
                         SELECT @rule_id, @version, @run_id, @run_date,
                                CAST(t.order_id AS STRING), CURRENT_TIMESTAMP(), TO_JSON(t),
-                               -- Recopiés de rules_registry : version en production à ce run (à
-                               -- transmettre), version candidate. Le script d'envoi dédoublonne par
-                               -- commande ; les chiffres d'une règle comptent les commandes distinctes.
-                               @send, @candidate
+                               -- Recopié de rules_registry : version en production à ce run (à
+                               -- transmettre). Le script d'envoi dédoublonne par commande ; les chiffres
+                               -- d'une règle comptent les commandes distinctes.
+                               @send
                         FROM (
                     {sql}
                         ) AS t
@@ -214,7 +212,6 @@ def make_dag(frequency: str, cron: str):
                     run_id=("STRING", run_id),
                     run_date=("DATE", run_date),
                     send=("BOOL", bool(rule["send_to_provider"])),
-                    candidate=("BOOL", bool(rule["candidate"])),
                     period_start=("TIMESTAMP", period_start),
                     period_end=("TIMESTAMP", period_end),
                 )

@@ -138,7 +138,7 @@ export function RuleDetailPage() {
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'definition' && <DefinitionTab r={r} onTested={rule.reload} />}
-        {tab === 'performance' && <PerformanceDashboard ruleId={r.ruleId} firstRunDate={firstRunDate} versionsRun={ran.length} observing={r.status === 'OBSERVATION'} />}
+        {tab === 'performance' && <PerformanceDashboard ruleId={r.ruleId} firstRunDate={firstRunDate} versionsRun={ran.length} observing={r.status === 'OBSERVATION' && !r.candidate} />}
         {tab === 'tests' && <TestsTab r={r} hash={hash} />}
         {tab === 'versions' && (
           <VersionsTab

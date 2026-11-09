@@ -7,10 +7,8 @@ ALTER TABLE `${PROJECT}.${DATASET}.rule_runs`
   ADD COLUMN IF NOT EXISTS rows_to_send INT64;
 ALTER TABLE `${PROJECT}.${DATASET}.rule_alerts`
   ADD COLUMN IF NOT EXISTS to_send BOOL,
-  ADD COLUMN IF NOT EXISTS candidate BOOL,
   ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP;
--- Version candidate en parallèle : rules_registry passe à une ligne par version exécutée.
-ALTER TABLE `${PROJECT}.${DATASET}.rules_registry` ADD COLUMN IF NOT EXISTS candidate BOOL;
+-- Version candidate en parallèle : rules_registry passe à une ligne par version exécutée (clé ci-dessous).
 -- Les colonnes sent_to_provider (rule_alerts) et rows_sent (rule_runs) des versions précédentes ne sont
 -- plus écrites. Elles ne sont pas supprimées ici, pour ne pas casser un script qui les lirait encore ;
 -- une fois le script d'envoi passé à to_send / sent_at :
