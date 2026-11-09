@@ -60,10 +60,25 @@ export function LoginPage() {
 
   return (
     <div className="login-wrap">
+      <aside className="login-aside">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true">R</span>
+          Rules Manager
+        </div>
+        <div className="login-pitch">
+          <p className="login-title">Les règles de détection de fraude, de l'idée à la production.</p>
+          <ul>
+            <li>Écrivez la règle en SQL et testez-la sur les vraies données.</li>
+            <li>Observez ce qu'elle remonte avant de l'envoyer au prestataire.</li>
+            <li>Suivez sa précision et ses exécutions, version par version.</li>
+          </ul>
+        </div>
+      </aside>
+      <div className="login-main">
       <div className="card login-card stack">
         <div className="row" style={{ gap: 10 }}>
-          <span className="brand-mark" aria-hidden="true">R</span>
-          <h1>Rules Manager</h1>
+          <span className="brand-mark login-card-mark" aria-hidden="true">R</span>
+          <h1>Connexion</h1>
         </div>
         {step === 'code' ? (
           <form className="stack" onSubmit={submitCode} noValidate>
@@ -131,6 +146,7 @@ export function LoginPage() {
             </div>
           </form>
         )}
+      </div>
       </div>
     </div>
   );

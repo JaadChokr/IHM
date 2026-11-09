@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '../components/Pager';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
@@ -246,12 +247,13 @@ function RunsTab({ r }: { r: RuleDetail }) {
   const DAYS = 90;
   const runs = useAsync(() => api.getRuns(r.ruleId, DAYS), [r.ruleId]);
   const [onlyFailed, setOnlyFailed] = useState(false);
-  if (runs.error) return <Alert kind="error" title={runs.error.message} />;
-  if (!runs.data) return <Spinner />;
-  const all = runs.data;
-  if (all.length === 0) return <div className="card empty">Cette règle ne s'est pas encore exécutée.</div>;
+  const all = runs.data ?? [];
   const failed = all.filter((x) => x.status === 'FAILED');
   const shown = onlyFailed ? failed : all;
+  const { rows, pager } = usePaged(shown, 'runs');
+  if (runs.error) return <Alert kind="error" title={runs.error.message} />;
+  if (!runs.data) return <Spinner />;
+  if (all.length === 0) return <div className="card empty">Cette règle ne s'est pas encore exécutée.</div>;
   const last = all[0];
   const duration = (x: RuleRun) =>
     x.finishedAt ? fmtDuration(new Date(x.finishedAt).getTime() - new Date(x.startedAt).getTime()) : '—';
@@ -259,6 +261,7 @@ function RunsTab({ r }: { r: RuleDetail }) {
     <div className="stack">
       <div className="grid-3">
         <KpiTile
+          featured
           label="Dernière exécution"
           value={last.status === 'SUCCESS' ? 'Réussie' : 'En échec'}
           sub={`${fmtDateTime(last.startedAt)} · v${last.ruleVersion}`}
@@ -298,7 +301,7 @@ function RunsTab({ r }: { r: RuleDetail }) {
                 </tr>
               </thead>
               <tbody>
-                {shown.map((x) => (
+                {rows.map((x) => (
                   <tr key={x.runId}>
                     <td>
                       {fmtDateTime(x.startedAt)}
@@ -330,6 +333,7 @@ function RunsTab({ r }: { r: RuleDetail }) {
                 ))}
               </tbody>
             </table>
+            <Pager {...pager} />
           </div>
         )}
       </div>

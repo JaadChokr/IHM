@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '../components/Pager';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
@@ -22,6 +23,7 @@ export const ACTION_LABEL: Record<AuditAction, string> = {
 };
 
 export function AuditTable({ events, showRule = true }: { events: AuditEvent[]; showRule?: boolean }) {
+  const { rows, pager } = usePaged(events, showRule ? 'audit' : 'ruleAudit');
   if (events.length === 0) return <div className="empty">Aucun événement.</div>;
   return (
     <div className="table-wrap">
@@ -36,7 +38,7 @@ export function AuditTable({ events, showRule = true }: { events: AuditEvent[]; 
           </tr>
         </thead>
         <tbody>
-          {events.map((e) => (
+          {rows.map((e) => (
             <tr key={e.id}>
               <td className="small nowrap">{fmtDateTime(e.at)}</td>
               <td className="small nowrap">
@@ -60,6 +62,7 @@ export function AuditTable({ events, showRule = true }: { events: AuditEvent[]; 
           ))}
         </tbody>
       </table>
+      <Pager {...pager} />
     </div>
   );
 }

@@ -533,6 +533,13 @@ table.data tr:last-child td {
   gap: 4px;
   align-items: center;
 }
+table.data a:not(.btn) {
+  text-decoration: none;
+  font-weight: 500;
+}
+table.data a:not(.btn):hover {
+  text-decoration: underline;
+}
 .rule-link {
   font-weight: 600;
   color: var(--text);
@@ -541,6 +548,54 @@ table.data tr:last-child td {
 .rule-link:hover {
   color: var(--accent);
   text-decoration: underline;
+}
+
+/* ---------- Pagination ---------- */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-3);
+}
+.pager-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.pager-size select {
+  width: auto;
+  min-height: 32px;
+  padding: 4px 8px;
+}
+.pager-range {
+  color: var(--text-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pager-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.pager-btn:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.pager-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* ---------- Badges ---------- */
@@ -657,13 +712,18 @@ table.data tr:last-child td {
   background: var(--good-soft);
 }
 
-/* ---------- Onglets ---------- */
+/* ---------- Onglets : pastilles, comme les sélecteurs de période ---------- */
 .tabs {
   display: flex;
-  gap: 2px;
-  /* Filet dessiné à l'intérieur : rien ne dépasse, donc pas de barre de défilement parasite (Windows). */
-  box-shadow: inset 0 -1px 0 var(--border);
-  margin-bottom: 16px;
+  gap: 4px;
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+  padding: 4px;
+  margin-bottom: 20px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
   /* Défilement horizontal sur écran étroit, sans barre visible. */
   overflow-x: auto;
   overflow-y: hidden;
@@ -675,19 +735,25 @@ table.data tr:last-child td {
 .tab {
   background: none;
   border: none;
+  border-radius: 10px;
   font: inherit;
+  font-weight: 500;
   color: var(--text-2);
-  padding: 10px 14px;
+  padding: 8px 16px;
   cursor: pointer;
-  border-bottom: 2px solid transparent;
   white-space: nowrap;
 }
 .tab[aria-selected='true'] {
-  color: var(--accent);
-  border-bottom-color: var(--accent);
+  background: var(--brand);
+  color: #fff;
   font-weight: 600;
 }
-.tab:hover {
+.tab[aria-selected='true'] .count {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+.tab:hover:not([aria-selected='true']) {
+  background: var(--surface-2);
   color: var(--text);
 }
 .count {
@@ -1227,13 +1293,76 @@ table.data tr:last-child td {
 .login-wrap {
   min-height: 100vh;
   display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+}
+.login-aside {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 40px 48px;
+  background: var(--ink);
+  color: var(--ink-text);
+}
+.login-aside .brand {
+  color: var(--ink-text);
+}
+.login-pitch {
+  max-width: 460px;
+  margin-bottom: 8vh;
+}
+.login-title {
+  margin: 0 0 20px;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.login-pitch ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--ink-muted);
+}
+.login-pitch li {
+  display: flex;
+  gap: 10px;
+}
+.login-pitch li::before {
+  content: '';
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--brand);
+}
+.login-main {
+  display: grid;
   place-items: center;
-  padding: 16px;
+  padding: 24px;
 }
 .login-card {
   width: 100%;
-  max-width: 400px;
-  padding: 28px;
+  max-width: 420px;
+  padding: 32px;
+}
+.login-card-mark {
+  display: none;
+}
+@media (max-width: 900px) {
+  .login-wrap {
+    grid-template-columns: 1fr;
+  }
+  .login-aside {
+    display: none;
+  }
+  .login-card-mark {
+    display: grid;
+  }
 }
 .code-input {
   font-family: var(--mono) !important;

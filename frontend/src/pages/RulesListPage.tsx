@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '../components/Pager';
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
@@ -24,6 +25,7 @@ export function RulesListPage() {
   }, [location.key, location.state]);
   const users = useAsync(() => api.listUsers(), []);
   const rules = useAsync(() => api.listRules(filters), [JSON.stringify(filters)]);
+  const { rows, pager } = usePaged(rules.data ?? [], 'rules');
 
   // Recherche plein texte : débounce de la saisie.
   useEffect(() => {
@@ -125,7 +127,7 @@ export function RulesListPage() {
                 </tr>
               </thead>
               <tbody>
-                {rules.data?.map((r) => (
+                {rows.map((r) => (
                   <tr key={r.ruleId}>
                     <td style={{ maxWidth: 300 }}>
                       <Link to={`/rules/${r.ruleId}`} className="rule-link">
@@ -160,6 +162,7 @@ export function RulesListPage() {
                 ))}
               </tbody>
             </table>
+            <Pager {...pager} />
           </div>
         )}
       </div>
