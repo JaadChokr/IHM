@@ -1522,9 +1522,6 @@ details summary {
   border-radius: 4px;
   background: var(--series-1);
 }
-.pbar-fill.low {
-  background: repeating-linear-gradient(135deg, var(--series-1) 0 4px, color-mix(in srgb, var(--series-1) 45%, var(--surface)) 4px 8px);
-}
 .pbar-threshold {
   position: absolute;
   top: -4px;

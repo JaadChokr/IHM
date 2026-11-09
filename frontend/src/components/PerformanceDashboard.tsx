@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { DailyPerformance, PeriodTotals, VersionDaily, VersionPerformance } from '../api/types';
 import { addDays, daysBetween, fmtDate, fmtDateTime, fmtInt, fmtPct, isoDate } from '../lib/format';
-import { delta, MIN_PROCESSED_ORDERS, totals } from '../lib/metrics';
+import { delta, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
 import { LineChart, versionColor, type Series } from './LineChart';
@@ -191,7 +191,6 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               value={fmtPct(view.cur.precision)}
               delta={fmtDelta(delta(view.cur.precision, view.prev.precision, 'points'), 'points')}
               sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} vérifiées`}
-              flag={view.cur.lowSample ? `Échantillon trop faible (moins de ${MIN_PROCESSED_ORDERS} commandes vérifiées)` : undefined}
             />
           </div>
 
@@ -383,11 +382,7 @@ function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
                         {Math.abs(d * 100).toFixed(1).replace('.', ',')} pts)
                       </span>
                     )}
-                    {r.ordersFlagged === 0 ? (
-                      <div className="small" style={{ color: 'var(--bad)' }}>✕ aucune remontée : requête à vérifier</div>
-                    ) : (
-                      r.lowSample && <div className="small" style={{ color: 'var(--warn)' }}>⚠ échantillon faible</div>
-                    )}
+                    {r.ordersFlagged === 0 && <div className="small" style={{ color: 'var(--bad)' }}>✕ aucune remontée : requête à vérifier</div>}
                   </td>
                 </tr>
               );

@@ -1,12 +1,7 @@
 import type { ConsolidatedRow, DailyPerformance } from '../api/types';
 import { fmtDate, fmtPct } from './format';
 
-/**
- * Seuil de fiabilité du taux de précision (PRD F6, point d'attention). Le prestataire traite toutes les
- * commandes qu'il reçoit ; la précision porte sur les commandes vérifiées (présentes dans sa table de retour).
- */
-export const MIN_PROCESSED_ORDERS = 20;
-
+/** Le prestataire vérifie toutes les commandes qu'il reçoit ; la précision porte sur les commandes vérifiées. */
 export interface Totals {
   flagged: number;
   /** Vérifiées : présentes dans la table de retour du prestataire. */
@@ -15,8 +10,6 @@ export interface Totals {
   pending: number;
   confirmed: number;
   precision: number | null;
-  /** Précision assise sur un échantillon trop faible. */
-  lowSample: boolean;
 }
 
 export function totals(rows: DailyPerformance[]): Totals {
@@ -24,7 +17,7 @@ export function totals(rows: DailyPerformance[]): Totals {
   const processed = rows.reduce((s, r) => s + r.ordersProcessed, 0);
   const confirmed = rows.reduce((s, r) => s + r.ordersConfirmedFraud, 0);
   const precision = processed > 0 ? confirmed / processed : null;
-  return { flagged, processed, pending: Math.max(0, flagged - processed), confirmed, precision, lowSample: processed < MIN_PROCESSED_ORDERS };
+  return { flagged, processed, pending: Math.max(0, flagged - processed), confirmed, precision };
 }
 
 /** Variation relative (comptages) ou absolue en points (taux). */
@@ -41,7 +34,6 @@ export interface ProductionHealth extends ConsolidatedRow {
   /** Remontées sur 30 jours en attente de vérification (pas encore dans la table de retour). */
   pending: number;
   precision: number | null;
-  lowSample: boolean;
   /** Raisons de surveiller la règle ; vide si tout va bien. */
   reasons: string[];
 }
@@ -50,7 +42,6 @@ export interface ProductionHealth extends ConsolidatedRow {
 export function productionHealth(r: ConsolidatedRow, threshold: number): ProductionHealth {
   const pending = Math.max(0, r.ordersFlagged30d - r.ordersProcessed30d);
   const precision = r.ordersProcessed30d ? r.ordersConfirmed30d / r.ordersProcessed30d : null;
-  const lowSample = r.ordersProcessed30d < MIN_PROCESSED_ORDERS;
   const reasons: string[] = [];
   if (r.status === 'INACTIVE')
     reasons.push(`Plus exécutée par Airflow${r.lastRunAt ? ` depuis le ${fmtDate(r.lastRunAt)}` : ''} — DAG arrêté ou en panne`);
@@ -58,5 +49,5 @@ export function productionHealth(r: ConsolidatedRow, threshold: number): Product
   // En observation, rien n'est envoyé au prestataire : la précision n'est pas significative.
   if (r.status !== 'OBSERVATION' && precision !== null && precision < threshold)
     reasons.push(`Précision sous le seuil de ${fmtPct(threshold)}`);
-  return { ...r, pending, precision, lowSample, reasons };
+  return { ...r, pending, precision, reasons };
 }

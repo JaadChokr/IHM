@@ -118,11 +118,6 @@ export function ProductionPage() {
                       <td className="num">{fmtInt(r.pending)}</td>
                       <td className="num">
                         <strong>{fmtPct(r.precision)}</strong>
-                        {r.lowSample && r.precision !== null && (
-                          <div className="small" style={{ color: 'var(--warn)' }} title="Moins de 20 commandes vérifiées par le prestataire">
-                            ⚠ échantillon faible
-                          </div>
-                        )}
                       </td>
                       <td className="small">
                         {r.reasons.length ? (

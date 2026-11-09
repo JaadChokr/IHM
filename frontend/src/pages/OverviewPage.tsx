@@ -251,7 +251,7 @@ function PrecisionBars({ rows, threshold }: { rows: ProductionHealth[]; threshol
             </Link>
             <div className="pbar-track" role="cell" title={label}>
               {r.precision !== null && (
-                <span className={`pbar-fill${r.lowSample ? ' low' : ''}`} style={{ width: `${Math.max(r.precision * 100, 0.5)}%` }} />
+                <span className="pbar-fill" style={{ width: `${Math.max(r.precision * 100, 0.5)}%` }} />
               )}
               <span className="pbar-threshold" style={{ left: `${threshold * 100}%` }} aria-hidden="true" />
             </div>
@@ -259,15 +259,7 @@ function PrecisionBars({ rows, threshold }: { rows: ProductionHealth[]; threshol
               {r.precision === null ? (
                 <span style={{ color: 'var(--bad)' }}>{label}</span>
               ) : (
-                <>
-                  <strong>{fmtPct(r.precision)}</strong>
-                  {r.lowSample && (
-                    <span className="small" style={{ color: 'var(--warn)' }} title="Moins de 20 commandes vérifiées par le prestataire">
-                      {' '}
-                      ⚠ échantillon faible
-                    </span>
-                  )}
-                </>
+                <strong>{fmtPct(r.precision)}</strong>
               )}
             </span>
           </div>
