@@ -173,6 +173,19 @@ def test_periode_testee_selon_la_frequence(client, bq):
         start, end = (datetime.fromisoformat(dry["period"][k]) for k in ("start", "end"))
         assert end - start == step and end <= datetime.now(UTC)
         assert (bq.last_period.start, bq.last_period.end) == (start, end)  # passée à BigQuery
+    dry = client.post("/query/dry-run", json={"sql": SQL, "schedule": "HOURLY", "scheduleEvery": 6}).json()
+    start, end = (datetime.fromisoformat(dry["period"][k]) for k in ("start", "end"))
+    assert end - start == timedelta(hours=6)
+
+
+def test_frequence_avec_un_pas(client, bq):
+    login(client)
+    created = client.post("/drafts", json={**RULE, "scheduleEvery": 3})
+    assert created.status_code == 201 and created.json()["scheduleEvery"] == 3
+    # Heures : diviseurs de 24 seulement ; jours : 30 au plus.
+    bad = {**RULE, "name": "x5", "schedule": "HOURLY", "scheduleEvery": 5}
+    assert client.post("/drafts", json=bad).status_code == 422
+    assert client.post("/drafts", json={**RULE, "name": "x31", "scheduleEvery": 31}).status_code == 422
 
 
 def test_date_en_dur_soumissible(client):

@@ -4,12 +4,18 @@
 `rules_registry` à chaque exécution et lance une tâche par version à exécuter (mappage dynamique, Airflow 2.9
 ou plus) : une règle publiée est prise en charge dès le run suivant, sans action manuelle.
 
+Fréquence d'une règle : une unité (colonne `schedule` : le DAG qui l'exécute) et un pas
+(`schedule_every`) : « toutes les 2 heures », « tous les 3 jours ». Le DAG se déclenche à chaque unité
+(SCHEDULES, heure de Paris) et n'exécute une règle que lorsqu'elle est due (_due), avec un calage fixe :
+  - heures : comptées depuis minuit (pas diviseur de 24) : toutes les 2 h = 0 h 05, 2 h 05, 4 h 05… ;
+  - jours et semaines : comptés depuis ANCHOR (le lundi 5 janvier 2026).
+
 Période du run : la requête de la règle reçoit `@period_start` / `@period_end` (TIMESTAMP), bornes
-[début, fin[ de l'intervalle du run, calées par Airflow sur le cron du DAG (heure de Paris) : 1 h en
-horaire, de 3 h à 3 h en quotidien, du lundi 4 h au lundi 4 h en hebdomadaire. Un rattrapage (catchup) ou
-une relance d'un run passé repasse donc les bornes de la période d'origine, sans réécrire la requête.
-L'IHM teste la requête avec la dernière période complète du même calendrier (backend/app/periods.py :
-garder les crons alignés).
+[début, fin[ : du déclenchement dû précédent à celui-ci (pas de 1 : 1 h en horaire, de 3 h à 3 h en
+quotidien, du lundi 4 h au lundi 4 h en hebdomadaire). Un rattrapage (catchup) ou une relance d'un run
+passé repasse donc les bornes de la période d'origine, sans réécrire la requête. L'IHM teste la requête
+avec la dernière période complète du même calendrier (backend/app/periods.py : garder SCHEDULES, ANCHOR,
+_due et _period_start alignés).
 
 rules_registry a une ligne par version à exécuter (au plus deux par règle : la version en production et
 une candidate). Le DAG lance une tâche par ligne, sans logique propre aux versions. Pour chaque version :
@@ -31,8 +37,9 @@ commandes passées depuis sont rattachées au run rejoué.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from functools import partial
+from zoneinfo import ZoneInfo
 
 import pendulum
 from airflow.decorators import dag, task
@@ -80,6 +87,36 @@ SCHEDULES = {
     "DAILY": "0 3 * * *",  # chaque nuit à 3 h (la veille est complète)
     "WEEKLY": "0 4 * * 1",  # le lundi à 4 h
 }
+ANCHOR = date(2026, 1, 5)  # un lundi : origine du calage des jours et des semaines
+UNIT = {"HOURLY": timedelta(hours=1), "DAILY": timedelta(days=1), "WEEKLY": timedelta(weeks=1)}
+PARIS = ZoneInfo(TZ)
+
+
+def _due(frequency: str, every: int, tick: datetime) -> bool:
+    """La règle (toutes les `every` unités) tourne-t-elle à ce déclenchement du DAG ?"""
+    local = tick.astimezone(PARIS)
+    if frequency == "HOURLY":
+        return local.hour % every == 0
+    days = (local.date() - ANCHOR).days
+    return (days // 7 if frequency == "WEEKLY" else days) % every == 0
+
+
+def _prev_tick(frequency: str, tick: datetime) -> datetime:
+    """Déclenchement précédent du DAG : une heure réelle avant, ou la même heure de Paris la veille / la
+    semaine d'avant (changements d'heure compris)."""
+    if frequency == "HOURLY":
+        return tick.astimezone(timezone.utc) - UNIT[frequency]
+    wall = tick.astimezone(PARIS).replace(tzinfo=None) - UNIT[frequency]
+    return wall.replace(tzinfo=PARIS).astimezone(timezone.utc)
+
+
+def _period_start(frequency: str, every: int, end: datetime) -> datetime:
+    """Début de la période d'un run : le déclenchement dû précédent (ni trou ni chevauchement)."""
+    t = _prev_tick(frequency, end)
+    while not _due(frequency, every, t):
+        t = _prev_tick(frequency, t)
+    return t
+
 
 # Garde-fou : le SQL des règles est saisi dans l'IHM, pas relu ici.
 MAX_BYTES_BILLED = 200 * 1024**3  # 200 Gio par règle
@@ -131,16 +168,18 @@ def make_dag(frequency: str, cron: str):
     def fraud_rules():
         @task
         def get_rules() -> list[dict]:
-            """Versions à exécuter pour cette fréquence : une ligne par version (celle en production
-            et, le cas échéant, une candidate en observation)."""
+            """Versions dues à ce déclenchement : une ligne par version (celle en production et, le cas
+            échéant, une candidate en observation), dont le pas tombe sur ce déclenchement."""
             client, ds = _bq()
+            tick = get_current_context()["data_interval_end"]
             rows = _query(
                 client,
-                f"SELECT rule_id, version, name, sql_query, send_to_provider FROM `{ds}.rules_registry`"
+                "SELECT rule_id, version, name, sql_query, send_to_provider,"
+                f" IFNULL(schedule_every, 1) AS schedule_every FROM `{ds}.rules_registry`"
                 " WHERE schedule = @schedule",
                 schedule=("STRING", frequency),
             ).result()
-            return [dict(r.items()) for r in rows]
+            return [dict(r.items()) for r in rows if _due(frequency, r["schedule_every"], tick)]
 
         @task(map_index_template="{{ rule_name }}")
         def run_rule(rule: dict) -> None:
@@ -152,9 +191,9 @@ def make_dag(frequency: str, cron: str):
             # La version y figure : une règle peut tourner en deux versions dans le même run
             # (production et candidate).
             run_id = f"{context['run_id']}__{rule['rule_id']}__v{rule['version']}"
-            # Fenêtre d'analyse du run
-            period_start = context["data_interval_start"]
+            # Fenêtre d'analyse du run : du déclenchement dû précédent de la règle à celui-ci.
             period_end = context["data_interval_end"]
+            period_start = _period_start(frequency, rule["schedule_every"], period_end)
             run_date = period_end.in_timezone(TZ).date()
             started = datetime.now(timezone.utc)
             sql = rule["sql_query"].strip().rstrip(";")

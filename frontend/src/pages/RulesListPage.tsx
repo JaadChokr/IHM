@@ -4,7 +4,7 @@ import { api } from '../api/client';
 import { CRITICALITIES, RULE_STATUSES, type RuleFilters } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { CriticalityBadge, StatusBadge, Spinner, Alert } from '../components/ui';
-import { CRITICALITY_LABEL, FRAUD_TYPOLOGIES, SCHEDULE_LABEL, STATUS_LABEL, fmtDateTime } from '../lib/format';
+import { CRITICALITY_LABEL, FRAUD_TYPOLOGIES, STATUS_LABEL, fmtDateTime, scheduleLabel } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
 import { usePageTitle } from '../nav/history';
@@ -140,7 +140,7 @@ export function RulesListPage() {
                     </td>
                     <td className="col-c"><span className="tag">{r.fraudTypology}</span></td>
                     <td className="col-e"><CriticalityBadge value={r.criticality} /></td>
-                    <td className="small col-a">{SCHEDULE_LABEL[r.schedule]}</td>
+                    <td className="small col-a">{scheduleLabel(r.schedule, r.scheduleEvery)}</td>
                     <td className="small col-b">{r.ownerName}</td>
                     <td className="num col-a">v{r.version}</td>
                     <td className="small">{fmtDateTime(r.updatedAt)}</td>

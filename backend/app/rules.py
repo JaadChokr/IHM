@@ -103,7 +103,8 @@ def _run_status(v: RuleVersion, at: datetime | None) -> str | None:
     if not (v.first_run_at and v.last_run_at):
         return None
     idle = (at or now()) - as_utc(v.last_run_at)
-    if idle > SCHEDULE_PERIOD.get(v.schedule, timedelta(days=1)) * INACTIVE_AFTER_PERIODS:
+    period = SCHEDULE_PERIOD.get(v.schedule, timedelta(days=1)) * (v.schedule_every or 1)
+    if idle > period * INACTIVE_AFTER_PERIODS:
         return "INACTIVE"
     return "IN_PRODUCTION" if v.decision == "SENT" else "OBSERVATION"
 
@@ -153,6 +154,7 @@ def _version_out(v: RuleVersion, rule: Rule, users: dict[str, User]) -> RuleVers
         fraud_typology=v.fraud_typology,
         criticality=v.criticality,  # type: ignore[arg-type]
         schedule=v.schedule,  # type: ignore[arg-type]
+        schedule_every=v.schedule_every or 1,
         sql_query=v.sql_query,
         status=derive_status(rule, v),  # type: ignore[arg-type]
         owner_matricule=rule.owner_matricule,
@@ -241,7 +243,8 @@ def validate(db: Session, bq: BigQueryGateway, data: RuleInput, rule_id: str | N
     # DML/DDL rejetés dès l'enregistrement, d'après le dry-run quand il aboutit (PRD F2).
     # Les autres contraintes (order_id, test réussi) bloquent la soumission, pas le brouillon.
     try:
-        stype = bq.dry_run(data.sql_query, last_period(data.schedule, now())).statement_type
+        period = last_period(data.schedule, now(), data.schedule_every)
+        stype = bq.dry_run(data.sql_query, period).statement_type
     except QueryError:
         kw = _first_keyword(data.sql_query)
         stype = "SELECT" if kw in ("SELECT", "WITH") else kw

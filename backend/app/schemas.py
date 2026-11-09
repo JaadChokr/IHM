@@ -3,8 +3,10 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic.alias_generators import to_camel
+
+from .periods import EVERY, valid_every
 
 # Statut d'une version de règle (toujours soumise : les brouillons sont à part, voir DraftOut).
 # Soumise → en observation (Airflow l'exécute, rien n'est envoyé au prestataire) → en production
@@ -13,6 +15,13 @@ RuleStatus = Literal["SUBMITTED", "OBSERVATION", "IN_PRODUCTION", "INACTIVE", "R
 Decision = Literal["SENT", "DISCARDED"]
 Criticality = Literal["HIGH", "MEDIUM", "LOW"]
 Schedule = Literal["DAILY", "HOURLY", "WEEKLY"]
+
+
+def check_every(schedule: str, every: int) -> None:
+    if not valid_every(schedule, every):
+        allowed = ", ".join(map(str, EVERY[schedule]))
+        unit = {"HOURLY": "heures", "DAILY": "jours", "WEEKLY": "semaines"}[schedule]
+        raise ValueError(f"Fréquence invalide : toutes les {every} {unit}. Valeurs possibles : {allowed}.")
 
 
 class Model(BaseModel):
@@ -45,7 +54,14 @@ class RuleInput(Model):
     fraud_typology: str
     criticality: Criticality
     schedule: Schedule
+    # Pas de la fréquence : toutes les `schedule_every` heures, jours ou semaines (periods.EVERY).
+    schedule_every: int = 1
     sql_query: str
+
+    @model_validator(mode="after")
+    def _every(self):  # noqa: ANN202
+        check_every(self.schedule, self.schedule_every)
+        return self
 
 
 class TestRecord(Model):
@@ -143,6 +159,7 @@ class QueryIn(Model):
     # Fréquence saisie dans l'éditeur : fixe la période testée (@period_start / @period_end). À défaut,
     # celle du brouillon ou de la règle testée, sinon quotidienne.
     schedule: Schedule | None = None
+    schedule_every: int | None = None
 
 
 class TestPeriod(Model):

@@ -37,7 +37,7 @@ router = APIRouter(prefix="/drafts", tags=["brouillons"])
 
 # Fenêtre pendant laquelle un test fait depuis l'éditeur est rattaché au brouillon enregistré ensuite.
 TEST_ADOPTION_WINDOW = timedelta(hours=1)
-CONTENT = ("name", "description", "fraud_typology", "criticality", "schedule", "sql_query")
+CONTENT = ("name", "description", "fraud_typology", "criticality", "schedule", "schedule_every", "sql_query")
 
 
 def _tests(db: Session, draft_id: str) -> list[TestRun]:

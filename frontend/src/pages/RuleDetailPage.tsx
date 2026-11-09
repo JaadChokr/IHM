@@ -11,7 +11,8 @@ import { PerformanceDashboard } from '../components/PerformanceDashboard';
 import { KpiTile } from '../components/KpiTile';
 import { Alert, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
 import { AuditTable } from './AuditPage';
-import { SCHEDULE_LABEL, SCHEDULE_WHEN, fmtDateTime, fmtDuration, fmtInt } from '../lib/format';
+import { fmtDateTime, fmtDuration, fmtInt, scheduleLabel, scheduleWhen } from '../lib/format';
+import { fmtRun, nextRun } from '../lib/period';
 import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
 
@@ -72,7 +73,7 @@ export function RuleDetailPage() {
           <p className="row small" style={{ gap: 14 }}>
             <span>{r.fraudTypology}</span>
             <CriticalityBadge value={r.criticality} />
-            <span>{SCHEDULE_LABEL[r.schedule]}</span>
+            <span>{scheduleLabel(r.schedule, r.scheduleEvery)}</span>
             <span>Propriétaire : {r.ownerName}</span>
             <span>Modifiée le {fmtDateTime(r.updatedAt)}</span>
           </p>
@@ -100,7 +101,7 @@ export function RuleDetailPage() {
             kind="success"
             title={
               <>
-                v{r.version} publiée : première exécution {SCHEDULE_WHEN[r.schedule]}, en observation.
+                v{r.version} publiée : première exécution le {fmtRun(nextRun(r.schedule, r.scheduleEvery))}, en observation.
                 <InfoTip align="start">
                   Ses commandes ne seront envoyées au prestataire qu'après votre décision.
                   {r.candidate && r.productionVersion && ` La v${r.productionVersion} reste en production pendant ce temps.`} Tant qu'elle ne
@@ -185,7 +186,7 @@ export function RuleDetailPage() {
 function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void }) {
   const editor = useRef<SqlEditorHandle>(null);
   const [issues, setIssues] = useState<SqlIssue[]>();
-  const test = useQueryTest({ sql: r.sqlQuery, target: { ruleId: r.ruleId }, schedule: r.schedule, onIssues: setIssues, onTested });
+  const test = useQueryTest({ sql: r.sqlQuery, target: { ruleId: r.ruleId }, schedule: r.schedule, scheduleEvery: r.scheduleEvery, onIssues: setIssues, onTested });
   return (
     <div className="stack">
       <div className="card card-pad stack" style={{ gap: 12 }}>
@@ -202,9 +203,15 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
           </dd>
           <dt>Exécution</dt>
           <dd>
-            {SCHEDULE_LABEL[r.schedule]}, {SCHEDULE_WHEN[r.schedule]}
+            {scheduleLabel(r.schedule, r.scheduleEvery)}, {scheduleWhen(r.schedule, r.scheduleEvery)}
             {r.airflowDagId && <InfoTip>Traitement de l'équipe data : {r.airflowDagId}</InfoTip>}
           </dd>
+          {!r.firstRunAt && r.status === 'SUBMITTED' && (
+            <>
+              <dt>Prochaine exécution</dt>
+              <dd>{fmtRun(nextRun(r.schedule, r.scheduleEvery))}</dd>
+            </>
+          )}
           {r.firstRunAt && (
             <>
               <dt>Première exécution</dt>
@@ -347,6 +354,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
         fraudTypology: v.fraudTypology,
         criticality: v.criticality,
         schedule: v.schedule,
+        scheduleEvery: v.scheduleEvery,
         sqlQuery: v.sqlQuery,
       };
       const d = r.myDraftId ? await api.updateDraft(r.myDraftId, content) : await api.createDraft({ ...content, ruleId: r.ruleId });

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
-import { CRITICALITIES, SCHEDULES, type Draft, type RuleDetail, type RuleInput, type SqlIssue } from '../api/types';
+import { CRITICALITIES, EVERY, type Draft, type Schedule, type RuleDetail, type RuleInput, type SqlIssue } from '../api/types';
 import { SqlEditor, type SqlEditorHandle } from '../components/SqlEditor';
 import { TestActions, TestResults, useQueryTest } from '../components/TestPanel';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { usePageTitle } from '../nav/history';
 import { Alert, InfoTip, Spinner, StatusBadge } from '../components/ui';
-import { CRITICALITY_LABEL, FRAUD_TYPOLOGIES, SCHEDULE_LABEL, STATUS_LABEL, fmtDateTime } from '../lib/format';
+import { CRITICALITY_LABEL, FRAUD_TYPOLOGIES, SCHEDULE_UNIT, STATUS_LABEL, fmtDateTime, scheduleWhen } from '../lib/format';
+import { fmtRun, nextRun } from '../lib/period';
 import { checkParams, queryHash } from '../lib/sql';
 import { readPref, writePref } from '../prefs/prefs';
 
@@ -17,6 +18,7 @@ const EMPTY: RuleInput = {
   fraudTypology: '',
   criticality: 'MEDIUM',
   schedule: 'DAILY',
+  scheduleEvery: 1,
   sqlQuery: `SELECT
   o.order_id
 FROM \`sales.orders\` o
@@ -30,8 +32,18 @@ const toInput = (r: RuleInput): RuleInput => ({
   fraudTypology: r.fraudTypology,
   criticality: r.criticality,
   schedule: r.schedule,
+  scheduleEvery: r.scheduleEvery ?? 1, // saisie locale antérieure au pas : 1
   sqlQuery: r.sqlQuery,
 });
+
+/** Unités dans l'ordre du sélecteur de fréquence. */
+const UNITS: Schedule[] = ['HOURLY', 'DAILY', 'WEEKLY'];
+/** « Toutes les heures », « Toutes les 2 heures », « Tous les 3 jours »… */
+function everyLabel(u: Schedule, n: number): string {
+  const many = SCHEDULE_UNIT[u][1];
+  const det = u === 'DAILY' ? 'Tous les' : 'Toutes les';
+  return n === 1 ? `${det} ${many}` : `${det} ${n} ${many}`;
+}
 
 const same = (a: RuleInput, b: RuleInput) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -72,6 +84,7 @@ export function RuleEditorPage() {
     sql: form.sqlQuery,
     target: draft ? { draftId: draft.id } : rule ? { excludeRuleId: rule.ruleId } : undefined,
     schedule: form.schedule,
+    scheduleEvery: form.scheduleEvery,
     onIssues: setDryIssues,
     onExecuted: setExecHash,
   });
@@ -310,7 +323,7 @@ export function RuleEditorPage() {
           <Alert kind="info" title="Un brouillon non enregistré a été retrouvé sur ce poste.">
             <div className="row" style={{ marginTop: 6 }}>
               <span className="small muted">Dernière saisie : {fmtDateTime(restorable.savedAt)}</span>
-              <button type="button" className="btn btn-sm" onClick={() => { setForm(restorable.form); setRestorable(null); }}>
+              <button type="button" className="btn btn-sm" onClick={() => { setForm(toInput(restorable.form)); setRestorable(null); }}>
                 Restaurer
               </button>
               <button type="button" className="btn btn-sm btn-ghost" onClick={() => { writePref(draftKey, null); setRestorable(null); }}>
@@ -430,16 +443,34 @@ export function RuleEditorPage() {
                 </div>
               </fieldset>
               <div className="field">
-                <label htmlFor="schedule">
+                <label htmlFor="schedule-every">
                   Fréquence d'exécution souhaitée<span className="req" aria-hidden="true">*</span>
+                  <InfoTip>
+                    Les heures d'exécution sont fixes : toutes les 2 h = 0 h 05, 2 h 05, 4 h 05… ; chaque jour à 3 h ; chaque lundi à 4 h. La
+                    requête porte sur la période écoulée depuis l'exécution précédente (@period_start / @period_end).
+                  </InfoTip>
                 </label>
-                <select id="schedule" value={form.schedule} onChange={(e) => set('schedule', e.target.value as RuleInput['schedule'])}>
-                  {SCHEDULES.map((s) => (
-                    <option key={s} value={s}>
-                      {SCHEDULE_LABEL[s]}
-                    </option>
+                <select
+                  id="schedule-every"
+                  value={`${form.schedule}:${form.scheduleEvery}`}
+                  onChange={(e) => {
+                    const [s, n] = e.target.value.split(':');
+                    setForm((f) => ({ ...f, schedule: s as RuleInput['schedule'], scheduleEvery: Number(n) }));
+                  }}
+                >
+                  {UNITS.map((u) => (
+                    <optgroup key={u} label={SCHEDULE_UNIT[u][1][0].toUpperCase() + SCHEDULE_UNIT[u][1].slice(1)}>
+                      {EVERY[u].map((n) => (
+                        <option key={n} value={`${u}:${n}`}>
+                          {everyLabel(u, n)}
+                        </option>
+                      ))}
+                    </optgroup>
                   ))}
                 </select>
+                <p className="small muted">
+                  Exécution {scheduleWhen(form.schedule, form.scheduleEvery)} · prochaine le {fmtRun(nextRun(form.schedule, form.scheduleEvery))}
+                </p>
               </div>
             </div>
           </div>

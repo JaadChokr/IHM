@@ -59,8 +59,12 @@ def _record(db: Session, user: User, body: QueryIn, target: Target, **fields) ->
 def _period(body: QueryIn, target: Target) -> Period:
     """Valeurs de @period_start / @period_end : la dernière période complète de la fréquence."""
     cur, draft = target
-    schedule = body.schedule or (draft.schedule if draft else cur.schedule if cur else "DAILY")
-    return last_period(schedule, now())
+    src = draft or cur
+    if body.schedule:
+        schedule, every = body.schedule, body.schedule_every or 1
+    else:
+        schedule, every = (src.schedule, src.schedule_every or 1) if src else ("DAILY", 1)
+    return last_period(schedule, now(), every)
 
 
 def _analyse(bq: BigQueryGateway, body: QueryIn, period: Period) -> tuple[list[SqlIssue], object | None]:

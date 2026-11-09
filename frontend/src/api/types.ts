@@ -17,6 +17,12 @@ export type Criticality = (typeof CRITICALITIES)[number];
 
 export const SCHEDULES = ['DAILY', 'HOURLY', 'WEEKLY'] as const;
 export type Schedule = (typeof SCHEDULES)[number];
+/** Pas autorisés par unité (miroir de backend/app/periods.py). Heures : diviseurs de 24. */
+export const EVERY: Record<Schedule, readonly number[]> = {
+  HOURLY: [1, 2, 3, 4, 6, 8, 12],
+  DAILY: Array.from({ length: 30 }, (_, i) => i + 1),
+  WEEKLY: Array.from({ length: 12 }, (_, i) => i + 1),
+};
 
 export interface User {
   matricule: string;
@@ -31,6 +37,8 @@ export interface RuleInput {
   fraudTypology: string;
   criticality: Criticality;
   schedule: Schedule;
+  /** Pas : toutes les `scheduleEvery` heures, jours ou semaines (1 : à chaque unité). */
+  scheduleEvery: number;
   sqlQuery: string;
 }
 
@@ -106,6 +114,7 @@ export interface TestTarget {
   excludeRuleId?: string;
   /** Fréquence saisie : fixe la période testée (@period_start / @period_end). */
   schedule?: Schedule;
+  scheduleEvery?: number;
 }
 
 /** Valeurs de @period_start / @period_end au test : la dernière période complète de la fréquence. */

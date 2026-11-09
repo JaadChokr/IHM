@@ -13,6 +13,8 @@ interface Options {
   target?: TestTarget;
   /** Fréquence de la règle : fixe la période testée (dernière période complète de son DAG). */
   schedule: Schedule;
+  /** Pas de la fréquence (toutes les N unités). */
+  scheduleEvery?: number;
   onIssues: (issues: SqlIssue[]) => void;
   /** Appelé après chaque test (pour rafraîchir l'historique / l'éligibilité à la soumission). */
   onTested?: () => void;
@@ -26,8 +28,8 @@ type Phase = 'idle' | 'dry-running' | 'dry-done' | 'executing' | 'exec-done';
  * État du test d'une requête, partagé entre les boutons (sous l'éditeur, `TestActions`) et le bloc de
  * résultat (à part, `TestResults`) : « Valider la syntaxe » (dry-run gratuit) puis « Tester la requête ».
  */
-export function useQueryTest({ sql, target: base, schedule, onIssues, onTested, onExecuted }: Options) {
-  const target: TestTarget = { ...base, schedule };
+export function useQueryTest({ sql, target: base, schedule, scheduleEvery = 1, onIssues, onTested, onExecuted }: Options) {
+  const target: TestTarget = { ...base, schedule, scheduleEvery };
   const guard = useAsync(() => api.getGuardrails(), []);
   const [phase, setPhase] = useState<Phase>('idle');
   const [dry, setDry] = useState<DryRunResult>();
@@ -77,6 +79,7 @@ export function useQueryTest({ sql, target: base, schedule, onIssues, onTested, 
   return {
     sql,
     schedule,
+    scheduleEvery,
     phase,
     dry,
     exec,
@@ -111,7 +114,7 @@ export function TestActions({ t }: { t: QueryTest }) {
           </span>
         ) : (
           <span className="muted">
-            Période testée {fmtPeriod(lastPeriod(t.schedule))}
+            Période testée {fmtPeriod(lastPeriod(t.schedule, undefined, t.scheduleEvery))}
             <InfoTip>
               Si la requête utilise <span className="mono">@period_start</span> / <span className="mono">@period_end</span>, ce sont leurs
               valeurs pendant le test : la dernière période complète de sa fréquence. <span className="mono">CURRENT_DATE()</span> donne la

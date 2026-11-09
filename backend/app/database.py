@@ -101,6 +101,7 @@ class RuleVersion(Base):
     fraud_typology: Mapped[str] = mapped_column(String(100))
     criticality: Mapped[str] = mapped_column(String(10))
     schedule: Mapped[str] = mapped_column(String(10))
+    schedule_every: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     sql_query: Mapped[str] = mapped_column(Text)
     # Toute version est soumise : les brouillons vivent dans `drafts`. En production, inactive et
     # remplacée se déduisent des exécutions Airflow (colonnes *_run_at), voir rules.derive_status.
@@ -142,6 +143,7 @@ class Draft(Base):
     fraud_typology: Mapped[str] = mapped_column(String(100))
     criticality: Mapped[str] = mapped_column(String(10))
     schedule: Mapped[str] = mapped_column(String(10))
+    schedule_every: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
     sql_query: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

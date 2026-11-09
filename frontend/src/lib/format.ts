@@ -26,18 +26,30 @@ export const CRITICALITY_LABEL: Record<Criticality, string> = {
   LOW: 'Basse',
 };
 
-/** Moment des exécutions automatiques, selon la fréquence (calendrier des traitements de l'équipe data). */
-export const SCHEDULE_WHEN: Record<Schedule, string> = {
-  DAILY: 'chaque nuit à 3 h',
-  HOURLY: 'toutes les heures, à h+5',
-  WEEKLY: 'chaque lundi à 4 h',
+/** Unité de la fréquence, au singulier et au pluriel (sélecteur de l'éditeur). */
+export const SCHEDULE_UNIT: Record<Schedule, [string, string]> = {
+  HOURLY: ['heure', 'heures'],
+  DAILY: ['jour', 'jours'],
+  WEEKLY: ['semaine', 'semaines'],
 };
 
-export const SCHEDULE_LABEL: Record<Schedule, string> = {
-  DAILY: 'Quotidienne',
-  HOURLY: 'Horaire',
-  WEEKLY: 'Hebdomadaire',
-};
+/** « Quotidienne », « Toutes les 2 h », « Tous les 3 jours », « Toutes les 2 semaines ». */
+export function scheduleLabel(schedule: Schedule, every = 1): string {
+  if (every <= 1) return { DAILY: 'Quotidienne', HOURLY: 'Horaire', WEEKLY: 'Hebdomadaire' }[schedule];
+  if (schedule === 'HOURLY') return `Toutes les ${every} h`;
+  return schedule === 'DAILY' ? `Tous les ${every} jours` : `Toutes les ${every} semaines`;
+}
+
+/** Moment des exécutions automatiques (calendrier des DAG de l'équipe data, voir lib/period.ts). */
+export function scheduleWhen(schedule: Schedule, every = 1): string {
+  if (schedule === 'HOURLY') {
+    if (every <= 1) return 'toutes les heures, à h+5';
+    const hours = Array.from({ length: 24 / every }, (_, i) => `${i * every} h 05`);
+    return hours.length <= 4 ? `à ${hours.slice(0, -1).join(', ')} et ${hours.at(-1)}` : `à ${hours.slice(0, 3).join(', ')}…`;
+  }
+  if (schedule === 'WEEKLY') return every <= 1 ? 'chaque lundi à 4 h' : 'le lundi à 4 h';
+  return every <= 1 ? 'chaque nuit à 3 h' : 'à 3 h';
+}
 
 /**
  * Typologies de fraude — liste PROVISOIRE, à remplacer par la liste fermée

@@ -37,7 +37,7 @@ export interface MockDb {
   audit: AuditEvent[];
 }
 
-export const SCHEMA_VERSION = 16;
+export const SCHEMA_VERSION = 17;
 
 /** Marqueur : la version a tourné ; v() le remplace par le DAG de sa fréquence. */
 const dag = 'dag';
@@ -67,6 +67,8 @@ interface Def {
   fraudTypology: string;
   criticality: RuleVersion['criticality'];
   schedule: RuleVersion['schedule'];
+  /** Pas de la fréquence (1 par défaut). */
+  every?: number;
   sql: string;
 }
 
@@ -77,6 +79,7 @@ function content(def: Def): RuleInput {
     fraudTypology: def.fraudTypology,
     criticality: def.criticality,
     schedule: def.schedule,
+    scheduleEvery: def.every ?? 1,
     sqlQuery: def.sql,
   };
 }
@@ -91,6 +94,7 @@ function v(def: Def, version: number, created: number, extra: Partial<RuleVersio
     fraudTypology: def.fraudTypology,
     criticality: def.criticality,
     schedule: def.schedule,
+    scheduleEvery: def.every ?? 1,
     sqlQuery: def.sql,
     status: 'SUBMITTED',
     ownerMatricule: def.owner,
@@ -253,6 +257,7 @@ const R7: Def = {
   fraudTypology: 'Triangulation / revente',
   criticality: 'MEDIUM',
   schedule: 'DAILY',
+  every: 2,
   sql: `SELECT
   o.order_id,
   COUNT(DISTINCT o.customer_id) OVER (PARTITION BY o.shipping_address_id) AS nb_comptes

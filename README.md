@@ -271,7 +271,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     le run suivant le DAG marque ses commandes à transmettre (`to_send`) pour le script d'envoi. « Suspendre l'envoi » la ramène en observation ;
   - *Écartée* : l'analyste a décidé de ne pas l'envoyer ; elle sort de `rules_registry` et la version
     précédente reprend sa place (avec son envoi, si elle était envoyée) ;
-  - *Inactive depuis X* : plus de run réussi depuis 3 périodes (3 h, 3 jours ou 3 semaines selon la fréquence) ;
+  - *Inactive depuis X* : plus de run réussi depuis 3 périodes (3 h, 3 jours ou 3 semaines pour une règle à chaque unité ;
+    6 jours pour une règle tous les 2 jours) ;
   - *Remplacée* : une version plus récente a été publiée ou tourne à sa place.
 
   **Version candidate** : une nouvelle version d'une règle **en production ne la remplace pas**. Elle tourne
@@ -375,10 +376,21 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   d'explication l'indique sous le tableau. Les deux vues sont créées par `apply.sh` / `apply.ps1`
   (`04_v_rule_performance.sql`, `05_v_rule_orders.sql`, qui supprime l'ancienne `v_rule_orders_daily`).
 
-  **Période du run (`@period_start` / `@period_end`)** : Airflow passe à la requête les bornes `[début, fin[`
-  de l'intervalle du run (`data_interval_start` / `data_interval_end`, TIMESTAMP), calées sur le cron du DAG en
-  heure de Paris : 1 h pour le DAG horaire (de h+5 à h+5), **de 3 h à 3 h** pour le quotidien, du lundi 4 h au
-  lundi 4 h pour l'hebdomadaire. Exemples :
+  **Fréquence : une unité et un pas.** L'analyste choisit « toutes les heures », « toutes les 2 heures », « tous
+  les 3 jours », « toutes les 2 semaines »… : une unité (`rules_registry.schedule`, le DAG qui l'exécute) et un
+  pas (`schedule_every`). Pas autorisés : 1, 2, 3, 4, 6, 8 ou 12 heures (diviseurs de 24, pour des heures
+  d'exécution identiques chaque jour), 1 à 30 jours, 1 à 12 semaines. Chaque DAG se déclenche à chaque unité
+  et n'exécute une règle que lorsqu'elle est due, avec un calage fixe : les heures sont comptées depuis minuit
+  (toutes les 6 h = 0 h 05, 6 h 05, 12 h 05, 18 h 05), les jours et les semaines depuis le lundi 5 janvier 2026
+  (tous les 2 jours = un jour sur deux à 3 h). L'éditeur affiche les heures d'exécution et la prochaine ; la
+  fiche d'une règle publiée qui n'a pas encore tourné aussi. Des tables existantes reçoivent la colonne par
+  `infra/bigquery/08_rules_registry_every.sql` (pas de 1 pour les règles existantes).
+
+  **Période du run (`@period_start` / `@period_end`)** : le DAG passe à la requête les bornes `[début, fin[`
+  (TIMESTAMP) qui vont du déclenchement dû précédent de la règle à celui-ci, en heure de Paris : 1 h pour une
+  règle horaire (de h+5 à h+5), **de 3 h à 3 h** pour une quotidienne, du lundi 4 h au lundi 4 h pour une
+  hebdomadaire, 6 h pour une règle toutes les 6 h, 2 jours pour une règle tous les 2 jours. Aux changements
+  d'heure, la période suit les déclenchements réels : ni trou ni chevauchement. Exemples :
   - période exacte : `created_at >= @period_start AND created_at < @period_end` ;
   - la veille, jour calendaire : `DATE(created_at, 'Europe/Paris') = DATE_SUB(DATE(@period_end, 'Europe/Paris'), INTERVAL 1 DAY)` ;
   - fenêtre glissante de 7 jours : `created_at >= TIMESTAMP_SUB(@period_end, INTERVAL 7 DAY) AND created_at < @period_end`.
@@ -455,8 +467,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   Le recoupement relit le résultat du test (table temporaire du job BigQuery) : la requête n'est pas rejouée.
   Les versions de la même règle ne sont pas comptées. Si `rule_alerts` est illisible, seul le total s'affiche.
 - **Période d'un test** : `@period_start` / `@period_end` prennent la **dernière période complète** du DAG de
-  la fréquence choisie dans l'éditeur (quotidienne testée un mercredi à 10 h : du mardi 3 h au mercredi 3 h ;
-  horaire à 14 h 02 : de 12 h 05 à 13 h 05). La requête testée voit donc ce qu'a vu le dernier run. La
+  la fréquence choisie dans l'éditeur, pas compris (quotidienne testée un mercredi à 10 h : du mardi 3 h au
+  mercredi 3 h ; horaire à 14 h 02 : de 12 h 05 à 13 h 05 ; toutes les 2 h à 14 h 02 : de 10 h 05 à 12 h 05). La requête testée voit donc ce qu'a vu le dernier run. La
   période est affichée sous l'éditeur et dans le résultat du test. `CURRENT_DATE()` donne, au test comme en
   production, la date réelle d'exécution. Le modèle de départ vise la veille :
   `order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`.

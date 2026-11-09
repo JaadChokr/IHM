@@ -379,6 +379,7 @@ class RealBigQueryGateway:
                 P("fraud_typology", "STRING", v.fraud_typology),
                 P("criticality", "STRING", v.criticality),
                 P("schedule", "STRING", v.schedule),
+                P("schedule_every", "INT64", v.schedule_every or 1),
                 P("sql_query", "STRING", v.sql_query),
                 P("status", "STRING", status),
                 P("send_to_provider", "BOOL", send),
@@ -394,13 +395,15 @@ class RealBigQueryGateway:
             ON t.rule_id = s.rule_id AND t.version = s.version
             WHEN MATCHED THEN UPDATE SET
               name = @name, description = @description, fraud_typology = @fraud_typology,
-              criticality = @criticality, schedule = @schedule, sql_query = @sql_query, status = @status,
+              criticality = @criticality, schedule = @schedule, schedule_every = @schedule_every,
+              sql_query = @sql_query, status = @status,
               send_to_provider = @send_to_provider, updated_at = @updated_at
             WHEN NOT MATCHED THEN INSERT
-              (rule_id, version, name, description, fraud_typology, criticality, schedule, sql_query,
-               status, send_to_provider, owner_matricule, created_at, updated_at)
+              (rule_id, version, name, description, fraud_typology, criticality, schedule, schedule_every,
+               sql_query, status, send_to_provider, owner_matricule, created_at, updated_at)
             VALUES (@rule_id, @version, @name, @description, @fraud_typology, @criticality, @schedule,
-                    @sql_query, @status, @send_to_provider, @owner_matricule, @created_at, @updated_at)
+                    @schedule_every, @sql_query, @status, @send_to_provider, @owner_matricule, @created_at,
+                    @updated_at)
             """
             self.client.query(sql, job_config=self._bq.QueryJobConfig(query_parameters=params)).result()
 

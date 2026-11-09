@@ -5,6 +5,7 @@
 import type { Api } from '../client';
 import {
   ApiError,
+  EVERY,
   type AuditEvent,
   type DailyPerformance,
   type Draft,
@@ -156,7 +157,7 @@ export function createMockApi(): Api {
     const run = withRuns(r, v);
     if (!run.lastRunAt) return undefined;
     const idleDays = (Date.now() - new Date(run.lastRunAt).getTime()) / 86400000;
-    if (idleDays > PERIOD_DAYS[v.schedule] * INACTIVE_AFTER_PERIODS) return 'INACTIVE';
+    if (idleDays > PERIOD_DAYS[v.schedule] * (v.scheduleEvery ?? 1) * INACTIVE_AFTER_PERIODS) return 'INACTIVE';
     return v.decision === 'SENT' ? 'IN_PRODUCTION' : 'OBSERVATION';
   }
 
@@ -223,16 +224,15 @@ export function createMockApi(): Api {
 
   /** Période testée : fréquence saisie, sinon celle du brouillon ou de la règle, sinon quotidienne. */
   function testPeriod(target: TestTarget | undefined, u: User) {
-    const schedule =
-      target?.schedule ??
-      (target?.draftId ? findDraft(target.draftId, u).schedule : db.rules.find((r) => r.ruleId === target?.ruleId)?.versions.at(-1)?.schedule) ??
-      'DAILY';
-    return lastPeriod(schedule);
+    if (target?.schedule) return lastPeriod(target.schedule, undefined, target.scheduleEvery ?? 1);
+    const src = target?.draftId ? findDraft(target.draftId, u) : db.rules.find((r) => r.ruleId === target?.ruleId)?.versions.at(-1);
+    return src ? lastPeriod(src.schedule, undefined, src.scheduleEvery ?? 1) : lastPeriod('DAILY');
   }
 
-  const CONTENT = ['name', 'description', 'fraudTypology', 'criticality', 'schedule', 'sqlQuery'] as const;
+  const CONTENT = ['name', 'description', 'fraudTypology', 'criticality', 'schedule', 'scheduleEvery', 'sqlQuery'] as const;
   function applyContent(target: RuleInput, input: RuleInput) {
-    for (const k of CONTENT) (target as unknown as Record<string, string>)[k] = input[k];
+    for (const k of CONTENT) (target as unknown as Record<string, unknown>)[k] = input[k];
+    target.scheduleEvery ??= 1;
     target.name = target.name.trim();
   }
 
@@ -248,6 +248,9 @@ export function createMockApi(): Api {
       ] as const
     ).filter(([k]) => !String(input[k] ?? '').trim());
     if (missing.length) throw new ApiError(422, `Champs obligatoires manquants : ${missing.map((m) => m[1]).join(', ')}.`);
+    if (!EVERY[input.schedule]?.includes(input.scheduleEvery ?? 1)) {
+      throw new ApiError(422, `Fréquence invalide. Valeurs possibles : ${EVERY[input.schedule].join(', ')}.`);
+    }
     if (!nameAvailable(input.name, excludeRuleId)) throw new ApiError(409, `Une règle nommée « ${input.name.trim()} » existe déjà.`, 'NAME_TAKEN');
     // DML/DDL rejetés dès l'enregistrement ; les autres contraintes bloquent la soumission.
     const dry = simulateDryRun(input.sqlQuery, GUARDRAILS, 'check');
@@ -690,7 +693,7 @@ export function createMockApi(): Api {
       const owner = r.versions[0] ?? { ownerMatricule: u.matricule, ownerName: fullName(u) };
       const t = now();
       const v: RuleVersion = {
-        ...clone({ name: d.name, description: d.description, fraudTypology: d.fraudTypology, criticality: d.criticality, schedule: d.schedule, sqlQuery: d.sqlQuery }),
+        ...clone({ name: d.name, description: d.description, fraudTypology: d.fraudTypology, criticality: d.criticality, schedule: d.schedule, scheduleEvery: d.scheduleEvery ?? 1, sqlQuery: d.sqlQuery }),
         ruleId: d.ruleId,
         version: r.versions.length ? current(r).version + 1 : 1,
         status: 'SUBMITTED',
@@ -803,7 +806,7 @@ export function createMockApi(): Api {
         const run = running(r);
         if (!run) throw new ApiError(409, "Aucune version n'est exécutée par Airflow.");
         // Dernier run juste au-delà du seuil d'inactivité (3 périodes selon la fréquence de la règle).
-        const until = addDays(isoDate(new Date()), -(Math.ceil(PERIOD_DAYS[run.schedule] * INACTIVE_AFTER_PERIODS) + 1));
+        const until = addDays(isoDate(new Date()), -(Math.ceil(PERIOD_DAYS[run.schedule] * (run.scheduleEvery ?? 1) * INACTIVE_AFTER_PERIODS) + 1));
         r.productionUntil[run.version] = until;
         // Le premier run doit précéder le dernier.
         if (r.productionSince[run.version] > until) r.productionSince[run.version] = addDays(until, -7);

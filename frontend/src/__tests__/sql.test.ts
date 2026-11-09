@@ -107,4 +107,20 @@ describe('période testée (@period_start / @period_end)', () => {
     const p = lastPeriod('DAILY', at('2026-10-25T11:00:00Z'));
     expect(p).toEqual({ start: '2026-10-24T01:00:00.000Z', end: '2026-10-25T02:00:00.000Z' });
   });
+  // Mêmes cas que backend/tests/test_sql_checks.py (test_periode_avec_un_pas).
+  it('toutes les 2 h : calées sur minuit', () => {
+    expect(lastPeriod('HOURLY', at('2026-11-04T13:02:00Z'), 2)).toEqual({ start: '2026-11-04T09:05:00.000Z', end: '2026-11-04T11:05:00.000Z' });
+  });
+  it('tous les 3 jours : calés sur le 5 janvier 2026', () => {
+    const p = { start: '2026-11-01T02:00:00.000Z', end: '2026-11-04T02:00:00.000Z' };
+    expect(lastPeriod('DAILY', at('2026-11-04T11:00:00Z'), 3)).toEqual(p);
+    expect(lastPeriod('DAILY', at('2026-11-06T11:00:00Z'), 3)).toEqual(p);
+  });
+  it('toutes les 2 semaines', () => {
+    expect(lastPeriod('WEEKLY', at('2026-11-04T08:00:00Z'), 2)).toEqual({ start: '2026-10-12T02:00:00.000Z', end: '2026-10-26T03:00:00.000Z' });
+  });
+  it("toutes les 2 h au passage à l'heure d'été : pas de trou", () => {
+    // 29 mars 2026, run de 4 h 05 (UTC+2) : la période repart du run de 0 h 05 (UTC+1).
+    expect(lastPeriod('HOURLY', at('2026-03-29T02:10:00Z'), 2)).toEqual({ start: '2026-03-28T23:05:00.000Z', end: '2026-03-29T02:05:00.000Z' });
+  });
 });
