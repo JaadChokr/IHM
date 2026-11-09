@@ -187,9 +187,16 @@ pre {
 /* ---------- Layout : voir « Barre latérale » en fin de fichier ---------- */
 main {
   width: 100%;
-  max-width: 1320px;
+  /* Occupe la largeur disponible ; plafond seulement sur les très grands écrans, pour garder des lignes
+     de tableau lisibles. */
+  max-width: 1880px;
   margin: 0 auto;
   padding: 28px 32px;
+}
+@media (min-width: 1600px) {
+  main {
+    padding: 32px 48px;
+  }
 }
 .page-head {
   display: flex;
