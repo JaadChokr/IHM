@@ -284,9 +284,11 @@ export function createMockApi(): Api {
     // En observation, rien n'est envoyé au prestataire : seules les commandes aussi remontées par une
     // règle envoyée sont traitées (environ un tiers).
     const sent = sentVersion(r, version);
-    const rate = p.processingRate * (sent ? 1 : 0.3);
-    // Le prestataire traite les commandes sans délai : les jours récents sont complets.
-    const processed = Math.min(flagged, Math.round(flagged * rate * (0.85 + rnd(s + 'p') * 0.3)));
+    // Le prestataire traite toutes les commandes qu'il reçoit ; certaines n'apparaissent dans sa table de
+    // retour qu'un peu plus tard (jours les plus récents). En observation, seules y figurent les commandes
+    // aussi remontées par une règle envoyée (environ un tiers).
+    const arrived = age >= 2 ? 1 : age === 1 ? 0.85 : 0.5;
+    const processed = Math.round(flagged * (sent ? arrived : 0.3 * (0.85 + rnd(s + 'p') * 0.3)));
     const confirmed = Math.min(processed, Math.round(processed * p.precision * (0.6 + rnd(s + 'c') * 0.8)));
     return { date: d, ruleVersion: version, ordersFlagged: flagged, ordersToSend: sent ? flagged : 0, ordersProcessed: processed, ordersConfirmedFraud: confirmed };
   }

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { DailyPerformance, PeriodTotals, VersionDaily, VersionPerformance } from '../api/types';
 import { addDays, daysBetween, fmtDate, fmtDateTime, fmtInt, fmtPct, isoDate } from '../lib/format';
-import { delta, MIN_PROCESSED_ORDERS, MIN_PROCESSING_RATE, totals } from '../lib/metrics';
+import { delta, MIN_PROCESSED_ORDERS, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
 import { LineChart, versionColor, type Series } from './LineChart';
@@ -47,7 +47,7 @@ function byVersion(dates: string[], rows: VersionDaily[]) {
       vol.observed[i] = !sent[i];
       if (processed[i] > 0) {
         pre.values[i] = confirmed[i] / processed[i];
-        pre.details![i] = `${fmtInt(confirmed[i])} confirmées / ${fmtInt(processed[i])} traitées`;
+        pre.details![i] = `${fmtInt(confirmed[i])} confirmées / ${fmtInt(processed[i])} avec retour`;
       }
     });
     volume.push(vol);
@@ -130,8 +130,8 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
     <div className="stack">
       {observing && (
         <Alert kind="info" title="En observation : ses commandes ne sont pas envoyées au prestataire.">
-          Le volume remonté est réel. Le taux de traitement et la précision ne portent que sur les commandes aussi remontées par une
-          règle envoyée au prestataire : ils ne sont pas représentatifs tant que la règle n'est pas envoyée.
+          Le volume remonté est réel. La précision ne porte que sur les commandes aussi remontées par une règle envoyée au prestataire,
+          les seules présentes dans sa table de retour : elle n'est pas représentative tant que la règle n'est pas envoyée.
         </Alert>
       )}
       <div className="row">
@@ -182,29 +182,24 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               sub={`${fmtInt(view.toSend)} envoyées au prestataire · ${fmtInt(view.observed)} remontées en observation`}
             />
             <KpiTile
-              label="Taux de traitement"
-              value={fmtPct(view.cur.processingRate)}
-              delta={fmtDelta(delta(view.cur.processingRate, view.prev.processingRate, 'points'), 'points')}
-              sub={`${fmtInt(view.cur.processed)} traitées par le prestataire / ${fmtInt(view.cur.flagged)} remontées`}
+              label="En attente de retour"
+              value={fmtInt(view.cur.pending)}
+              sub={`Remontées pas encore présentes dans la table du prestataire (${fmtInt(view.cur.processed)} y figurent)`}
             />
             <KpiTile
               label="Taux de précision"
               value={fmtPct(view.cur.precision)}
               delta={fmtDelta(delta(view.cur.precision, view.prev.precision, 'points'), 'points')}
-              sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} traitées`}
-              flag={
-                view.cur.lowSample
-                  ? `Échantillon trop faible (seuil : ${fmtPct(MIN_PROCESSING_RATE)} traitées et ${MIN_PROCESSED_ORDERS} commandes)`
-                  : undefined
-              }
+              sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} avec retour du prestataire`}
+              flag={view.cur.lowSample ? `Échantillon trop faible (moins de ${MIN_PROCESSED_ORDERS} commandes avec retour)` : undefined}
             />
           </div>
 
           <Alert kind="info" title="Comment lire ces indicateurs">
             <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
               <li>
-                Le <strong>taux de précision</strong> est calculé sur les commandes <strong>traitées</strong>, pas sur les commandes remontées :
-                lisez-le toujours à côté du taux de traitement.
+                Le prestataire traite toutes les commandes qu'il reçoit. Le <strong>taux de précision</strong> est calculé sur celles déjà
+                présentes dans sa <strong>table de retour</strong> ; les autres sont comptées <strong>en attente de retour</strong>.
               </li>
               <li>
                 Le <strong>rappel</strong> (fraudes que la règle n'a pas détectées) n'est pas mesurable dans ce dispositif.
@@ -238,7 +233,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             <div className="card-head">
               <div>
                 <h3>Taux de précision par jour</h3>
-                <p>Confirmées frauduleuses ÷ traitées, versions en production uniquement — pas de point les jours sans commande traitée</p>
+                <p>Confirmées frauduleuses ÷ commandes avec retour du prestataire, versions en production uniquement — pas de point les jours sans retour</p>
               </div>
             </div>
             <div className="card-pad">
@@ -358,7 +353,7 @@ function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
               <th>Version</th>
               <th>Période d'exécution</th>
               <th className="num">Remontées / jour</th>
-              <th className="num">Taux de traitement</th>
+              <th className="num">En attente de retour</th>
               <th className="num">Taux de précision</th>
             </tr>
           </thead>
@@ -378,7 +373,7 @@ function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
                     {fmtDate(r.firstDate)} → {fmtDate(r.lastDate)} <span className="muted">· {fmtInt(r.days)} j</span>
                   </td>
                   <td className="num">{fmtInt(Math.round(r.perDay))}</td>
-                  <td className="num">{fmtPct(r.processingRate)}</td>
+                  <td className="num">{fmtInt(r.pending)}</td>
                   <td className="num">
                     <strong>{fmtPct(r.precision)}</strong>
                     {d !== null && (

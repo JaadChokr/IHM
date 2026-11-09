@@ -232,7 +232,7 @@ class RealBigQueryGateway:
         rows = self._rows(
             f"""SELECT run_date, MAX(rule_version) AS rule_version,
                        COUNT(DISTINCT order_id) AS orders_flagged,
-                       COUNT(DISTINCT IF(is_processed, order_id, NULL)) AS orders_processed,
+                       COUNT(DISTINCT IF(has_feedback, order_id, NULL)) AS orders_processed,
                        COUNT(DISTINCT IF(is_fraud, order_id, NULL)) AS orders_confirmed_fraud
                 FROM {self.ds}.v_rule_orders
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end AND to_send = @sent
@@ -262,7 +262,7 @@ class RealBigQueryGateway:
         rows = self._rows(
             f"""SELECT run_date, rule_version, to_send,
                        COUNT(DISTINCT order_id) AS orders_flagged,
-                       COUNT(DISTINCT IF(is_processed, order_id, NULL)) AS orders_processed,
+                       COUNT(DISTINCT IF(has_feedback, order_id, NULL)) AS orders_processed,
                        COUNT(DISTINCT IF(is_fraud, order_id, NULL)) AS orders_confirmed_fraud
                 FROM {self.ds}.v_rule_orders
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end
@@ -312,7 +312,7 @@ class RealBigQueryGateway:
             # Les commandes envoyées et celles observées sont aussi comptées à part, quel que soit l'état.
             f"""SELECT rule_id,
                        COUNT(DISTINCT IF(kept, order_id, NULL)) AS flagged,
-                       COUNT(DISTINCT IF(kept AND is_processed, order_id, NULL)) AS processed,
+                       COUNT(DISTINCT IF(kept AND has_feedback, order_id, NULL)) AS processed,
                        COUNT(DISTINCT IF(kept AND is_fraud, order_id, NULL)) AS confirmed,
                        COUNT(DISTINCT IF(to_send, order_id, NULL)) AS to_send,
                        COUNT(DISTINCT IF(NOT to_send, order_id, NULL)) AS observed

@@ -262,7 +262,7 @@ function PrecisionBars({ rows, threshold }: { rows: ProductionHealth[]; threshol
                 <>
                   <strong>{fmtPct(r.precision)}</strong>
                   {r.lowSample && (
-                    <span className="small" style={{ color: 'var(--warn)' }} title="Taux de traitement < 50 % ou moins de 20 commandes traitées">
+                    <span className="small" style={{ color: 'var(--warn)' }} title="Moins de 20 commandes avec retour du prestataire">
                       {' '}
                       ⚠ échantillon faible
                     </span>

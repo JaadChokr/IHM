@@ -8,7 +8,7 @@ import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
 import { usePageTitle } from '../nav/history';
 
-type SortKey = 'precision' | 'volume' | 'processing' | 'name';
+type SortKey = 'precision' | 'volume' | 'pending' | 'name';
 
 type Row = ProductionHealth;
 
@@ -23,7 +23,7 @@ export function ProductionPage() {
 
   const sorted = useMemo(() => {
     const val = (r: Row): number | string =>
-      sort.key === 'name' ? r.name : sort.key === 'volume' ? r.ordersFlagged30d : sort.key === 'processing' ? r.processingRate ?? -1 : r.precision ?? -1;
+      sort.key === 'name' ? r.name : sort.key === 'volume' ? r.ordersFlagged30d : sort.key === 'pending' ? r.pending : r.precision ?? -1;
     return rows
       .filter((r) => !onlyWatch || r.reasons.length)
       .sort((a, b) => {
@@ -92,7 +92,7 @@ export function ProductionPage() {
                     {th('name', 'Règle', false)}
                     <th className="col-crit">Criticité</th>
                     {th('volume', 'Volume remonté')}
-                    {th('processing', 'Taux de traitement')}
+                    {th('pending', 'En attente de retour')}
                     {th('precision', 'Taux de précision')}
                     <th>À surveiller</th>
                   </tr>
@@ -115,11 +115,11 @@ export function ProductionPage() {
                         <CriticalityBadge value={r.criticality} />
                       </td>
                       <td className="num">{fmtInt(r.ordersFlagged30d)}</td>
-                      <td className="num">{fmtPct(r.processingRate)}</td>
+                      <td className="num">{fmtInt(r.pending)}</td>
                       <td className="num">
                         <strong>{fmtPct(r.precision)}</strong>
                         {r.lowSample && r.precision !== null && (
-                          <div className="small" style={{ color: 'var(--warn)' }} title="Taux de traitement < 50 % ou moins de 20 commandes traitées">
+                          <div className="small" style={{ color: 'var(--warn)' }} title="Moins de 20 commandes avec retour du prestataire">
                             ⚠ échantillon faible
                           </div>
                         )}

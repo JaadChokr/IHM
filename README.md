@@ -453,9 +453,12 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   période est affichée sous l'éditeur et dans le résultat du test. `CURRENT_DATE()` donne, au test comme en
   production, la date réelle d'exécution. Le modèle de départ vise la veille :
   `order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`.
-- **Retour du prestataire** : on considère que le prestataire traite les commandes **sans délai**. Les
-  indicateurs (taux de traitement, précision) sont donc complets jusqu'au jour même : pas de période
-  « incomplète » sur les courbes.
+- **Retour du prestataire** : on considère que le prestataire **traite toutes les commandes** qu'il reçoit ; il
+  n'y a donc plus de taux de traitement. Une commande peut toutefois n'apparaître dans sa table de retour qu'un
+  peu plus tard : la **précision** porte sur les commandes déjà présentes dans cette table (confirmées ÷ avec
+  retour), et les autres sont affichées **en attente de retour** (page règle, comparatif des versions, page
+  Production). Dans les vues, une commande est traitée dès qu'elle figure dans la table de retour
+  (`f.order_id IS NOT NULL`) : seules les colonnes `order_id` et `is_fraud` de cette table sont utilisées.
 - **Déploiement** : API en ingress interne sans IAM entre front et API (le contrôle d'accès est réseau, PRD F8).
   La topologie exacte (load balancer interne, routage `/api`) reste à arbitrer.
 - **Valeurs provisoires** : typologies de fraude (Q4, `frontend/src/lib/format.ts`),
