@@ -73,8 +73,9 @@ export function findParams(sql: string): ParamOccurrence[] {
 const ALLOWED: readonly string[] = PERIOD_PARAMS;
 
 /**
- * Paramètres de la requête : seuls @period_start / @period_end, bornes de la période du run (fournies
- * par Airflow, et par la plateforme au test). Les seuils s'écrivent directement dans le SQL.
+ * Paramètres de la requête : seuls @period_start / @period_end, facultatifs, bornes de la période du run
+ * (fournies par Airflow, et par la plateforme au test). Les seuils s'écrivent directement dans le SQL ;
+ * CURRENT_DATE() est libre.
  * Contrôle d'ergonomie côté front ; le back refait la vérification.
  */
 export function checkParams(sql: string): SqlIssue[] {
@@ -97,43 +98,24 @@ export function checkParams(sql: string): SqlIssue[] {
   return issues;
 }
 
-const CLOCK_REPLACEMENT: Record<string, string> = {
-  CURRENT_DATE: "DATE(@period_end, 'Europe/Paris')",
-  CURRENT_DATETIME: "DATETIME(@period_end, 'Europe/Paris')",
-  CURRENT_TIMESTAMP: '@period_end',
-};
-
 /**
- * Contrôles de la fenêtre de dates (miroir de check_date_window côté back) :
- * - CURRENT_DATE() et consorts sont refusés (erreur) : ils donnent la date réelle d'exécution, fausse en
- *   rattrapage ou en relance ; tout ce qu'ils expriment s'écrit avec @period_end ;
- * - sans plage de dates, chaque run relit toute la table et le premier remonte tout l'historique : alerte.
+ * Alerte si la requête n'a aucune fenêtre de dates (ni CURRENT_DATE() et consorts, ni @period_start /
+ * @period_end) : chaque run relit toute la table et le premier run remonte tout l'historique. Miroir de
+ * check_date_window côté back. CURRENT_DATE() est libre.
  */
 export function checkDateWindow(sql: string): SqlIssue[] {
+  if (!sql.trim()) return [];
   // Hors chaînes et commentaires, et hors identifiants entre backticks (une colonne `current_date`).
   const masked = maskSql(sql).replace(/`[^`\n]*`/g, (s) => ' '.repeat(s.length));
-  const issues: SqlIssue[] = [];
-  for (const m of masked.matchAll(/\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b(?:\s*\(\s*\))?/gi)) {
-    const { line, column } = offsetToLineCol(sql, m.index ?? 0);
-    const name = m[0].split('(')[0].trim().toUpperCase();
-    issues.push({
-      severity: 'error',
-      code: 'CURRENT_DATE_NOT_ALLOWED',
-      message: `${name} donne la date réelle d'exécution, fausse en rattrapage ou en relance d'un run passé. Utilisez ${CLOCK_REPLACEMENT[name]} : même résultat au run normal, bonne période sinon (bornes de la période du run : @period_start, @period_end).`,
-      line,
-      column,
-      length: m[0].length,
-    });
-  }
-  if (sql.trim() && issues.length === 0 && !findParams(sql).some((p) => ALLOWED.includes(p.name))) {
-    issues.push({
+  if (/\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b/i.test(masked) || findParams(sql).some((p) => ALLOWED.includes(p.name))) return [];
+  return [
+    {
       severity: 'warning',
       code: 'NO_DATE_WINDOW',
       message:
-        "Pas de plage de dates : chaque run relira toute la table, un volume inutilement grand, et le premier run remontera tout l'historique (pic dans le comparatif des versions). Bornez la lecture à la période du run : created_at >= @period_start AND created_at < @period_end.",
-    });
-  }
-  return issues;
+        "Pas de fenêtre de dates : chaque run relira toute la table, un volume inutilement grand, et le premier run remontera tout l'historique (pic dans le comparatif des versions). Bornez la lecture, par exemple order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) pour la veille.",
+    },
+  ];
 }
 
 /** Empreinte stable de la requête, pour lier un test à une version. */

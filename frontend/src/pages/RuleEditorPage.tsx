@@ -20,8 +20,7 @@ const EMPTY: RuleInput = {
   sqlQuery: `SELECT
   o.order_id
 FROM \`sales.orders\` o
--- Période du run, fournie par Airflow (au test : la dernière période complète)
-WHERE o.created_at >= @period_start AND o.created_at < @period_end
+WHERE o.order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)  -- la veille
 `,
 };
 
@@ -415,9 +414,9 @@ export function RuleEditorPage() {
               <h2 id="sec-sql">Requête SQL</h2>
               <p>
                 Une seule instruction <span className="mono">SELECT</span>, exposant <span className="mono">order_id</span>. Les seuils s'écrivent
-                directement dans la requête (ex. <span className="mono">amount_eur &gt;= 500</span>). Les dates se positionnent sur la période du run,{' '}
-                <span className="mono">[@period_start, @period_end[</span>, fournie par Airflow (quotidienne : de 3 h à 3 h ; fenêtre glissante :{' '}
-                <span className="mono">TIMESTAMP_SUB(@period_end, INTERVAL 7 DAY)</span>).
+                directement dans la requête (ex. <span className="mono">amount_eur &gt;= 500</span>) ; pour viser la veille :{' '}
+                <span className="mono">DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)</span>. Facultatif : les bornes de la période du run,{' '}
+                <span className="mono">@period_start</span> / <span className="mono">@period_end</span>, fournies par Airflow.
               </p>
             </div>
           </div>

@@ -245,7 +245,6 @@ class PerformanceResponse(Model):
     previous_totals: PeriodTotals | None = None
     runs: list[RuleRun]
     versions: list[VersionPerformance]
-    latency_days: int
 
 
 class ConsolidatedRow(Model):

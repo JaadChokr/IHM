@@ -7,7 +7,7 @@ from tests.conftest import login
 SQL = """SELECT
   o.order_id
 FROM `sales.orders` o
-WHERE o.created_at >= @period_start AND o.created_at < @period_end
+WHERE o.order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
   AND o.amount_eur > 500"""
 RULE = {
     "name": "Panier élevé",
@@ -159,17 +159,11 @@ def test_dry_run_controles(client, bq):
     def codes(sql: str) -> list[str]:
         return [i["code"] for i in client.post("/query/dry-run", json={"sql": sql}).json()["issues"]]
 
-    # CURRENT_DATE() : juste au run normal, faux en rattrapage → refusé, avec sa position.
-    sql = "SELECT order_id FROM t\nWHERE d >= current_date()"
-    dry = client.post("/query/dry-run", json={"sql": sql}).json()
-    assert dry["ok"] is False
-    issue = dry["issues"][0]
-    assert (issue["code"], issue["severity"], issue["line"]) == ("CURRENT_DATE_NOT_ALLOWED", "error", 2)
-    assert "DATE(@period_end, 'Europe/Paris')" in issue["message"]
-    assert codes("SELECT order_id FROM t WHERE t.`current_date` >= @period_start") == []  # une colonne
+    # CURRENT_DATE() est libre et compte comme une fenêtre de dates, comme @period_start / @period_end.
+    assert codes("SELECT order_id FROM t WHERE d >= current_date() -- x") == []
     assert codes("SELECT order_id FROM t -- CURRENT_DATE()") == ["NO_DATE_WINDOW"]
-    # Les bornes de la période : aucune alerte.
     assert codes("SELECT order_id FROM t WHERE d >= DATE(@period_end, 'Europe/Paris')") == []
+    assert codes("SELECT order_id, `current_date` FROM t") == ["NO_DATE_WINDOW"]  # une colonne
 
 
 def test_periode_testee_selon_la_frequence(client, bq):

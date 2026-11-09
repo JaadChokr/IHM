@@ -39,8 +39,6 @@ class Settings(BaseSettings):
     session_cookie: str = "rm_session"
     cookie_secure: bool = True
 
-    # Indicateurs F6
-    latency_days: int = 7
     # Test : commandes déjà remontées par une autre règle, cherchées dans rule_alerts sur cette période.
     overlap_days: int = 90
 

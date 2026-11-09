@@ -69,7 +69,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
       }
       if (d.ruleVersion !== undefined) prevVersion = d.ruleVersion;
     }
-    return { cur, prev, toSend, volume, precision, markers, incompleteFrom: addDays(today, -(data.latencyDays - 1)) };
+    return { cur, prev, toSend, volume, precision, markers };
   }, [data, today]);
 
   if (!everInProduction) {
@@ -176,9 +176,6 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
                 lisez-le toujours à côté du taux de traitement.
               </li>
               <li>
-                Le prestataire traite les commandes avec un délai : les <strong>{data.latencyDays} derniers jours</strong> sont incomplets (zone grisée).
-              </li>
-              <li>
                 Le <strong>rappel</strong> (fraudes que la règle n'a pas détectées) n'est pas mesurable dans ce dispositif.
               </li>
               <li>
@@ -200,7 +197,6 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
                 label="Volume remonté par jour"
                 points={view.volume}
                 format={(v) => fmtInt(Math.round(v))}
-                incompleteFrom={view.incompleteFrom}
                 markers={view.markers}
               />
             </div>
@@ -219,7 +215,6 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
                 points={view.precision}
                 format={(v) => fmtPct(v)}
                 yMax={1}
-                incompleteFrom={view.incompleteFrom}
                 markers={view.markers}
               />
             </div>

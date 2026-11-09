@@ -54,7 +54,6 @@ export function ProductionPage() {
       <div className="stack">
         <Alert kind="info">
           Une commande remontée par plusieurs règles est comptée pour chacune : les volumes de ce tableau <strong>ne s'additionnent pas</strong>.
-          Les 7 derniers jours sont incomplets (délai de traitement du prestataire).
         </Alert>
         <div className="card prod-card">
           <div className="card-pad row" style={{ borderBottom: '1px solid var(--border)' }}>

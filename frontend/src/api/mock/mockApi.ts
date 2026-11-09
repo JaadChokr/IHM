@@ -29,7 +29,6 @@ import { addDays, isoDate } from '../../lib/format';
 const DB_KEY = 'rm.mock.db';
 const SESSION_KEY = 'rm.mock.session';
 const SESSION_TTL_MS = 8 * 3600 * 1000; // 8 h glissantes (PRD F8)
-const LATENCY_DAYS = 7;
 
 const GUARDRAILS: Guardrails = {
   maxBytesBilled: 50e9,
@@ -281,12 +280,12 @@ export function createMockApi(): Api {
     const dow = new Date(d + 'T00:00:00').getDay();
     const weekly = dow === 0 || dow === 6 ? 1.3 : 1;
     const flagged = broken ? 0 : Math.round(p.dailyVolume * weekly * (0.55 + rnd(s + 'f') * 0.9));
-    const latency = Math.min(1, age / LATENCY_DAYS);
     // En observation, rien n'est envoyé au prestataire : seules les commandes aussi remontées par une
     // règle envoyée sont traitées (environ un tiers).
     const sent = r.versions.find((v) => v.version === version)?.decision === 'SENT' || !!r.wasSent?.includes(version);
     const rate = p.processingRate * (sent ? 1 : 0.3);
-    const processed = Math.min(flagged, Math.round(flagged * rate * latency * (0.85 + rnd(s + 'p') * 0.3)));
+    // Le prestataire traite les commandes sans délai : les jours récents sont complets.
+    const processed = Math.min(flagged, Math.round(flagged * rate * (0.85 + rnd(s + 'p') * 0.3)));
     const confirmed = Math.min(processed, Math.round(processed * p.precision * (0.6 + rnd(s + 'c') * 0.8)));
     return { date: d, ruleVersion: version, ordersFlagged: flagged, ordersToSend: sent ? flagged : 0, ordersProcessed: processed, ordersConfirmedFraud: confirmed };
   }
@@ -685,7 +684,6 @@ export function createMockApi(): Api {
         previousTotals: periodTotals(daily(r, addDays(from, -len), addDays(from, -1))),
         runs: runs(r, from, to),
         versions: versionTotals(r),
-        latencyDays: LATENCY_DAYS,
       };
     },
     async getConsolidated() {

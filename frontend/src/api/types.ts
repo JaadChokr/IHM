@@ -234,8 +234,6 @@ export interface PerformanceResponse {
   runs: RuleRun[];
   /** Indicateurs cumulés de chaque version sur toute sa période d'exécution. */
   versions: VersionPerformance[];
-  /** Fenêtre de latence du prestataire, en jours (PRD §7.4). */
-  latencyDays: number;
 }
 
 export interface ConsolidatedRow {

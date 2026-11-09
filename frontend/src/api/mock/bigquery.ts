@@ -201,12 +201,12 @@ function analyse(sql: string): Analysis {
         m[0].length,
         'warning',
         'HARDCODED_DATE',
-        `Date en dur (${m[0]}) : normal pour un seuil fixe. Si elle désigne la période traitée, la règle relira ce même jour à chaque exécution : préférez created_at >= @period_start AND created_at < @period_end.`,
+        `Date en dur (${m[0]}) : normal pour un seuil fixe. Si elle désigne la période traitée, la règle relira ce même jour à chaque exécution : préférez DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) pour la veille.`,
       ),
     );
   }
 
-  // Fenêtre de dates : CURRENT_DATE() (faux en rattrapage) ou aucune fenêtre (pic au premier run)
+  // Aucune fenêtre de dates : alerte (volume relu à chaque run, pic au premier run)
   issues.push(...checkDateWindow(sql));
 
   // Paramètres : seuls @period_start / @period_end

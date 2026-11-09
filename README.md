@@ -367,13 +367,11 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   - fenêtre glissante de 7 jours : `created_at >= TIMESTAMP_SUB(@period_end, INTERVAL 7 DAY) AND created_at < @period_end`.
 
   Un rattrapage (`catchup=True` : périodes manquées pendant un déploiement ou une panne) ou une relance d'un run
-  passé (Clear dans Airflow) repasse les bornes de la période d'origine : la requête porte sur la bonne
-  période sans être réécrite. `CURRENT_DATE()`, `CURRENT_DATETIME()` et `CURRENT_TIMESTAMP()` sont **refusés**
-  (erreur `CURRENT_DATE_NOT_ALLOWED` : le brouillon s'enregistre, mais ni test ni publication) : ils donnent
-  la date réelle d'exécution, fausse dans ces deux cas, et tout ce qu'ils expriment s'écrit avec `@period_end`
-  (`DATE(@period_end, 'Europe/Paris')`, `TIMESTAMP_SUB(@period_end, INTERVAL 1 HOUR)`…). Le message indique la
-  tournure de remplacement. Une version déjà publiée avec `CURRENT_DATE()` continue de tourner ; seule sa
-  prochaine version devra être corrigée.
+  passé (Clear dans Airflow) repasse les bornes de la période d'origine : une requête qui les utilise porte sur
+  la bonne période sans être réécrite. Ces paramètres sont **facultatifs** : l'analyste peut aussi écrire ses
+  dates avec `CURRENT_DATE()`, `CURRENT_DATETIME()` ou `CURRENT_TIMESTAMP()`, sans contrainte. Ces fonctions
+  donnent la date réelle d'exécution : juste au run normal, mais un rattrapage ou une relance lit alors la
+  période du jour de la relance, pas celle d'origine (sans doublon, grâce au dédoublonnage par version).
 
   **Relance et rattrapage** : la requête est exécutée telle quelle, tables lues au présent. Avec une plage
   `@period_start` / `@period_end`, elle porte sur la période d'origine : résultat exact. Sans plage, elle relit
@@ -394,7 +392,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   plage de dates remonte donc, à son premier run, toutes les commandes qu'elle lit ;
   le comparatif des versions montre un pic ce jour-là. Rien n'est envoyé pour autant : toute version commence
   en observation, et seules les commandes des runs faits après la décision sont marquées à transmettre. L'éditeur
-  l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'utilise ni `@period_start` ni `@period_end`.
+  l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'a aucune fenêtre de dates (ni
+  `CURRENT_DATE()` et consorts, ni `@period_start` / `@period_end`).
 
   Pour chaque commande remontée, le DAG écrit une ligne dans `rule_alerts`. Chaque règle renvoie ses
   propres colonnes ; seule `order_id` est obligatoire (vérifiée à la publication) et sert aux indicateurs.
@@ -427,10 +426,10 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - **Contraintes SQL** : seul le DML/DDL bloque l'enregistrement d'un brouillon. Pour tester, il faut une requête
   valide pour BigQuery exposant `order_id` ; publier exige un test réussi. Les dates en
   dur ne sont qu'une alerte : légitimes comme seuil fixe (`created_at >= '2024-01-01'`), à éviter comme jour
-  traité (`order_date = '2026-10-27'` relirait ce jour à chaque exécution). L'absence de fenêtre de dates est
-  aussi une simple alerte ; `CURRENT_DATE()` et consorts, eux, bloquent le test (voir « Période du run »).
-- **Paramètres (écart au PRD F2)** : seulement `@period_start` et `@period_end`, bornes de la période du run,
-  fournies par Airflow et, au test, par la plateforme ; l'analyste ne les saisit jamais. Les seuils s'écrivent
+  traité (`order_date = '2026-10-27'` relirait ce jour à chaque exécution). L'absence de fenêtre de dates
+  (ni `CURRENT_DATE()` et consorts, ni `@period_start` / `@period_end`) est aussi une simple alerte.
+- **Paramètres (écart au PRD F2)** : seulement `@period_start` et `@period_end`, facultatifs, bornes de la
+  période du run, fournies par Airflow et, au test, par la plateforme ; l'analyste ne les saisit jamais. Les seuils s'écrivent
   en dur dans le SQL (`amount_eur >= 500`) et leur évolution se lit dans le comparatif entre versions ; tout
   autre `@paramètre` est refusé. `rules_registry` n'a donc pas de colonne `parameters`.
 - **Identité** : `owner_matricule` remplace `owner_email` dans `rules_registry`.
@@ -441,8 +440,12 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - **Période d'un test** : `@period_start` / `@period_end` prennent la **dernière période complète** du DAG de
   la fréquence choisie dans l'éditeur (quotidienne testée un mercredi à 10 h : du mardi 3 h au mercredi 3 h ;
   horaire à 14 h 02 : de 12 h 05 à 13 h 05). La requête testée voit donc ce qu'a vu le dernier run. La
-  période est affichée sous l'éditeur et dans le résultat du test. Le modèle de départ filtre
-  `created_at >= @period_start AND created_at < @period_end`.
+  période est affichée sous l'éditeur et dans le résultat du test. `CURRENT_DATE()` donne, au test comme en
+  production, la date réelle d'exécution. Le modèle de départ vise la veille :
+  `order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`.
+- **Retour du prestataire** : on considère que le prestataire traite les commandes **sans délai**. Les
+  indicateurs (taux de traitement, précision) sont donc complets jusqu'au jour même : pas de période
+  « incomplète » sur les courbes.
 - **Déploiement** : API en ingress interne sans IAM entre front et API (le contrôle d'accès est réseau, PRD F8).
   La topologie exacte (load balancer interne, routage `/api`) reste à arbitrer.
 - **Valeurs provisoires** : typologies de fraude (Q4, `frontend/src/lib/format.ts`),
