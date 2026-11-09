@@ -58,7 +58,7 @@ export function ProductionPage() {
         <div className="card prod-card">
           <div className="card-pad row" style={{ borderBottom: '1px solid var(--border)' }}>
             <label htmlFor="thr" className="small">
-              Seuil de précision « à surveiller »
+              Seuil d'alerte de précision
             </label>
             <input
               id="thr"
@@ -74,7 +74,7 @@ export function ProductionPage() {
             <span className="spacer" />
             <label className="row small" style={{ gap: 6 }}>
               <input type="checkbox" checked={onlyWatch} onChange={(e) => setOnlyWatch(e.target.checked)} />
-              Seulement les règles à surveiller ({watchCount})
+              Seulement les règles avec alerte ({watchCount})
             </label>
           </div>
           {data.error && <Alert kind="error" title={data.error.message} />}
@@ -83,7 +83,7 @@ export function ProductionPage() {
               <Spinner />
             </div>
           ) : sorted.length === 0 ? (
-            <div className="empty">{onlyWatch ? 'Aucune règle à surveiller.' : 'Aucune règle en production.'}</div>
+            <div className="empty">{onlyWatch ? 'Aucune règle avec alerte.' : 'Aucune règle en production.'}</div>
           ) : (
             <div className="table-wrap">
               <table className="data">
@@ -94,7 +94,7 @@ export function ProductionPage() {
                     {th('volume', 'Volume remonté')}
                     {th('pending', 'En attente de vérification')}
                     {th('precision', 'Taux de précision')}
-                    <th>À surveiller</th>
+                    <th>Alertes</th>
                   </tr>
                 </thead>
                 <tbody>
