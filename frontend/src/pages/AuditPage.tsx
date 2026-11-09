@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { AuditAction, AuditEvent } from '../api/types';
-import { Alert, Spinner } from '../components/ui';
+import { Alert, InfoTip, Spinner } from '../components/ui';
 import { fmtDateTime } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 import { usePageTitle } from '../nav/history';
@@ -77,14 +77,15 @@ export function AuditPage() {
       <div className="page-head">
         <div>
           <h1>Journal d'audit</h1>
-          <p>Qui a créé, modifié, testé ou publié quoi, et quand. Immuable, conservé 24 mois.</p>
+          <p>
+            Qui a créé, modifié, testé ou publié quoi, et quand. Immuable, conservé 24 mois.
+            <InfoTip>
+              Le journal trace le matricule saisi à la connexion, qui n'est pas vérifié : il sert à reconstituer une chronologie, pas de preuve.
+            </InfoTip>
+          </p>
         </div>
       </div>
       <div className="stack">
-        <Alert kind="info">
-          Journal <strong>déclaratif</strong> : il trace un matricule saisi, pas une identité vérifiée. Utile pour reconstituer une
-          chronologie, il ne constitue pas une preuve opposable.
-        </Alert>
         <div className="card">
           <div className="card-pad row" style={{ borderBottom: '1px solid var(--border)' }}>
             <label htmlFor="au-user" className="small muted">

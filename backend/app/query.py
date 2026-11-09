@@ -48,7 +48,7 @@ def _record(db: Session, user: User, body: QueryIn, target: Target, **fields) ->
         **fields,
     )
     db.add(run)
-    phase = "Exécution échantillonnée" if fields["phase"] == "EXECUTION" else "Dry-run"
+    phase = "Test" if fields["phase"] == "EXECUTION" else "Vérification de la syntaxe"
     outcome = "réussi" if fields["success"] else f"en échec : {fields.get('error') or ''}"
     # Un brouillon est privé : le journal garde le test (volume scanné) sans nommer la règle.
     record_audit(db, user, "RULE_TEST", cur, f"{phase} {outcome}" + (" (brouillon)" if draft else ""))
@@ -152,12 +152,12 @@ def execute(
     period = _period(body, target)
     issues, meta = _analyse(bq, body, period)
     if meta is None or any(i.severity == "error" for i in issues):
-        raise ApiError(422, "Le dry-run doit réussir avant toute exécution.")
+        raise ApiError(422, "Validez d'abord la syntaxe de la requête.")
     if meta.bytes_processed > settings.max_bytes_billed:
         raise ApiError(
             422,
-            f"Exécution refusée : volume estimé {meta.bytes_processed / 1e9:.1f} Go, "
-            f"plafond {settings.max_bytes_billed / 1e9:.0f} Go (maximumBytesBilled).",
+            f"Test refusé : la requête lirait {meta.bytes_processed / 1e9:.1f} Go, au-delà du plafond de "
+            f"{settings.max_bytes_billed / 1e9:.0f} Go. Restreignez la période ou les tables lues.",
             "BYTES_LIMIT",
         )
     try:
@@ -165,7 +165,7 @@ def execute(
         res = bq.execute(body.sql, period, exclude_rule_id=own, overlap_days=settings.overlap_days)
     except BytesLimitExceeded as e:
         _record(db, user, body, target, phase="EXECUTION", success=False, error=str(e))
-        raise ApiError(422, "Exécution interrompue : plafond de volume scanné atteint.", "BYTES_LIMIT") from e
+        raise ApiError(422, "Test interrompu : plafond de volume lu atteint.", "BYTES_LIMIT") from e
     except QueryError as e:
         _record(db, user, body, target, phase="EXECUTION", success=False, error=e.message)
         raise ApiError(422, e.message, "BIGQUERY") from e

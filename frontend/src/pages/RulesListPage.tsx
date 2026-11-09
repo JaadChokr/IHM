@@ -148,7 +148,7 @@ export function RulesListPage() {
                       {!r.lastTest ? (
                         <span className="muted">Jamais testée</span>
                       ) : r.lastTest.success ? (
-                        <span style={{ color: 'var(--good)' }}>✓ {r.lastTest.phase === 'EXECUTION' ? 'Exécution' : 'Dry-run'}</span>
+                        <span style={{ color: 'var(--good)' }}>✓ {r.lastTest.phase === 'EXECUTION' ? 'Testée' : 'Syntaxe'}</span>
                       ) : (
                         <span style={{ color: 'var(--bad)' }}>✕ Échec</span>
                       )}

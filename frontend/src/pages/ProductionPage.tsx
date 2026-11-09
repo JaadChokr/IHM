@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { Alert, CriticalityBadge, Spinner, StatusBadge } from '../components/ui';
+import { Alert, CriticalityBadge, InfoTip, Spinner, StatusBadge } from '../components/ui';
 import { fmtInt, fmtPct } from '../lib/format';
 import { DEFAULT_WATCH_THRESHOLD, productionHealth, type ProductionHealth } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
@@ -48,13 +48,13 @@ export function ProductionPage() {
       <div className="page-head">
         <div>
           <h1>Règles en production</h1>
-          <p>Toutes les règles exécutées par Airflow sur les 30 derniers jours : envoyées au prestataire, en observation ou devenues inactives.</p>
+          <p>
+            Règles exécutées sur les 30 derniers jours : envoyées au prestataire, en observation ou devenues inactives.
+            <InfoTip>Une commande remontée par plusieurs règles compte pour chacune : les volumes de ce tableau ne s'additionnent pas.</InfoTip>
+          </p>
         </div>
       </div>
       <div className="stack">
-        <Alert kind="info">
-          Une commande remontée par plusieurs règles est comptée pour chacune : les volumes de ce tableau <strong>ne s'additionnent pas</strong>.
-        </Alert>
         <div className="card prod-card">
           <div className="card-pad row" style={{ borderBottom: '1px solid var(--border)' }}>
             <label htmlFor="thr" className="small">

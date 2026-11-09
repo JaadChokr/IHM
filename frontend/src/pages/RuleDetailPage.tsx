@@ -8,9 +8,9 @@ import { Breadcrumb } from '../components/Breadcrumb';
 import { usePageTitle } from '../nav/history';
 import { DiffView } from '../components/DiffView';
 import { PerformanceDashboard } from '../components/PerformanceDashboard';
-import { Alert, CriticalityBadge, idleFor, Lifecycle, Spinner, StatusBadge } from '../components/ui';
+import { Alert, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
 import { AuditTable } from './AuditPage';
-import { SCHEDULE_LABEL, fmtBytes, fmtDateTime, fmtDuration, fmtInt } from '../lib/format';
+import { SCHEDULE_LABEL, SCHEDULE_WHEN, fmtBytes, fmtDateTime, fmtDuration, fmtInt } from '../lib/format';
 import { queryHash } from '../lib/sql';
 import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
@@ -94,36 +94,62 @@ export function RuleDetailPage() {
       <div className="stack" style={{ marginBottom: 16 }}>
         {flash === 'draftDeleted' && <Alert kind="success" title="Brouillon supprimé." />}
         {flash === 'submitted' && (
-          <Alert kind="success" title={`v${r.version} publiée.`}>
-            Airflow l'exécutera au prochain run du DAG {{ DAILY: 'quotidien', HOURLY: 'horaire', WEEKLY: 'hebdomadaire' }[r.schedule]}, d'abord en observation :
-            ses commandes ne seront envoyées au prestataire qu'après votre décision.
-            {r.candidate && r.productionVersion && ` La v${r.productionVersion} reste en production pendant ce temps : elle continue de tourner et d'être envoyée.`}{' '}
-            Vous pouvez encore la modifier tant qu'Airflow ne l'a pas exécutée : elle redeviendra alors votre brouillon.
-          </Alert>
+          <Alert
+            kind="success"
+            title={
+              <>
+                v{r.version} publiée : première exécution {SCHEDULE_WHEN[r.schedule]}, en observation.
+                <InfoTip align="start">
+                  Ses commandes ne seront envoyées au prestataire qu'après votre décision.
+                  {r.candidate && r.productionVersion && ` La v${r.productionVersion} reste en production pendant ce temps.`} Tant qu'elle ne
+                  s'est pas exécutée, vous pouvez encore la modifier : elle redeviendra votre brouillon.
+                </InfoTip>
+              </>
+            }
+          />
         )}
         <DecisionPanel r={r} onChange={rule.setData} />
         {r.myDraftId && !flash && (
-          <Alert kind="info" title="Vous préparez une nouvelle version de cette règle.">
-            Votre brouillon n'est visible que de vous.{' '}
-            <Link to={`/drafts/${r.myDraftId}`}>Le reprendre</Link>
-          </Alert>
+          <Alert
+            kind="info"
+            title={
+              <>
+                Vous préparez une nouvelle version de cette règle. <Link to={`/drafts/${r.myDraftId}`}>Reprendre le brouillon</Link>
+                <InfoTip>Votre brouillon n'est visible que de vous.</InfoTip>
+              </>
+            }
+          />
         )}
         {r.status === 'INACTIVE' && r.lastRunAt && (
-          <Alert kind="warn" title={`Plus exécutée par Airflow depuis ${idleFor(r.lastRunAt)}`}>
-            Dernier run le {fmtDateTime(r.lastRunAt)}. Le DAG a été arrêté ou est en panne : vérifiez auprès de l'équipe data. La règle
-            reprendra son statut dès que les runs reprendront.
-          </Alert>
+          <Alert
+            kind="warn"
+            title={
+              <>
+                Ne s'exécute plus depuis {idleFor(r.lastRunAt)} : prévenez l'équipe data.
+                <InfoTip align="start">
+                  Dernière exécution le {fmtDateTime(r.lastRunAt)}. Le traitement automatique est arrêté ou en panne ; la règle reprendra son
+                  statut dès qu'il redémarrera.
+                </InfoTip>
+              </>
+            }
+          />
         )}
         {r.productionVersion && !r.candidate && (
-          <Alert kind="info" title={`La v${r.productionVersion} est encore exécutée par Airflow.`}>
-            La v{r.version}, publiée, la remplacera au prochain run, en observation, jusqu'à votre décision sur la v{r.version}.
-          </Alert>
+          <Alert kind="info" title={`La v${r.version} remplacera la v${r.productionVersion} à sa première exécution, en observation.`} />
         )}
         {r.candidate && r.productionVersion && r.status === 'SUBMITTED' && (
-          <Alert kind="info" title={`La v${r.version} tournera à côté de la v${r.productionVersion}, en production.`}>
-            Dès le prochain run, Airflow exécutera les deux versions : la v{r.productionVersion} continue d'être envoyée au prestataire, la
-            v{r.version} est observée sans envoi. Vous pourrez la mettre en production après son premier run.
-          </Alert>
+          <Alert
+            kind="info"
+            title={
+              <>
+                La v{r.version} s'exécutera à côté de la v{r.productionVersion}, qui reste en production.
+                <InfoTip align="start">
+                  La v{r.productionVersion} continue d'être envoyée au prestataire ; la v{r.version} est observée sans envoi. Vous pourrez la
+                  mettre en production après sa première exécution.
+                </InfoTip>
+              </>
+            }
+          />
         )}
       </div>
 
@@ -172,13 +198,16 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
           <dd>
             {fmtDateTime(r.submittedAt)} par {r.submittedByName}
           </dd>
-          <dt>DAG Airflow</dt>
-          <dd className="mono small">{r.airflowDagId ?? <span className="muted">— pas encore exécutée par Airflow</span>}</dd>
+          <dt>Exécution</dt>
+          <dd>
+            {SCHEDULE_LABEL[r.schedule]}, {SCHEDULE_WHEN[r.schedule]}
+            {r.airflowDagId && <InfoTip>Traitement de l'équipe data : {r.airflowDagId}</InfoTip>}
+          </dd>
           {r.firstRunAt && (
             <>
-              <dt>Premier run</dt>
+              <dt>Première exécution</dt>
               <dd>{fmtDateTime(r.firstRunAt)}</dd>
-              <dt>Dernier run</dt>
+              <dt>Dernière exécution</dt>
               <dd>{r.lastRunAt ? fmtDateTime(r.lastRunAt) : '—'}</dd>
             </>
           )}
@@ -187,8 +216,10 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
       <section className="card" id="rule-test" aria-labelledby="rule-test-title">
         <div className="card-head">
           <div>
-            <h2 id="rule-test-title">Requête SQL</h2>
-            <p>v{r.version} telle que publiée ; le test l'exécute sans rien modifier.</p>
+            <h2 id="rule-test-title">
+              Requête SQL
+              <InfoTip>La v{r.version} telle que publiée. Le test l'exécute sans rien modifier.</InfoTip>
+            </h2>
           </div>
         </div>
         <div className="card-pad stack">
@@ -207,8 +238,10 @@ function TestsTab({ r, hash }: { r: RuleDetail; hash: string }) {
     <div className="card">
       <div className="card-head">
         <div>
-          <h2>Historique des tests</h2>
-          <p>Métadonnées uniquement : les lignes retournées ne sont jamais conservées.</p>
+          <h2>
+            Historique des tests
+            <InfoTip>Seuls le résultat et les volumes sont conservés, jamais les commandes renvoyées.</InfoTip>
+          </h2>
         </div>
       </div>
       <div className="table-wrap">
@@ -219,7 +252,7 @@ function TestsTab({ r, hash }: { r: RuleDetail; hash: string }) {
               <th>Version</th>
               <th>Étape</th>
               <th>Résultat</th>
-              <th className="num">Volume scanné</th>
+              <th className="num">Volume lu</th>
               <th className="num">Lignes</th>
               <th className="num">Durée</th>
               <th>Par</th>
@@ -233,7 +266,7 @@ function TestsTab({ r, hash }: { r: RuleDetail; hash: string }) {
                   v{t.version}
                   {t.version === r.version && t.queryHash !== hash && <span className="small muted"> (requête antérieure)</span>}
                 </td>
-                <td className="small">{t.phase === 'EXECUTION' ? 'Exécution' : 'Dry-run'}</td>
+                <td className="small">{t.phase === 'EXECUTION' ? 'Test' : 'Vérification de la syntaxe'}</td>
                 <td className="small" style={{ maxWidth: 360 }}>
                   {t.success ? <span style={{ color: 'var(--good)' }}>✓ Succès</span> : <span style={{ color: 'var(--bad)' }}>✕ {t.error}</span>}
                 </td>
@@ -298,7 +331,6 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                 <th>Statut</th>
                 <th>Créée le</th>
                 <th>Publiée</th>
-                <th>DAG</th>
                 <th>
                   <span className="sr-only">Actions</span>
                 </th>
@@ -313,14 +345,13 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                   </td>
                   <td>
                     <StatusBadge status={v.status} lastRunAt={v.lastRunAt} />
-                    {v.candidate && <div className="small muted">candidate, en parallèle de la production</div>}
+                    {v.candidate && <div className="small muted">candidate</div>}
                   </td>
                   <td className="small">{fmtDateTime(v.createdAt)}</td>
                   <td className="small">
                     {fmtDateTime(v.submittedAt)}
                     <div className="muted">{v.submittedByName}</div>
                   </td>
-                  <td className="small mono">{v.airflowDagId ?? '—'}</td>
                   <td>
                     <div className="row" style={{ gap: 6, flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
                       <button type="button" className="btn btn-sm" onClick={() => setShown(shown?.version === v.version ? null : v)} aria-expanded={shown?.version === v.version}>
@@ -356,7 +387,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
           {r.myDraftId
             ? `Le contenu de la v${confirming} remplace celui de votre brouillon en cours.`
             : r.canWithdraw
-              ? `Votre publication de la v${r.version} est retirée (Airflow ne l'a jamais exécutée) et redevient votre brouillon, avec le contenu de la v${confirming}.`
+              ? `Votre publication de la v${r.version}, qui ne s'est jamais exécutée, redevient votre brouillon, avec le contenu de la v${confirming}.`
               : `Un brouillon personnel est créé avec le contenu de la v${confirming}. La v${r.version} reste en place jusqu'à sa publication.`}{' '}
           Il faudra ensuite le tester et le publier.
         </Alert>
@@ -446,29 +477,29 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
     send: prod
       ? {
           title: `Mettre la v${r.version} en production à la place de la v${prod} ?`,
-          text: `Dès le prochain run Airflow, ses commandes seront transmises au prestataire et la v${prod} s'arrêtera.`,
+          text: `Dès la prochaine exécution, ses commandes seront transmises au prestataire et la v${prod} s'arrêtera.`,
           label: 'Mettre en production',
         }
       : {
           title: `Envoyer la v${r.version} au prestataire ?`,
-          text: 'Ses commandes lui seront transmises dès le prochain run Airflow.',
+          text: 'Ses commandes lui seront transmises dès la prochaine exécution.',
           label: "Confirmer l'envoi",
         },
     suspend: {
       title: `Suspendre l'envoi de la v${prod ?? r.version} ?`,
       text: prod
         ? `Ses commandes ne seront plus transmises au prestataire. La v${r.version}, candidate, tournera alors seule, en observation, à la place de la v${prod}.`
-        : "Airflow continue de l'exécuter, mais ses commandes ne sont plus transmises au prestataire.",
+        : "Elle continue de s'exécuter, mais ses commandes ne sont plus transmises au prestataire.",
       label: 'Suspendre',
       danger: true,
     },
     discard: {
       title: `Écarter la v${r.version} ?`,
       text: prod
-        ? `Airflow ne l'exécutera plus ; la v${prod} reste en production.`
+        ? `Elle ne s'exécutera plus ; la v${prod} reste en production.`
         : r.versionCount > 1
-          ? "Airflow ne l'exécutera plus ; la version précédente reprend sa place (et son envoi au prestataire, si elle était envoyée)."
-          : "Airflow ne l'exécutera plus. Vous pourrez toujours en créer une nouvelle version.",
+          ? "Elle ne s'exécutera plus ; la version précédente reprend sa place (et son envoi au prestataire, si elle était envoyée)."
+          : "Elle ne s'exécutera plus. Vous pourrez toujours en créer une nouvelle version.",
       label: 'Écarter',
       danger: true,
     },
@@ -479,11 +510,13 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
     panel = (
       <div className="decision-card observing">
         <div>
-          <strong>Candidate en observation{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}</strong>
-          <p>
-            Airflow exécute la v{r.version} à côté de la v{prod}, qui reste en production et continue d'être envoyée. Comparez-les dans
-            l'onglet Versions, sur la même période, puis décidez.
-          </p>
+          <strong>
+            Candidate en observation{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}
+            <InfoTip align="start">
+              La v{r.version} s'exécute à côté de la v{prod}, qui reste en production et continue d'être envoyée. Comparez-les sur la même
+              période dans l'onglet Performance, puis décidez.
+            </InfoTip>
+          </strong>
         </div>
         <div className="decision-actions">
           <button type="button" className="btn btn-ghost" onClick={() => setConfirming('suspend')} disabled={busy}>
@@ -502,11 +535,12 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
     panel = (
       <div className="decision-card observing">
         <div>
-          <strong>En observation{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}</strong>
-          <p>
-            Airflow exécute la v{r.version} mais ses commandes ne sont pas envoyées au prestataire. Consultez l'onglet Performance, puis
-            décidez.
-          </p>
+          <strong>
+            En observation{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}
+            <InfoTip align="start">
+              La v{r.version} s'exécute, mais ses commandes ne sont pas envoyées au prestataire. Consultez l'onglet Performance, puis décidez.
+            </InfoTip>
+          </strong>
         </div>
         <div className="decision-actions">
           <button type="button" className="btn" onClick={() => setConfirming('discard')} disabled={busy}>
@@ -536,7 +570,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
       <div className="decision-card">
         <span>
           Écartée{r.decidedAt && ` le ${fmtDateTime(r.decidedAt)}`}
-          {r.decidedByName && ` par ${r.decidedByName}`} : Airflow ne l'exécute plus.
+          {r.decidedByName && ` par ${r.decidedByName}`} : elle ne s'exécute plus.
         </span>
       </div>
     );
@@ -581,22 +615,21 @@ function DemoPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) =
   return (
     <div className="demo-panel stack" style={{ marginTop: 24, gap: 8 }}>
       <div>
-        <strong>Simulation Airflow</strong>{' '}
-        <span className="small muted">
-          — mode démo uniquement. En réel, la plateforme lit les exécutions dans <span className="mono">rule_runs</span> : une version
-          qui tourne passe « En observation » (puis « En production » une fois envoyée au prestataire), une version qui ne tourne plus
-          depuis 3 périodes passe « Inactive ».
-        </span>
+        <strong>Simulation des exécutions</strong> <span className="small muted">— mode démo uniquement</span>
+        <InfoTip>
+          En réel, la plateforme constate les exécutions automatiques : une version qui s'exécute passe « En observation » (puis « En
+          production » une fois envoyée), une version qui ne s'exécute plus depuis 3 échéances passe « Inactive ».
+        </InfoTip>
       </div>
       <div className="row">
         {waiting && (
           <button type="button" className="btn btn-sm" onClick={() => act(api.demo!.simulateRuns)}>
-            Simuler les premiers runs Airflow
+            Simuler les premières exécutions
           </button>
         )}
         {running && (
           <button type="button" className="btn btn-sm btn-danger" onClick={() => act(api.demo!.simulateStop)}>
-            Simuler l'arrêt du DAG
+            Simuler l'arrêt des exécutions
           </button>
         )}
         {!waiting && !running && <span className="small muted">Aucune simulation possible dans cet état.</span>}

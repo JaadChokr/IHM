@@ -79,14 +79,14 @@ export function OverviewPage() {
             <span className="kpi-label">En observation</span>
             <span className="kpi-value">{fmtInt(count('OBSERVATION'))}</span>
             <span className="kpi-sub">
-              Exécutées par Airflow, décision d'envoi attendue
-              {count('SUBMITTED') > 0 && ` · ${count('SUBMITTED')} publiée${count('SUBMITTED') > 1 ? 's' : ''} en attente du premier run`}
+              Décision d'envoi attendue
+              {count('SUBMITTED') > 0 && ` · ${count('SUBMITTED')} publiée${count('SUBMITTED') > 1 ? 's' : ''} en attente de première exécution`}
             </span>
           </button>
           <Link to="/production" className="card kpi kpi-link">
             <span className="kpi-label">À surveiller</span>
             <span className="kpi-value">{prod.data ? fmtInt(watch.length) : '…'}</span>
-            <span className="kpi-sub">Précision sous {fmtPct(threshold)}, aucune remontée sur 30 jours ou plus exécutée par Airflow</span>
+            <span className="kpi-sub">Précision sous {fmtPct(threshold)}, aucune remontée sur 30 jours ou exécution arrêtée</span>
             {watch.length > 0 && <span className="kpi-flag">⚠ Action requise</span>}
           </Link>
           <Link to="/drafts" className="card kpi kpi-link">

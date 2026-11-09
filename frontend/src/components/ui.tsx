@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { RULE_STATUSES, type Criticality, type DisplayStatus } from '../api/types';
 import { CRITICALITY_LABEL, STATUS_HELP, STATUS_LABEL } from '../lib/format';
 
@@ -29,6 +29,24 @@ export function CriticalityBadge({ value }: { value: Criticality }) {
         ))}
       </span>
       {CRITICALITY_LABEL[value]}
+    </span>
+  );
+}
+
+/**
+ * Petite icône « i » qui affiche une explication au survol ou au focus clavier, à la place d'un bloc de
+ * texte. `align` place la bulle quand l'icône est près d'un bord.
+ */
+export function InfoTip({ children, label = 'Explication', align = 'center' }: { children: ReactNode; label?: string; align?: 'center' | 'start' | 'end' }) {
+  const id = useId();
+  return (
+    <span className={`infotip infotip-${align}`}>
+      <button type="button" className="infotip-btn" aria-label={label} aria-describedby={id}>
+        i
+      </button>
+      <span role="tooltip" id={id} className="infotip-text">
+        {children}
+      </span>
     </span>
   );
 }

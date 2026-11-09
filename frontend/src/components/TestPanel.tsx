@@ -5,7 +5,7 @@ import { useAsync } from '../lib/useAsync';
 import { fmtBytes, fmtDuration, fmtInt, fmtPct } from '../lib/format';
 import { fmtPeriod, lastPeriod } from '../lib/period';
 import { queryHash } from '../lib/sql';
-import { Alert, Spinner } from './ui';
+import { Alert, InfoTip, Spinner } from './ui';
 
 interface Options {
   sql: string;
@@ -107,11 +107,16 @@ export function TestActions({ t }: { t: QueryTest }) {
           </span>
         ) : dry?.ok && !busy ? (
           <span className={`test-inline ${dry.exceedsBytesLimit ? 'bad' : 'good'}`}>
-            {dry.exceedsBytesLimit ? '✕' : '✓'} Syntaxe valide · {fmtBytes(dry.bytesProcessed ?? 0)} à scanner
+            {dry.exceedsBytesLimit ? '✕' : '✓'} Syntaxe valide · {fmtBytes(dry.bytesProcessed ?? 0)} à lire
           </span>
         ) : (
-          <span className="muted" title="Valeurs de @period_start et @period_end au test : la dernière période complète du DAG de cette fréquence">
+          <span className="muted">
             Période testée {fmtPeriod(lastPeriod(t.schedule))}
+            <InfoTip>
+              Si la requête utilise <span className="mono">@period_start</span> / <span className="mono">@period_end</span>, ce sont leurs
+              valeurs pendant le test : la dernière période complète de sa fréquence. <span className="mono">CURRENT_DATE()</span> donne la
+              date du jour.
+            </InfoTip>
           </span>
         )}
       </span>
@@ -124,7 +129,7 @@ export function TestActions({ t }: { t: QueryTest }) {
           className="btn btn-primary"
           onClick={t.runExec}
           disabled={!t.canExec}
-          title={t.canExec ? undefined : dry?.ok && dry.exceedsBytesLimit ? 'Volume à scanner au-delà du plafond' : "Validez d'abord la syntaxe de la requête actuelle"}
+          title={t.canExec ? undefined : dry?.ok && dry.exceedsBytesLimit ? 'Volume à lire au-delà du plafond' : "Validez d'abord la syntaxe de la requête actuelle"}
         >
           {phase === 'executing' ? <span className="spinner" aria-hidden="true" /> : <span aria-hidden="true">▶</span>} Tester la requête
         </button>
@@ -176,8 +181,8 @@ export function TestResults({ t, onGoTo }: { t: QueryTest; onGoTo: (line: number
           </div>
         )}
         {dry?.ok && dry.exceedsBytesLimit && (
-          <Alert kind="error" title={`Test impossible : ${fmtBytes(dry.bytesProcessed ?? 0)} à scanner, au-delà du plafond de ${g ? fmtBytes(g.maxBytesBilled) : '…'}.`}>
-            Restreignez la période ou les tables scannées.
+          <Alert kind="error" title={`Test impossible : ${fmtBytes(dry.bytesProcessed ?? 0)} à lire, au-delà du plafond de ${g ? fmtBytes(g.maxBytesBilled) : '…'}.`}>
+            Restreignez la période ou les tables lues.
           </Alert>
         )}
         {phase === 'executing' && <Spinner label="Exécution et recoupement avec les autres règles…" />}
@@ -194,7 +199,7 @@ export function TestResults({ t, onGoTo }: { t: QueryTest; onGoTo: (line: number
 
         {exec && (
           <p className="small muted test-meta">
-            Période testée {fmtPeriod(exec.period)} · {fmtDuration(exec.durationMs)} · {fmtBytes(exec.bytesProcessed)} scannés
+            Période testée {fmtPeriod(exec.period)} · {fmtDuration(exec.durationMs)} · {fmtBytes(exec.bytesProcessed)} lus
           </p>
         )}
 
@@ -271,7 +276,7 @@ function ExecSummary({ exec }: { exec: ExecutionResult }) {
           </span>
           <span className="test-kpi-value">{known ? fmtInt(already) : '—'}</span>
           <span className="test-kpi-sub">
-            {known ? `${fmtPct(share(already))} · par une autre règle, ${exec.overlapDays} derniers jours` : 'table rule_alerts illisible'}
+            {known ? `${fmtPct(share(already))} · par une autre règle, ${exec.overlapDays} derniers jours` : 'recoupement indisponible'}
           </span>
         </div>
       </div>

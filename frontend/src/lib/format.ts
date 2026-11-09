@@ -12,18 +12,25 @@ export const STATUS_LABEL: Record<DisplayStatus, string> = {
 
 export const STATUS_HELP: Record<DisplayStatus, string> = {
   DRAFT: 'En cours de rédaction, visible de vous seul',
-  SUBMITTED: 'Publiée : exécutée par Airflow au prochain run du DAG de sa fréquence',
-  OBSERVATION: "Exécutée par Airflow sans envoi au prestataire, en attendant la décision de l'envoyer",
-  IN_PRODUCTION: 'Exécutée par Airflow, commandes envoyées au prestataire',
-  INACTIVE: 'Plus aucune exécution Airflow depuis 3 périodes',
+  SUBMITTED: 'Publiée : sera exécutée automatiquement à la prochaine échéance de sa fréquence',
+  OBSERVATION: "Exécutée automatiquement, sans envoi au prestataire, en attendant votre décision",
+  IN_PRODUCTION: 'Exécutée automatiquement, commandes envoyées au prestataire',
+  INACTIVE: "Ne s'exécute plus depuis 3 échéances : à signaler à l'équipe data",
   REPLACED: 'Remplacée par une version plus récente',
-  DISCARDED: "Écartée après observation : Airflow ne l'exécute plus",
+  DISCARDED: "Écartée : elle n'est plus exécutée",
 };
 
 export const CRITICALITY_LABEL: Record<Criticality, string> = {
   HIGH: 'Haute',
   MEDIUM: 'Moyenne',
   LOW: 'Basse',
+};
+
+/** Moment des exécutions automatiques, selon la fréquence (calendrier des traitements de l'équipe data). */
+export const SCHEDULE_WHEN: Record<Schedule, string> = {
+  DAILY: 'chaque nuit à 3 h',
+  HOURLY: 'toutes les heures, à h+5',
+  WEEKLY: 'chaque lundi à 4 h',
 };
 
 export const SCHEDULE_LABEL: Record<Schedule, string> = {

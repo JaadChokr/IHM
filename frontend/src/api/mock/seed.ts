@@ -417,7 +417,7 @@ export function buildSeed(): MockDb {
   for (const t of tests) {
     // Un test de brouillon est tracé sans nommer la règle (le brouillon est privé).
     const r = rules.find((x) => x.ruleId === t.ruleId)?.versions.find((x) => x.version === t.version);
-    const outcome = t.success ? `${t.phase === 'EXECUTION' ? 'Exécution' : 'Dry-run'} réussi` : `Échec : ${t.error}`;
+    const outcome = t.success ? `${t.phase === 'EXECUTION' ? 'Test' : 'Vérification de la syntaxe'} réussi` : `Échec : ${t.error}`;
     ev(t.at, t.byMatricule, 'RULE_TEST', r, t.draftId ? `${outcome} (brouillon)` : outcome);
   }
   audit.sort((a, b) => b.at.localeCompare(a.at));

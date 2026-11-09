@@ -6,7 +6,7 @@ import { delta, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
 import { LineChart, versionColor, type Series } from './LineChart';
-import { Alert, Spinner } from './ui';
+import { Alert, InfoTip, Spinner } from './ui';
 
 type Preset = 7 | 30 | 90 | 'all' | 'custom';
 
@@ -110,10 +110,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
   if (!everInProduction) {
     return (
       <div className="card empty">
-        Cette règle n'a encore jamais tourné en production : aucun indicateur disponible.
-        <div className="small" style={{ marginTop: 6 }}>
-          Les indicateurs proviennent de la table <span className="mono">rule_alerts</span> alimentée par Airflow et du retour prestataire.
-        </div>
+        Cette règle ne s'est pas encore exécutée : aucun indicateur pour l'instant.
       </div>
     );
   }
@@ -129,10 +126,13 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
   return (
     <div className="stack">
       {observing && (
-        <Alert kind="info" title="En observation : ses commandes ne sont pas envoyées au prestataire.">
-          Le volume remonté est réel. La précision ne porte que sur les commandes aussi remontées par une règle envoyée au prestataire,
-          les seules qu'il vérifie : elle n'est pas représentative tant que la règle n'est pas envoyée.
-        </Alert>
+        <p className="small muted" style={{ margin: 0 }}>
+          En observation : rien n'est envoyé au prestataire.
+          <InfoTip align="start">
+            Le volume remonté est réel. La précision, elle, ne porte que sur les commandes qu'une autre règle a envoyées au prestataire :
+            elle n'est pas représentative tant que cette règle n'est pas envoyée.
+          </InfoTip>
+        </p>
       )}
       <div className="row">
         <div className="seg" role="group" aria-label="Période">
@@ -141,7 +141,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               {p} jours
             </button>
           ))}
-          <button type="button" aria-pressed={preset === 'all'} onClick={() => setPreset('all')} title="Depuis le premier run de la v1 : toutes les versions sur la même courbe">
+          <button type="button" aria-pressed={preset === 'all'} onClick={() => setPreset('all')} title="Depuis la première exécution de la v1 : toutes les versions sur la même courbe">
             Tout l'historique
           </button>
           <button type="button" aria-pressed={preset === 'custom'} onClick={() => setPreset('custom')}>
@@ -179,42 +179,36 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               label="Volume remonté"
               value={fmtInt(view.cur.flagged)}
               delta={fmtDelta(delta(view.cur.flagged, view.prev.flagged, 'relative'), 'relative')}
-              sub={`${fmtInt(view.toSend)} envoyées au prestataire · ${fmtInt(view.observed)} remontées en observation`}
+              sub={`${fmtInt(view.toSend)} envoyées au prestataire · ${fmtInt(view.observed)} en observation`}
+              info={
+                <>
+                  Commandes remontées sur la période. « Envoyées » : par la version en production. « En observation » : par une version
+                  pas encore envoyée. Une commande trouvée par plusieurs règles compte pour chacune : n'additionnez pas les règles.
+                </>
+              }
             />
             <KpiTile
               label="En attente de vérification"
               value={fmtInt(view.cur.pending)}
-              sub={`Remontées pas encore vérifiées par le prestataire (${fmtInt(view.cur.processed)} vérifiées)`}
+              sub={`${fmtInt(view.cur.processed)} déjà vérifiées`}
+              info="Commandes remontées que le prestataire n'a pas encore vérifiées : elles n'apparaissent pas encore dans son retour."
             />
             <KpiTile
               label="Taux de précision"
               value={fmtPct(view.cur.precision)}
               delta={fmtDelta(delta(view.cur.precision, view.prev.precision, 'points'), 'points')}
               sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} vérifiées`}
+              info="Part des commandes vérifiées par le prestataire qui sont confirmées frauduleuses. Les fraudes que la règle n'a pas trouvées ne sont pas mesurables."
             />
           </div>
-
-          <Alert kind="info" title="Comment lire ces indicateurs">
-            <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
-              <li>
-                Le prestataire vérifie toutes les commandes qu'il reçoit. Le <strong>taux de précision</strong> est calculé sur les commandes
-                <strong>vérifiées</strong> (présentes dans sa table de retour) ; les autres sont comptées <strong>en attente de vérification</strong>.
-              </li>
-              <li>
-                Le <strong>rappel</strong> (fraudes que la règle n'a pas détectées) n'est pas mesurable dans ce dispositif.
-              </li>
-              <li>
-                Une commande remontée par plusieurs règles est comptée pour chacune : ne <strong>jamais additionner</strong> les indicateurs de
-                plusieurs règles.
-              </li>
-            </ul>
-          </Alert>
 
           <section className="card">
             <div className="card-head">
               <div>
-                <h3>Volume remonté par jour</h3>
-                <p>Une courbe par version : trait plein en production (commandes envoyées au prestataire), pointillé en observation</p>
+                <h3>
+                  Volume remonté par jour
+                  <InfoTip>Une courbe par version. Trait plein : la version est en production (commandes envoyées au prestataire). Pointillé : en observation.</InfoTip>
+                </h3>
               </div>
             </div>
             <div className="card-pad">
@@ -231,8 +225,10 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
           <section className="card">
             <div className="card-head">
               <div>
-                <h3>Taux de précision par jour</h3>
-                <p>Confirmées frauduleuses ÷ commandes vérifiées, versions en production uniquement — pas de point les jours sans commande vérifiée</p>
+                <h3>
+                  Taux de précision par jour
+                  <InfoTip>Confirmées frauduleuses ÷ commandes vérifiées, pour les versions en production. Pas de point les jours sans commande vérifiée.</InfoTip>
+                </h3>
               </div>
             </div>
             <div className="card-pad">
@@ -288,7 +284,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
                 <table className="data">
                   <thead>
                     <tr>
-                      <th>Date du run</th>
+                      <th>Date d'exécution</th>
                       <th>Version</th>
                       <th>Démarré</th>
                       <th className="num">Volume remonté</th>
@@ -334,15 +330,13 @@ function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
     <section className="card">
       <div className="card-head">
         <div>
-          <h3>Comparaison des versions</h3>
-          <p>Chaque version sur toute sa période d'exécution par Airflow, indépendamment de la période sélectionnée</p>
-          {versions.length > 1 && (
-            <p className="small muted">
-              Chaque version est mesurée sur tout ce qu'elle remonte, y compris les commandes déjà remontées par la précédente (fenêtre glissante) : ses
-              chiffres ne s'additionnent pas avec ceux des autres versions. Les courbes et indicateurs ci-dessus comptent chaque commande une seule fois
-              pour la règle.
-            </p>
-          )}
+          <h3>
+            Comparaison des versions
+            <InfoTip>
+              Chaque version sur toute sa durée d'exécution, quelle que soit la période choisie, y compris en observation. Une commande trouvée
+              par deux versions compte pour chacune : les lignes ne s'additionnent pas.
+            </InfoTip>
+          </h3>
         </div>
       </div>
       <div className="table-wrap">

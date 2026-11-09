@@ -6,7 +6,7 @@ import { SqlEditor, type SqlEditorHandle } from '../components/SqlEditor';
 import { TestActions, TestResults, useQueryTest } from '../components/TestPanel';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { usePageTitle } from '../nav/history';
-import { Alert, Spinner, StatusBadge } from '../components/ui';
+import { Alert, InfoTip, Spinner, StatusBadge } from '../components/ui';
 import { CRITICALITY_LABEL, FRAUD_TYPOLOGIES, SCHEDULE_LABEL, STATUS_LABEL, fmtDateTime } from '../lib/format';
 import { checkParams, queryHash } from '../lib/sql';
 import { readPref, writePref } from '../prefs/prefs';
@@ -266,24 +266,45 @@ export function RuleEditorPage() {
       </div>
 
       <div className="stack">
-        {flash === 'saved' && !dirty && <Alert kind="success" title="Brouillon enregistré. Vous seul le voyez ; reprenez-le quand vous voulez depuis « Mes brouillons »." />}
+        {flash === 'saved' && !dirty && (
+          <Alert
+            kind="success"
+            title={
+              <>
+                Brouillon enregistré.
+                <InfoTip align="start">Vous seul le voyez ; reprenez-le quand vous voulez depuis « Mes brouillons ».</InfoTip>
+              </>
+            }
+          />
+        )}
         {flash === 'withdrawn' && !dirty && (
-          <Alert kind="success" title="Publication retirée : la version est redevenue votre brouillon.">
-            La ligne de la règle dans <span className="mono">rules_registry</span> est revenue à la version précédente (Airflow ne peut plus prendre
-            celle-ci). Testez-la puis publiez-la à nouveau.
-          </Alert>
+          <Alert
+            kind="success"
+            title={
+              <>
+                Publication retirée : la version est redevenue votre brouillon. Testez-la puis publiez-la à nouveau.
+                <InfoTip align="start">Elle ne s'exécutera pas ; la version précédente, s'il y en a une, reprend sa place.</InfoTip>
+              </>
+            }
+          />
         )}
         {flash?.startsWith('restored:') && !dirty && (
-          <Alert kind="success" title={`Contenu de la v${flash.split(':')[1]} repris dans votre brouillon.`}>
-            Testez-le puis publiez-le : Airflow exécutera cette version dès le run suivant.
-          </Alert>
+          <Alert kind="success" title={`Contenu de la v${flash.split(':')[1]} repris dans votre brouillon : testez-le puis publiez-le.`} />
         )}
         {behind && (
-          <Alert kind="warn" title={`La v${draft.latestVersion} a été publiée depuis que vous avez commencé ce brouillon.`}>
-            Vous êtes parti{draft.baseVersion ? ` de la v${draft.baseVersion}` : ' d’une version précédente'} : vérifiez que ce brouillon tient compte des
-            changements de la <Link to={`/rules/${draft.ruleId}`}>v{draft.latestVersion}</Link>. À la publication, il deviendra la v
-            {draft.latestVersion! + 1}.
-          </Alert>
+          <Alert
+            kind="warn"
+            title={
+              <>
+                La <Link to={`/rules/${draft.ruleId}`}>v{draft.latestVersion}</Link> a été publiée depuis le début de ce brouillon : vérifiez qu'il
+                en tient compte.
+                <InfoTip align="start">
+                  Vous êtes parti{draft.baseVersion ? ` de la v${draft.baseVersion}` : ' d’une version précédente'}. À la publication, ce
+                  brouillon deviendra la v{draft.latestVersion! + 1}.
+                </InfoTip>
+              </>
+            }
+          />
         )}
         {restorable && (
           <Alert kind="info" title="Un brouillon non enregistré a été retrouvé sur ce poste.">
@@ -299,17 +320,33 @@ export function RuleEditorPage() {
           </Alert>
         )}
         {rule && withdraws && (
-          <Alert kind="info" title={`Vous avez publié la v${rule.version}, qu'Airflow n'a pas encore exécutée : vous pouvez la reprendre.`}>
-            L'enregistrement ramène la ligne de la règle dans <span className="mono">rules_registry</span> à la version précédente (Airflow ne peut donc
-            plus prendre celle-ci) et en refait votre brouillon personnel. Il faudra la retester puis la publier à nouveau ; elle gardera le numéro v{rule.version}.
-          </Alert>
+          <Alert
+            kind="info"
+            title={
+              <>
+                La v{rule.version}, publiée par vous, ne s'est pas encore exécutée : vous pouvez la reprendre.
+                <InfoTip align="start">
+                  À l'enregistrement, elle redevient votre brouillon et ne s'exécutera pas ; la version précédente reprend sa place. Il faudra la
+                  retester puis la publier à nouveau ; elle gardera le numéro v{rule.version}.
+                </InfoTip>
+              </>
+            }
+          />
         )}
         {rule && !withdraws && (
-          <Alert kind="info" title={`Vous préparez une nouvelle version à partir de la v${rule.version} (« ${STATUS_LABEL[rule.status]} »).`}>
-            La v{rule.version} reste inchangée
-            {rule.status === 'IN_PRODUCTION' || rule.status === 'INACTIVE' ? ' et continue de tourner' : ''} jusqu'à la publication de votre brouillon,
-            qui deviendra alors la v{rule.version + 1}. D'ici là, personne d'autre ne le voit.
-          </Alert>
+          <Alert
+            kind="info"
+            title={
+              <>
+                Nouvelle version à partir de la v{rule.version} (« {STATUS_LABEL[rule.status]} »).
+                <InfoTip align="start">
+                  La v{rule.version} reste inchangée
+                  {rule.status === 'IN_PRODUCTION' || rule.status === 'INACTIVE' ? ' et continue de s’exécuter' : ''} jusqu'à la publication de
+                  votre brouillon, qui deviendra la v{rule.version + 1}. D'ici là, personne d'autre ne le voit.
+                </InfoTip>
+              </>
+            }
+          />
         )}
         {confirmDelete && draft && (
           <Alert kind="warn" title="Supprimer ce brouillon ?">
@@ -376,7 +413,7 @@ export function RuleEditorPage() {
                 required
               />
               <span id="desc-msg" className={err('description') ? 'error-text' : 'hint'}>
-                {err('description') ? 'La description est obligatoire.' : 'Le scénario de fraude visé, en français. Ces descriptions serviront d’exemples à l’assistant LLM de la V2.'}
+                {err('description') ? 'La description est obligatoire.' : 'Le scénario de fraude visé, en quelques phrases.'}
               </span>
             </div>
             <div className="stack" style={{ gap: 14 }}>
@@ -411,12 +448,18 @@ export function RuleEditorPage() {
         <section className="card" aria-labelledby="sec-sql">
           <div className="card-head">
             <div>
-              <h2 id="sec-sql">Requête SQL</h2>
+              <h2 id="sec-sql">
+                Requête SQL
+                <InfoTip>
+                  Une seule requête <span className="mono">SELECT</span>, qui renvoie la colonne <span className="mono">order_id</span>. Écrivez
+                  les seuils directement (ex. <span className="mono">amount_eur &gt;= 500</span>) ; pour la veille :{' '}
+                  <span className="mono">DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)</span>. Facultatif :{' '}
+                  <span className="mono">@period_start</span> / <span className="mono">@period_end</span>, début et fin de la période traitée
+                  par chaque exécution.
+                </InfoTip>
+              </h2>
               <p>
-                Une seule instruction <span className="mono">SELECT</span>, exposant <span className="mono">order_id</span>. Les seuils s'écrivent
-                directement dans la requête (ex. <span className="mono">amount_eur &gt;= 500</span>) ; pour viser la veille :{' '}
-                <span className="mono">DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)</span>. Facultatif : les bornes de la période du run,{' '}
-                <span className="mono">@period_start</span> / <span className="mono">@period_end</span>, fournies par Airflow.
+                Un <span className="mono">SELECT</span> qui renvoie <span className="mono">order_id</span>.
               </p>
             </div>
           </div>

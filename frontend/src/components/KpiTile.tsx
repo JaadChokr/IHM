@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { InfoTip } from './ui';
 
 interface Props {
   label: string;
@@ -7,13 +8,18 @@ interface Props {
   /** Variation vs période précédente, déjà formatée ; null = non calculable. */
   delta?: { text: string; direction: 'up' | 'down' | 'flat' } | null;
   flag?: ReactNode;
+  /** Explication en infobulle, à côté du libellé. */
+  info?: ReactNode;
 }
 
 /** Tuile d'indicateur : le chiffre, sa variation (libellée, pas seulement colorée) et un éventuel signalement. */
-export function KpiTile({ label, value, sub, delta, flag }: Props) {
+export function KpiTile({ label, value, sub, delta, flag, info }: Props) {
   return (
     <div className="card kpi">
-      <span className="kpi-label">{label}</span>
+      <span className="kpi-label">
+        {label}
+        {info && <InfoTip label={`À propos : ${label}`}>{info}</InfoTip>}
+      </span>
       <span className="kpi-value">{value}</span>
       {delta !== undefined && (
         <span className="kpi-delta">

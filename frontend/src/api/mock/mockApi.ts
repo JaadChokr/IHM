@@ -411,7 +411,7 @@ export function createMockApi(): Api {
     };
     db.tests.push(rec);
     // Un brouillon est privé : le journal garde le test (volume scanné) sans nommer la règle.
-    const outcome = `${t.phase === 'EXECUTION' ? 'Exécution échantillonnée' : 'Dry-run'} ${t.success ? 'réussi' : `en échec : ${t.error ?? ''}`}`;
+    const outcome = `${t.phase === 'EXECUTION' ? 'Test' : 'Vérification de la syntaxe'} ${t.success ? 'réussi' : `en échec : ${t.error ?? ''}`}`;
     audit(u, 'RULE_TEST', cur, draft ? `${outcome} (brouillon)` : outcome);
     save();
     return rec;
@@ -632,11 +632,11 @@ export function createMockApi(): Api {
       const u = currentUser();
       if (target?.draftId) findDraft(target.draftId, u);
       const dry = simulateDryRun(sql, GUARDRAILS, 'pre', testPeriod(target, u));
-      if (!dry.ok) throw new ApiError(422, 'Le dry-run doit réussir avant toute exécution.');
+      if (!dry.ok) throw new ApiError(422, "Validez d'abord la syntaxe de la requête.");
       if (dry.exceedsBytesLimit) {
         throw new ApiError(
           422,
-          `Exécution refusée : volume estimé ${(dry.bytesProcessed! / 1e9).toFixed(1)} Go, plafond ${GUARDRAILS.maxBytesBilled / 1e9} Go (maximumBytesBilled).`,
+          `Test refusé : la requête lirait ${(dry.bytesProcessed! / 1e9).toFixed(1)} Go, au-delà du plafond de ${GUARDRAILS.maxBytesBilled / 1e9} Go. Restreignez la période ou les tables lues.`,
           'BYTES_LIMIT',
         );
       }
