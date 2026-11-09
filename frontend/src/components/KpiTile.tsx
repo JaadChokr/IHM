@@ -7,13 +7,12 @@ interface Props {
   sub?: ReactNode;
   /** Variation vs période précédente, déjà formatée ; null = non calculable. */
   delta?: { text: string; direction: 'up' | 'down' | 'flat' } | null;
-  flag?: ReactNode;
   /** Explication en infobulle, à côté du libellé. */
   info?: ReactNode;
 }
 
-/** Tuile d'indicateur : le chiffre, sa variation (libellée, pas seulement colorée) et un éventuel signalement. */
-export function KpiTile({ label, value, sub, delta, flag, info }: Props) {
+/** Tuile d'indicateur : le chiffre, sa variation (libellée, pas seulement colorée). */
+export function KpiTile({ label, value, sub, delta, info }: Props) {
   return (
     <div className="card kpi">
       <span className="kpi-label">
@@ -34,7 +33,6 @@ export function KpiTile({ label, value, sub, delta, flag, info }: Props) {
         </span>
       )}
       {sub && <span className="kpi-sub">{sub}</span>}
-      {flag && <span className="kpi-flag">⚠ {flag}</span>}
     </div>
   );
 }
