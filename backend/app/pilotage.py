@@ -48,6 +48,7 @@ def performance(
         previous=bq.daily_performance(rule_id, prev_from, prev_to, sent),
         totals=_totals(bq, rule_id, sent, from_, to),
         previous_totals=_totals(bq, rule_id, sent, prev_from, prev_to),
+        by_version=bq.version_daily(rule_id, from_, to),
         runs=bq.runs(rule_id, from_, to),
         versions=bq.version_totals(rule_id),
     )
@@ -60,6 +61,7 @@ def _totals(bq: BigQueryGateway, rule_id: str, sent: bool, start: date, end: dat
         orders_to_send=t.to_send if t else 0,
         orders_processed=t.processed if t else 0,
         orders_confirmed_fraud=t.confirmed if t else 0,
+        orders_observed=t.observed if t else 0,
     )
 
 

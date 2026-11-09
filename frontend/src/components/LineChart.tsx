@@ -1,23 +1,24 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { fmtDate } from '../lib/format';
 
-export interface Point {
-  date: string;
-  value: number | null;
-  /** Lignes secondaires de l'infobulle. */
-  detail?: string;
-  /** Version de la règle qui a tourné ce jour-là. */
-  version?: number;
+/** Une courbe : une version de la règle, ses valeurs alignées sur les dates du graphique. */
+export interface Series {
+  version: number;
+  /** null : pas de donnée ce jour-là (trou dans la courbe). */
+  values: (number | null)[];
+  /** Par jour : la version était en observation (trait pointillé) plutôt qu'en production (trait plein). */
+  observed: boolean[];
+  /** Ligne secondaire de l'infobulle, par jour. */
+  details?: (string | undefined)[];
 }
 
 interface Props {
   label: string;
-  points: Point[];
+  dates: string[];
+  series: Series[];
   format: (v: number) => string;
   /** Borne haute fixe (ex. 1 pour un taux). */
   yMax?: number;
-  /** À partir de cette date, les données sont incomplètes (latence prestataire). */
-  incompleteFrom?: string;
   /** Repères verticaux, ex. la date à laquelle une nouvelle version a commencé à tourner. */
   markers?: { date: string; label: string }[];
   height?: number;
@@ -42,10 +43,12 @@ function niceMax(v: number): number {
 }
 
 /**
- * Courbe journalière à une seule série, axe Y unique (PRD F6 : jamais de double
- * axe). Réticule + infobulle au survol et au clavier (flèches gauche/droite).
+ * Courbes journalières, une par version, sur un axe Y unique (PRD F6 : jamais de double axe). Trait plein
+ * quand la version est en production, pointillé quand elle est en observation : deux versions qui tournent
+ * en même temps (production et candidate) se comparent sur les mêmes jours. Réticule + infobulle au survol
+ * et au clavier (flèches gauche/droite).
  */
-export function LineChart({ label, points, format, yMax, incompleteFrom, markers = [], height = 200 }: Props) {
+export function LineChart({ label, dates, series, format, yMax, markers = [], height = 200 }: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
@@ -60,40 +63,44 @@ export function LineChart({ label, points, format, yMax, incompleteFrom, markers
 
   const iw = width - M.left - M.right;
   const ih = height - M.top - M.bottom;
-  const n = points.length;
-  const max = yMax ?? niceMax(Math.max(0, ...points.map((p) => p.value ?? 0)));
+  const n = dates.length;
+  const max = yMax ?? niceMax(Math.max(0, ...series.flatMap((s) => s.values.map((v) => v ?? 0))));
   const x = (i: number) => M.left + (n <= 1 ? iw / 2 : (i / (n - 1)) * iw);
   const y = (v: number) => M.top + ih - (v / max) * ih;
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * max);
 
-  // Segments continus (une valeur nulle = pas de donnée → trou dans la courbe).
-  // Un tracé par version : à chaque changement, le nouveau segment repart du dernier point de l'ancien.
-  const segments = useMemo(() => {
-    const out: { version?: number; d: string }[] = [];
-    let cur: { version?: number; d: string } | null = null;
-    let last: { i: number; v: number } | null = null;
-    points.forEach((p, i) => {
-      if (p.value === null) {
-        cur = null;
-        last = null;
-        return;
-      }
-      const pt = `${x(i).toFixed(1)},${y(p.value).toFixed(1)}`;
-      if (!cur || cur.version !== p.version) {
-        const prev: { i: number; v: number } | null = last;
-        cur = { version: p.version, d: prev ? `M${x(prev.i).toFixed(1)},${y(prev.v).toFixed(1)}L${pt}` : `M${pt}` };
-        out.push(cur);
-      } else {
-        cur.d += `L${pt}`;
-      }
-      last = { i, v: p.value };
-    });
+  // Segments continus par version (une valeur nulle = trou). Au passage de l'observation à la production,
+  // le nouveau segment repart du dernier point pour que la courbe reste continue.
+  const paths = useMemo(() => {
+    const out: { version: number; observed: boolean; d: string }[] = [];
+    for (const s of series) {
+      let cur: { version: number; observed: boolean; d: string } | null = null;
+      let last: { i: number; v: number } | null = null;
+      s.values.forEach((v, i) => {
+        if (v === null) {
+          cur = null;
+          last = null;
+          return;
+        }
+        const pt = `${x(i).toFixed(1)},${y(v).toFixed(1)}`;
+        const observed = !!s.observed[i];
+        if (!cur || cur.observed !== observed) {
+          const prev: { i: number; v: number } | null = last;
+          cur = { version: s.version, observed, d: prev ? `M${x(prev.i).toFixed(1)},${y(prev.v).toFixed(1)}L${pt}` : `M${pt}` };
+          out.push(cur);
+        } else {
+          cur.d += `L${pt}`;
+        }
+        last = { i, v };
+      });
+    }
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, width, max]);
-  const versions = [...new Set(points.filter((p) => p.value !== null && p.version !== undefined).map((p) => p.version!))].sort(
-    (a, b) => a - b,
-  );
+  }, [series, width, max, n]);
+
+  const shown = series.filter((s) => s.values.some((v) => v !== null));
+  const hasObserved = shown.some((s) => s.values.some((v, i) => v !== null && s.observed[i]));
+  const hasProduction = shown.some((s) => s.values.some((v, i) => v !== null && !s.observed[i]));
 
   const xTicks = useMemo(() => {
     if (n === 0) return [];
@@ -101,13 +108,12 @@ export function LineChart({ label, points, format, yMax, incompleteFrom, markers
     return Array.from({ length: count }, (_, k) => Math.round((k / (count - 1 || 1)) * (n - 1)));
   }, [n, iw]);
 
-  const incIdx = incompleteFrom ? points.findIndex((p) => p.date >= incompleteFrom) : -1;
-  let lastIdx = -1;
-  for (let i = n - 1; i >= 0; i--)
-    if (points[i].value !== null) {
-      lastIdx = i;
-      break;
-    }
+  // Dernier point de chaque version, étiqueté s'il n'y a pas plus de deux versions (au-delà, l'infobulle).
+  const ends = shown.map((s) => {
+    let i = s.values.length - 1;
+    while (i >= 0 && s.values[i] === null) i--;
+    return { s, i };
+  });
 
   function onMove(e: PointerEvent<SVGRectElement>) {
     const rect = (e.currentTarget.ownerSVGElement as SVGSVGElement).getBoundingClientRect();
@@ -124,37 +130,45 @@ export function LineChart({ label, points, format, yMax, incompleteFrom, markers
     e.preventDefault();
   }
 
-  const hp = hover !== null ? points[hover] : null;
-
-  if (n === 0) return <div className="empty">Aucune donnée sur la période.</div>;
+  if (n === 0 || shown.length === 0) return <div className="empty">Aucune donnée sur la période.</div>;
+  const hovered = hover !== null ? shown.filter((s) => s.values[hover] !== null) : [];
+  const topValue = hovered.length ? Math.max(...hovered.map((s) => s.values[hover!]!)) : null;
 
   return (
     <div className="chart" ref={wrap}>
-      {versions.length > 1 && (
+      {(shown.length > 1 || hasObserved) && (
         <ul className="chart-legend" aria-label="Versions">
-          {versions.map((v) => (
-            <li key={v}>
-              <span className="legend-key" style={{ background: versionColor(v) }} aria-hidden="true" />v{v}
+          {shown.map((s) => (
+            <li key={s.version}>
+              <span className="legend-key" style={{ background: versionColor(s.version) }} aria-hidden="true" />v{s.version}
             </li>
           ))}
+          {hasProduction && hasObserved && (
+            <li className="legend-style">
+              <svg width="22" height="8" aria-hidden="true">
+                <line x1="0" x2="22" y1="4" y2="4" className="legend-line" />
+              </svg>
+              en production
+            </li>
+          )}
+          {hasObserved && (
+            <li className="legend-style">
+              <svg width="22" height="8" aria-hidden="true">
+                <line x1="0" x2="22" y1="4" y2="4" className="legend-line observed" />
+              </svg>
+              en observation{hasProduction ? '' : ' (rien n\'est envoyé)'}
+            </li>
+          )}
         </ul>
       )}
       <svg
         height={height}
         role="img"
-        aria-label={`${label}, du ${fmtDate(points[0].date)} au ${fmtDate(points[n - 1].date)}. Utilisez les flèches pour parcourir les valeurs.`}
+        aria-label={`${label}, du ${fmtDate(dates[0])} au ${fmtDate(dates[n - 1])}, ${shown.length} version${shown.length > 1 ? 's' : ''}. Utilisez les flèches pour parcourir les valeurs.`}
         tabIndex={0}
         onKeyDown={onKey}
         onBlur={() => setHover(null)}
       >
-        {incIdx >= 0 && (
-          <g>
-            <rect className="incomplete" x={x(incIdx) - (n > 1 ? iw / (n - 1) / 2 : 0)} y={M.top} width={M.left + iw - x(incIdx) + (n > 1 ? iw / (n - 1) / 2 : 0)} height={ih} />
-            <text className="incomplete-label" x={M.left + iw} y={M.top + 11} textAnchor="end">
-              données incomplètes
-            </text>
-          </g>
-        )}
         <g className="axis">
           {ticks.map((t) => (
             <g key={t}>
@@ -166,15 +180,15 @@ export function LineChart({ label, points, format, yMax, incompleteFrom, markers
           ))}
           {xTicks.map((i) => (
             <text key={i} x={x(i)} y={height - 6} textAnchor={i === 0 ? 'start' : i === n - 1 ? 'end' : 'middle'}>
-              {new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(new Date(points[i].date + 'T00:00:00'))}
+              {new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' }).format(new Date(dates[i] + 'T00:00:00'))}
             </text>
           ))}
         </g>
         {markers.map((m) => {
-          const i = points.findIndex((p) => p.date === m.date);
+          const i = dates.indexOf(m.date);
           if (i < 0) return null;
           return (
-            <g key={m.date} className="marker">
+            <g key={m.date + m.label} className="marker">
               <line x1={x(i)} x2={x(i)} y1={M.top} y2={M.top + ih} />
               <text x={x(i) + 5} y={M.top + 11}>
                 {m.label}
@@ -182,47 +196,47 @@ export function LineChart({ label, points, format, yMax, incompleteFrom, markers
             </g>
           );
         })}
-        {segments.map((s, k) => (
-          <path key={k} className="line" d={s.d} style={{ stroke: versionColor(s.version) }} />
+        {paths.map((p, k) => (
+          <path key={k} className={`line${p.observed ? ' observed' : ''}`} d={p.d} style={{ stroke: versionColor(p.version) }} />
         ))}
-        {lastIdx >= 0 && (
-          <>
-            <circle className="dot" cx={x(lastIdx)} cy={y(points[lastIdx].value!)} r={4} style={{ fill: versionColor(points[lastIdx].version) }} />
-            <text className="end-label" x={x(lastIdx) + 8} y={y(points[lastIdx].value!) + 4}>
-              {format(points[lastIdx].value!)}
-            </text>
-          </>
+        {ends.map(({ s, i }) =>
+          i < 0 ? null : (
+            <g key={s.version}>
+              <circle className="dot" cx={x(i)} cy={y(s.values[i]!)} r={4} style={{ fill: versionColor(s.version) }} />
+              {shown.length <= 2 && (
+                <text className="end-label" x={x(i) + 8} y={y(s.values[i]!) + 4}>
+                  {format(s.values[i]!)}
+                </text>
+              )}
+            </g>
+          ),
         )}
-        {hp && (
+        {hover !== null && (
           <g>
-            <line className="crosshair" x1={x(hover!)} x2={x(hover!)} y1={M.top} y2={M.top + ih} />
-            {hp.value !== null && <circle className="dot" cx={x(hover!)} cy={y(hp.value)} r={5} style={{ fill: versionColor(hp.version) }} />}
+            <line className="crosshair" x1={x(hover)} x2={x(hover)} y1={M.top} y2={M.top + ih} />
+            {hovered.map((s) => (
+              <circle key={s.version} className="dot" cx={x(hover)} cy={y(s.values[hover]!)} r={5} style={{ fill: versionColor(s.version) }} />
+            ))}
           </g>
         )}
-        <rect
-          x={M.left - 6}
-          y={0}
-          width={iw + 12}
-          height={height}
-          fill="transparent"
-          onPointerMove={onMove}
-          onPointerLeave={() => setHover(null)}
-        />
+        <rect x={M.left - 6} y={0} width={iw + 12} height={height} fill="transparent" onPointerMove={onMove} onPointerLeave={() => setHover(null)} />
       </svg>
-      {hp && (
+      {hover !== null && (
         <div
           className="tooltip"
-          style={{ left: Math.min(Math.max(x(hover!), 80), width - 80), top: hp.value !== null ? y(hp.value) - 10 : M.top + ih / 2 }}
+          style={{ left: Math.min(Math.max(x(hover), 80), width - 80), top: topValue !== null ? y(topValue) - 10 : M.top + ih / 2 }}
           aria-live="polite"
         >
-          <div>
-            <span className="tt-key" aria-hidden="true" style={{ background: versionColor(hp.version) }} />
-            <strong>{hp.value === null ? 'n/d' : format(hp.value)}</strong>
-          </div>
-          <div className="muted">{fmtDate(hp.date)}</div>
-          {hp.detail && <div className="muted">{hp.detail}</div>}
-          {hp.version !== undefined && <div className="muted">Version v{hp.version}</div>}
-          {incompleteFrom && hp.date >= incompleteFrom && <div className="muted">Traitement prestataire en cours</div>}
+          <div className="muted">{fmtDate(dates[hover])}</div>
+          {hovered.length === 0 && <strong>n/d</strong>}
+          {hovered.map((s) => (
+            <div key={s.version}>
+              <span className="tt-key" aria-hidden="true" style={{ background: versionColor(s.version) }} />
+              v{s.version} · <strong>{format(s.values[hover]!)}</strong>{' '}
+              <span className="muted">{s.observed[hover] ? '(observation)' : '(production)'}</span>
+              {s.details?.[hover] && <div className="muted">{s.details[hover]}</div>}
+            </div>
+          ))}
         </div>
       )}
     </div>

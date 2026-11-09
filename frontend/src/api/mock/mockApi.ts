@@ -10,6 +10,7 @@ import {
   type Draft,
   type Guardrails,
   type PeriodTotals,
+  type VersionDaily,
   type RuleDetail,
   type RuleInput,
   type RuleRun,
@@ -341,11 +342,36 @@ export function createMockApi(): Api {
     return out;
   }
 
+  /** La version était en production ce jour-là : envoyée, et depuis la date de la décision. */
+  const sentAt = (r: MockRule, v: RuleVersion, date: string) => sentVersion(r, v.version) && (!v.decidedAt || date >= v.decidedAt.slice(0, 10));
+
+  /** Courbe par version (v_rule_orders) : chaque version sur ses jours, en production ou en observation. */
+  function versionDaily(r: MockRule, from: string, to: string): VersionDaily[] {
+    if (!r.profile) return [];
+    const today = isoDate(new Date());
+    const out: VersionDaily[] = [];
+    for (const v of r.versions) {
+      const since = r.productionSince[v.version];
+      if (since === undefined) continue;
+      const until = r.productionUntil[v.version] ?? today;
+      for (let d = since > from ? since : from; d <= until && d <= to && d <= today; d = addDays(d, 1)) {
+        const p = dayPerf(r, d, v.version);
+        out.push({ date: d, ruleVersion: v.version, toSend: sentAt(r, v, d), ordersFlagged: p.ordersFlagged, ordersProcessed: p.ordersProcessed, ordersConfirmedFraud: p.ordersConfirmedFraud });
+      }
+    }
+    return out.sort((a, b) => a.date.localeCompare(b.date) || a.ruleVersion - b.ruleVersion);
+  }
+
   /** Totaux d'une période (côté serveur : commandes distinctes ; ici, la somme des jours simulés). */
   function periodTotals(rows: DailyPerformance[]): PeriodTotals {
     const sum = (k: 'ordersFlagged' | 'ordersToSend' | 'ordersProcessed' | 'ordersConfirmedFraud') => rows.reduce((s, x) => s + (x[k] ?? 0), 0);
     return { ordersFlagged: sum('ordersFlagged'), ordersToSend: sum('ordersToSend'), ordersProcessed: sum('ordersProcessed'), ordersConfirmedFraud: sum('ordersConfirmedFraud') };
   }
+  const withObserved = (t: PeriodTotals, byVersion: VersionDaily[]): PeriodTotals => ({
+    ...t,
+    ordersToSend: byVersion.filter((x) => x.toSend).reduce((s, x) => s + x.ordersFlagged, 0),
+    ordersObserved: byVersion.filter((x) => !x.toSend).reduce((s, x) => s + x.ordersFlagged, 0),
+  });
 
   function runs(r: MockRule, from: string, to: string): RuleRun[] {
     const out: RuleRun[] = [];
@@ -688,8 +714,12 @@ export function createMockApi(): Api {
         to,
         daily: daily(r, from, to),
         previous: daily(r, addDays(from, -len), addDays(from, -1)),
-        totals: periodTotals(daily(r, from, to)),
-        previousTotals: periodTotals(daily(r, addDays(from, -len), addDays(from, -1))),
+        totals: withObserved(periodTotals(daily(r, from, to)), versionDaily(r, from, to)),
+        previousTotals: withObserved(
+          periodTotals(daily(r, addDays(from, -len), addDays(from, -1))),
+          versionDaily(r, addDays(from, -len), addDays(from, -1)),
+        ),
+        byVersion: versionDaily(r, from, to),
         runs: runs(r, from, to),
         versions: versionTotals(r),
       };

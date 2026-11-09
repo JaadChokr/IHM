@@ -851,6 +851,25 @@ table.data tr:last-child td {
   stroke-linejoin: round;
   stroke-linecap: round;
 }
+/* Version en observation (candidate ou avant la mise en production) : pointillé. */
+.chart .line.observed {
+  stroke-dasharray: 5 4;
+}
+.chart-legend .legend-line {
+  stroke: var(--text-3);
+  stroke-width: 2;
+}
+.chart-legend .legend-line.observed {
+  stroke-dasharray: 5 4;
+}
+.chart-legend {
+  flex-wrap: wrap;
+}
+.chart-legend .legend-style {
+  font-weight: 400;
+  color: var(--text-3);
+  white-space: nowrap;
+}
 .chart .area {
   fill: var(--series-1);
   opacity: 0.08;

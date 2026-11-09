@@ -225,6 +225,18 @@ class RuleRun(Model):
     error_message: str | None = None
 
 
+class VersionDaily(Model):
+    """Commandes d'une version un jour donné, en production (to_send) ou en observation : une courbe par
+    version, pleine en production, pointillée en observation."""
+
+    date: date
+    rule_version: int
+    to_send: bool
+    orders_flagged: int
+    orders_processed: int
+    orders_confirmed_fraud: int
+
+
 class PeriodTotals(Model):
     """Chiffres d'une règle sur une période, en commandes distinctes : exacts même si deux versions ont
     remonté la même commande (la somme des jours peut la compter deux fois)."""
@@ -233,6 +245,7 @@ class PeriodTotals(Model):
     orders_to_send: int
     orders_processed: int
     orders_confirmed_fraud: int
+    orders_observed: int = 0  # commandes remontées en observation (candidate comprise)
 
 
 class PerformanceResponse(Model):
@@ -243,6 +256,8 @@ class PerformanceResponse(Model):
     previous: list[DailyPerformance]
     totals: PeriodTotals | None = None
     previous_totals: PeriodTotals | None = None
+    # Une ligne par jour, version et état (production / observation) : la courbe par version.
+    by_version: list[VersionDaily] = []
     runs: list[RuleRun]
     versions: list[VersionPerformance]
 

@@ -18,7 +18,7 @@ from typing import Any, Protocol
 from app.core import Settings, get_settings
 from app.database import Rule, RuleVersion
 from app.periods import Period
-from app.schemas import Column, DailyPerformance, RuleRun, VersionPerformance
+from app.schemas import Column, DailyPerformance, RuleRun, VersionDaily, VersionPerformance
 from app.sql_checks import mask_sql
 
 log = logging.getLogger(__name__)
@@ -85,6 +85,7 @@ class ProductionTotals:
     processed: int
     confirmed: int
     to_send: int = 0
+    observed: int = 0
 
 
 class BigQueryGateway(Protocol):
@@ -109,6 +110,10 @@ class BigQueryGateway(Protocol):
     def runs(self, rule_id: str, start: date, end: date, limit: int = 20) -> list[RuleRun]: ...
 
     def version_totals(self, rule_id: str) -> list[VersionPerformance]: ...
+
+    def version_daily(self, rule_id: str, start: date, end: date) -> list[VersionDaily]:
+        """Commandes de chaque version, par jour et par état (production / observation)."""
+        ...
 
     def production_totals(self, rules: dict[str, bool], start: date, end: date) -> list[ProductionTotals]:
         """Totaux de chaque règle sur la période, `rules` : rule_id → en production ?"""
@@ -252,6 +257,21 @@ class RealBigQueryGateway:
             for r in rows
         ]
 
+    def version_daily(self, rule_id, start, end):
+        P = self._bq.ScalarQueryParameter
+        rows = self._rows(
+            f"""SELECT run_date, rule_version, to_send,
+                       COUNT(DISTINCT order_id) AS orders_flagged,
+                       COUNT(DISTINCT IF(is_processed, order_id, NULL)) AS orders_processed,
+                       COUNT(DISTINCT IF(is_fraud, order_id, NULL)) AS orders_confirmed_fraud
+                FROM {self.ds}.v_rule_orders
+                WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end
+                GROUP BY run_date, rule_version, to_send
+                ORDER BY run_date, rule_version""",
+            [P("rule_id", "STRING", rule_id), P("start", "DATE", start), P("end", "DATE", end)],
+        )
+        return [VersionDaily.model_validate({**r, "date": r["run_date"]}) for r in rows]
+
     def version_totals(self, rule_id):
         rows = self._rows(
             f"""SELECT rule_version AS version, MIN(run_date) AS first_date, MAX(run_date) AS last_date,
@@ -289,13 +309,19 @@ class RealBigQueryGateway:
         rows = self._rows(
             # Commandes distinctes sur toute la période : exact même si deux versions ont remonté la même
             # commande à des jours différents. En production : commandes à transmettre ; sinon les autres.
-            f"""SELECT rule_id, COUNT(DISTINCT order_id) AS flagged,
-                       COUNT(DISTINCT IF(is_processed, order_id, NULL)) AS processed,
-                       COUNT(DISTINCT IF(is_fraud, order_id, NULL)) AS confirmed
-                FROM {self.ds}.v_rule_orders
-                WHERE run_date BETWEEN @start AND @end
-                  AND ((rule_id IN UNNEST(@sent_ids) AND to_send)
-                       OR (rule_id IN UNNEST(@observed_ids) AND NOT to_send))
+            # Les commandes envoyées et celles observées sont aussi comptées à part, quel que soit l'état.
+            f"""SELECT rule_id,
+                       COUNT(DISTINCT IF(kept, order_id, NULL)) AS flagged,
+                       COUNT(DISTINCT IF(kept AND is_processed, order_id, NULL)) AS processed,
+                       COUNT(DISTINCT IF(kept AND is_fraud, order_id, NULL)) AS confirmed,
+                       COUNT(DISTINCT IF(to_send, order_id, NULL)) AS to_send,
+                       COUNT(DISTINCT IF(NOT to_send, order_id, NULL)) AS observed
+                FROM (
+                  SELECT *, (rule_id IN UNNEST(@sent_ids)) = to_send AS kept
+                  FROM {self.ds}.v_rule_orders
+                  WHERE run_date BETWEEN @start AND @end
+                    AND rule_id IN UNNEST(ARRAY_CONCAT(@sent_ids, @observed_ids))
+                )
                 GROUP BY rule_id""",
             [
                 A("sent_ids", "STRING", [r for r, sent in rules.items() if sent]),
@@ -310,7 +336,8 @@ class RealBigQueryGateway:
                 r["flagged"] or 0,
                 r["processed"] or 0,
                 r["confirmed"] or 0,
-                (r["flagged"] or 0) if rules.get(r["rule_id"]) else 0,
+                r["to_send"] or 0,
+                r["observed"] or 0,
             )
             for r in rows
         ]
@@ -482,6 +509,20 @@ class FakeBigQueryGateway:
     def runs(self, rule_id, start, end, limit=20):
         return []
 
+    def version_daily(self, rule_id, start, end):
+        return [
+            VersionDaily(
+                date=d.date,
+                rule_version=d.rule_version or 0,
+                to_send=d.orders_to_send > 0,
+                orders_flagged=d.orders_flagged,
+                orders_processed=d.orders_processed,
+                orders_confirmed_fraud=d.orders_confirmed_fraud,
+            )
+            for d in self.performance.get(rule_id, [])
+            if start <= d.date <= end
+        ]
+
     def version_totals(self, rule_id):
         by: dict[int, list[DailyPerformance]] = {}
         for d in self.performance.get(rule_id, []):
@@ -510,6 +551,7 @@ class FakeBigQueryGateway:
                     sum(x.orders_processed for x in d),
                     sum(x.orders_confirmed_fraud for x in d),
                     sum(x.orders_to_send for x in d),
+                    sum(x.orders_flagged - x.orders_to_send for x in d),
                 )
             )
         return out

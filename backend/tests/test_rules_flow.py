@@ -346,6 +346,8 @@ def test_performance_par_version(client, bq):
     ]
     r = client.get(f"/rules/{rid}/performance", params={"from": str(day), "to": str(date.today())}).json()
     assert [(d["ruleVersion"], d["ordersFlagged"]) for d in r["daily"]] == [(1, 40), (2, 4)]
+    # Courbe par version : chaque version sur ses jours, avec son état (production ou observation).
+    assert [(d["ruleVersion"], d["toSend"]) for d in r["byVersion"]] == [(1, False), (2, False)]
     assert [(v["version"], v["ordersFlagged"], v["ordersConfirmedFraud"]) for v in r["versions"]] == [
         (1, 40, 6),
         (2, 10, 5),

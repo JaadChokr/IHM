@@ -200,6 +200,18 @@ export interface PeriodTotals {
   ordersToSend: number;
   ordersProcessed: number;
   ordersConfirmedFraud: number;
+  /** Commandes remontées en observation (candidate comprise). */
+  ordersObserved?: number;
+}
+
+/** Commandes d'une version un jour donné, en production (toSend) ou en observation. */
+export interface VersionDaily {
+  date: string;
+  ruleVersion: number;
+  toSend: boolean;
+  ordersFlagged: number;
+  ordersProcessed: number;
+  ordersConfirmedFraud: number;
 }
 
 export interface VersionPerformance {
@@ -231,6 +243,8 @@ export interface PerformanceResponse {
   previous: DailyPerformance[];
   totals?: PeriodTotals;
   previousTotals?: PeriodTotals;
+  /** Courbe par version : une ligne par jour, version et état. */
+  byVersion?: VersionDaily[];
   runs: RuleRun[];
   /** Indicateurs cumulés de chaque version sur toute sa période d'exécution. */
   versions: VersionPerformance[];

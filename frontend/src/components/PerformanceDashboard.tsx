@@ -1,14 +1,63 @@
 import { useMemo, useState } from 'react';
 import { api } from '../api/client';
-import type { DailyPerformance, PeriodTotals, VersionPerformance } from '../api/types';
+import type { DailyPerformance, PeriodTotals, VersionDaily, VersionPerformance } from '../api/types';
 import { addDays, daysBetween, fmtDate, fmtDateTime, fmtInt, fmtPct, isoDate } from '../lib/format';
 import { delta, MIN_PROCESSED_ORDERS, MIN_PROCESSING_RATE, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
-import { LineChart, versionColor, type Point } from './LineChart';
+import { LineChart, versionColor, type Series } from './LineChart';
 import { Alert, Spinner } from './ui';
 
 type Preset = 7 | 30 | 90 | 'all' | 'custom';
+
+/** Sans courbe par version (ancienne API) : une série par version, d'après les chiffres de la règle. */
+const fallback = (daily: DailyPerformance[]): VersionDaily[] =>
+  daily.map((d) => ({ date: d.date, ruleVersion: d.ruleVersion ?? 1, toSend: (d.ordersToSend ?? 0) > 0, ordersFlagged: d.ordersFlagged, ordersProcessed: d.ordersProcessed, ordersConfirmedFraud: d.ordersConfirmedFraud }));
+
+/**
+ * Une courbe par version sur toute la période : pleine quand elle est en production, pointillée en
+ * observation (avant sa mise en production, ou candidate à côté de la version en production). La précision
+ * ne se trace qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
+ * par une règle envoyée.
+ */
+function byVersion(dates: string[], rows: VersionDaily[]) {
+  const versions = [...new Set(rows.map((r) => r.ruleVersion))].sort((a, b) => a - b);
+  const at = new Map(dates.map((d, i) => [d, i]));
+  const volume: Series[] = [];
+  const precision: Series[] = [];
+  const markers: { date: string; label: string }[] = [];
+  for (const v of versions) {
+    const vol: Series = { version: v, values: dates.map(() => null), observed: dates.map(() => false), details: dates.map(() => undefined) };
+    const pre: Series = { version: v, values: dates.map(() => null), observed: dates.map(() => false), details: dates.map(() => undefined) };
+    const processed = dates.map(() => 0);
+    const confirmed = dates.map(() => 0);
+    const sent = dates.map(() => false);
+    for (const r of rows.filter((x) => x.ruleVersion === v)) {
+      const i = at.get(r.date);
+      if (i === undefined) continue;
+      // Un jour à cheval sur une décision (règle horaire) : les deux états s'additionnent, trait plein.
+      vol.values[i] = (vol.values[i] ?? 0) + r.ordersFlagged;
+      if (r.toSend) {
+        sent[i] = true;
+        processed[i] += r.ordersProcessed;
+        confirmed[i] += r.ordersConfirmedFraud;
+      }
+    }
+    dates.forEach((_, i) => {
+      vol.observed[i] = !sent[i];
+      if (processed[i] > 0) {
+        pre.values[i] = confirmed[i] / processed[i];
+        pre.details![i] = `${fmtInt(confirmed[i])} confirmées / ${fmtInt(processed[i])} traitées`;
+      }
+    });
+    volume.push(vol);
+    precision.push(pre);
+    // Repère au premier jour de chaque version dans la période (sauf la première courbe affichée).
+    const first = vol.values.findIndex((x) => x !== null);
+    if (first > 0 && volume.length > 1) markers.push({ date: dates[first], label: `v${v}` });
+  }
+  return { volume, precision, markers };
+}
 
 /** Remplit les jours sans ligne (aucune version en production) par des trous. */
 function fill(from: string, to: string, rows: DailyPerformance[]) {
@@ -51,24 +100,11 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
         : totals(rows);
     const cur = exact(data.totals, data.daily);
     const prev = exact(data.previousTotals, data.previous);
-    const days = fill(data.from, data.to, data.daily);
-    const volume: Point[] = days.map(({ date, row }) => ({ date, value: row ? row.ordersFlagged : null, version: row?.ruleVersion }));
-    const precision: Point[] = days.map(({ date, row }) => ({
-      date,
-      value: row && row.ordersProcessed > 0 ? row.ordersConfirmedFraud / row.ordersProcessed : null,
-      detail: row ? `${fmtInt(row.ordersConfirmedFraud)} confirmées / ${fmtInt(row.ordersProcessed)} traitées` : undefined,
-      version: row?.ruleVersion,
-    }));
-    // Un repère sur les deux courbes à chaque changement de version dans la période.
-    const markers: { date: string; label: string }[] = [];
-    let prevVersion: number | undefined;
-    for (const d of data.daily) {
-      if (d.ruleVersion !== undefined && prevVersion !== undefined && d.ruleVersion !== prevVersion) {
-        markers.push({ date: d.date, label: `v${d.ruleVersion}` });
-      }
-      if (d.ruleVersion !== undefined) prevVersion = d.ruleVersion;
-    }
-    return { cur, prev, volume, precision, markers };
+    const dates = fill(data.from, data.to, []).map((d) => d.date);
+    const { volume, precision, markers } = byVersion(dates, data.byVersion ?? fallback(data.daily));
+    const toSend = data.totals?.ordersToSend ?? 0;
+    const observed = data.totals?.ordersObserved ?? 0;
+    return { cur, prev, dates, volume, precision, markers, toSend, observed };
   }, [data, today]);
 
   if (!everInProduction) {
@@ -143,11 +179,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               label="Volume remonté"
               value={fmtInt(view.cur.flagged)}
               delta={fmtDelta(delta(view.cur.flagged, view.prev.flagged, 'relative'), 'relative')}
-              sub={
-                observing
-                  ? 'Commandes remontées en observation (rien n\'est envoyé au prestataire)'
-                  : 'Commandes envoyées au prestataire (version en production)'
-              }
+              sub={`${fmtInt(view.toSend)} envoyées au prestataire · ${fmtInt(view.observed)} remontées en observation`}
             />
             <KpiTile
               label="Taux de traitement"
@@ -188,13 +220,14 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             <div className="card-head">
               <div>
                 <h3>Volume remonté par jour</h3>
-                <p>Commandes distinctes remontées par run</p>
+                <p>Une courbe par version : trait plein en production (commandes envoyées au prestataire), pointillé en observation</p>
               </div>
             </div>
             <div className="card-pad">
               <LineChart
                 label="Volume remonté par jour"
-                points={view.volume}
+                dates={view.dates}
+                series={view.volume}
                 format={(v) => fmtInt(Math.round(v))}
                 markers={view.markers}
               />
@@ -205,13 +238,14 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             <div className="card-head">
               <div>
                 <h3>Taux de précision par jour</h3>
-                <p>Confirmées frauduleuses ÷ traitées — pas de point les jours sans commande traitée</p>
+                <p>Confirmées frauduleuses ÷ traitées, versions en production uniquement — pas de point les jours sans commande traitée</p>
               </div>
             </div>
             <div className="card-pad">
               <LineChart
                 label="Taux de précision par jour"
-                points={view.precision}
+                dates={view.dates}
+                series={view.precision}
                 format={(v) => fmtPct(v)}
                 yMax={1}
                 markers={view.markers}

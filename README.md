@@ -353,8 +353,16 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     production ; **en observation**, ses autres commandes. La plateforme compte les commandes **distinctes** :
     une commande remontée par deux versions n'est comptée qu'une fois. Une candidate n'entre donc jamais dans
     les chiffres d'une règle en production ; pour une version précise, candidate comprise, on lit le
-    comparatif des versions. Pour une règle aujourd'hui en production, ses jours d'observation n'apparaissent
-    plus sur sa courbe (ils restent dans le comparatif).
+    comparatif des versions.
+
+  **Courbes de la page règle** : une courbe **par version** sur toute la période, en **trait plein** quand elle
+  est en production (`to_send`) et en **pointillé** quand elle est en observation (avant sa mise en production,
+  ou candidate à côté de la version en production). Une candidate et la version en production se comparent
+  ainsi sur les mêmes jours ; la v1 passe du pointillé au trait plein le jour où elle est envoyée. La précision
+  n'est tracée qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
+  par une règle envoyée. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :
+  envoyées au prestataire, et remontées en observation (ils ne s'additionnent pas, une commande pouvant être
+  remontée par la version en production et par la candidate).
 
   Les chiffres du comparatif ne s'additionnent donc pas pour donner ceux de la règle ; une ligne
   d'explication l'indique sous le tableau. Les deux vues sont créées par `apply.sh` / `apply.ps1`

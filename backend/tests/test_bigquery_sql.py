@@ -28,8 +28,10 @@ def test_chiffres_de_la_regle_selon_son_etat():
     g.production_totals({"a": True, "b": False}, date(2026, 11, 1), date(2026, 11, 2))
     daily, totals = seen
     assert "to_send = @sent" in daily[0] and ("sent", "BOOL", True) in daily[1]
-    assert "rule_id IN UNNEST(@sent_ids) AND to_send" in totals[0]
-    assert "rule_id IN UNNEST(@observed_ids) AND NOT to_send" in totals[0]
+    # Une règle en production garde ses commandes à transmettre, une règle en observation les autres ;
+    # envoyées et observées sont aussi comptées à part.
+    assert "(rule_id IN UNNEST(@sent_ids)) = to_send AS kept" in totals[0]
+    assert "COUNT(DISTINCT IF(NOT to_send, order_id, NULL)) AS observed" in totals[0]
     assert ("sent_ids", "STRING", ["a"]) in totals[1] and ("observed_ids", "STRING", ["b"]) in totals[1]
     for sql, _ in seen:
-        assert "v_rule_orders" in sql and "COUNT(DISTINCT order_id)" in sql
+        assert "v_rule_orders" in sql and "COUNT(DISTINCT" in sql
