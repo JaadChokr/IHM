@@ -1,8 +1,9 @@
 """Pilotage, en lecture seule : indicateurs de performance (F6, F7) et journal d'audit (F8).
 
 Les indicateurs sont lus dans BigQuery, table rule_runs et deux vues :
-  - v_rule_orders_daily pour une règle toutes versions confondues (chaque commande comptée une fois) :
-    courbes et indicateurs de la page règle, totaux de la vue d'ensemble ;
+  - v_rule_orders pour une règle : version en production (ou seule version qui tourne), jamais la
+    candidate, en commandes distinctes ; « envoyées » = commandes marquées à transmettre (to_send).
+    Courbes et indicateurs de la page règle, totaux de la vue d'ensemble ;
   - v_rule_performance pour la comparaison des versions (chaque version mesurée en entier).
 """
 
@@ -17,7 +18,7 @@ from app.bigquery import BigQueryGateway, get_bigquery
 from app.core import ApiError, Settings, get_settings
 from app.database import AuditEvent, Rule, User, get_db
 from app.rules import derive_status, load_rule, running_version, sync_runs
-from app.schemas import AuditEventOut, ConsolidatedRow, PerformanceResponse
+from app.schemas import AuditEventOut, ConsolidatedRow, PerformanceResponse, PeriodTotals
 
 router = APIRouter(tags=["pilotage"])
 
@@ -37,15 +38,28 @@ def performance(
     load_rule(db, rule_id)
     length = (to - from_).days + 1
     prev_to = from_ - timedelta(days=1)
+    prev_from = prev_to - timedelta(days=length - 1)
     return PerformanceResponse(
         rule_id=rule_id,
         from_=from_,
         to=to,
         daily=bq.daily_performance(rule_id, from_, to),
-        previous=bq.daily_performance(rule_id, prev_to - timedelta(days=length - 1), prev_to),
+        previous=bq.daily_performance(rule_id, prev_from, prev_to),
+        totals=_totals(bq, rule_id, from_, to),
+        previous_totals=_totals(bq, rule_id, prev_from, prev_to),
         runs=bq.runs(rule_id, from_, to),
         versions=bq.version_totals(rule_id),
         latency_days=s.latency_days,
+    )
+
+
+def _totals(bq: BigQueryGateway, rule_id: str, start: date, end: date) -> PeriodTotals:
+    t = next(iter(bq.production_totals([rule_id], start, end)), None)
+    return PeriodTotals(
+        orders_flagged=t.flagged if t else 0,
+        orders_to_send=t.to_send if t else 0,
+        orders_processed=t.processed if t else 0,
+        orders_confirmed_fraud=t.confirmed if t else 0,
     )
 
 
@@ -78,6 +92,7 @@ def production(
                 ordersFlagged30d=t.flagged if t else 0,
                 ordersProcessed30d=t.processed if t else 0,
                 ordersConfirmed30d=t.confirmed if t else 0,
+                ordersToSend30d=t.to_send if t else 0,
             )
         )
     return out

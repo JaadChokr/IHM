@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { api } from '../api/client';
-import type { DailyPerformance, VersionPerformance } from '../api/types';
+import type { DailyPerformance, PeriodTotals, VersionPerformance } from '../api/types';
 import { addDays, daysBetween, fmtDate, fmtDateTime, fmtInt, fmtPct, isoDate } from '../lib/format';
 import { delta, MIN_PROCESSED_ORDERS, MIN_PROCESSING_RATE, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
@@ -43,8 +43,15 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
 
   const view = useMemo(() => {
     if (!data) return null;
-    const cur = totals(data.daily);
-    const prev = totals(data.previous);
+    // Totaux exacts du serveur (commandes distinctes : une commande remontée par deux versions compte une
+    // fois) ; à défaut, la somme des jours.
+    const exact = (t: PeriodTotals | undefined, rows: DailyPerformance[]) =>
+      t
+        ? totals([{ date: '', ordersFlagged: t.ordersFlagged, ordersProcessed: t.ordersProcessed, ordersConfirmedFraud: t.ordersConfirmedFraud }])
+        : totals(rows);
+    const cur = exact(data.totals, data.daily);
+    const prev = exact(data.previousTotals, data.previous);
+    const toSend = data.totals?.ordersToSend ?? data.daily.reduce((s, r) => s + (r.ordersToSend ?? 0), 0);
     const days = fill(data.from, data.to, data.daily);
     const volume: Point[] = days.map(({ date, row }) => ({ date, value: row ? row.ordersFlagged : null, version: row?.ruleVersion }));
     const precision: Point[] = days.map(({ date, row }) => ({
@@ -62,7 +69,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
       }
       if (d.ruleVersion !== undefined) prevVersion = d.ruleVersion;
     }
-    return { cur, prev, volume, precision, markers, incompleteFrom: addDays(today, -(data.latencyDays - 1)) };
+    return { cur, prev, toSend, volume, precision, markers, incompleteFrom: addDays(today, -(data.latencyDays - 1)) };
   }, [data, today]);
 
   if (!everInProduction) {
@@ -137,7 +144,11 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               label="Volume remonté"
               value={fmtInt(view.cur.flagged)}
               delta={fmtDelta(delta(view.cur.flagged, view.prev.flagged, 'relative'), 'relative')}
-              sub="Commandes remontées par la règle"
+              sub={
+                view.toSend > 0
+                  ? `Commandes remontées par la règle, dont ${fmtInt(view.toSend)} envoyées au prestataire`
+                  : 'Commandes remontées par la règle (aucune envoyée au prestataire sur la période)'
+              }
             />
             <KpiTile
               label="Taux de traitement"

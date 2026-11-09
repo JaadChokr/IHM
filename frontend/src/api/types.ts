@@ -49,6 +49,8 @@ export interface RuleVersion extends RuleInput {
   airflowDagId?: string;
   firstRunAt?: string;
   lastRunAt?: string;
+  /** Tourne en parallèle de la version en production, en observation, jusqu'à la décision. */
+  candidate?: boolean;
   /** Décision de l'analyste après observation : envoyée au prestataire, ou écartée. */
   decision?: 'SENT' | 'DISCARDED';
   decidedAt?: string;
@@ -186,6 +188,16 @@ export interface DailyPerformance {
   /** Version qui a tourné ce jour-là. */
   ruleVersion?: number;
   ordersFlagged: number;
+  /** Dont marquées à transmettre au prestataire (version en production). */
+  ordersToSend?: number;
+  ordersProcessed: number;
+  ordersConfirmedFraud: number;
+}
+
+/** Chiffres d'une règle sur une période, en commandes distinctes (exacts même si deux versions ont remonté la même commande). */
+export interface PeriodTotals {
+  ordersFlagged: number;
+  ordersToSend: number;
   ordersProcessed: number;
   ordersConfirmedFraud: number;
 }
@@ -217,6 +229,8 @@ export interface PerformanceResponse {
   to: string;
   daily: DailyPerformance[];
   previous: DailyPerformance[];
+  totals?: PeriodTotals;
+  previousTotals?: PeriodTotals;
   runs: RuleRun[];
   /** Indicateurs cumulés de chaque version sur toute sa période d'exécution. */
   versions: VersionPerformance[];
@@ -236,6 +250,7 @@ export interface ConsolidatedRow {
   ordersFlagged30d: number;
   ordersProcessed30d: number;
   ordersConfirmed30d: number;
+  ordersToSend30d?: number;
 }
 
 // ---------- F8 : audit ----------

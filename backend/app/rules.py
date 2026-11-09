@@ -69,38 +69,73 @@ SCHEDULE_PERIOD = {"HOURLY": timedelta(hours=1), "DAILY": timedelta(days=1), "WE
 RUNNING = ("OBSERVATION", "IN_PRODUCTION", "INACTIVE")
 
 
-def derive_status(rule: Rule, v: RuleVersion, at: datetime | None = None) -> str:
-    """Statut affiché d'une version (toutes les versions stockées ont été soumises).
+def production_version(rule: Rule) -> RuleVersion | None:
+    """Version en production : la plus récente que l'analyste a décidé d'envoyer au prestataire. Mettre
+    une version en production retire la décision des précédentes (voir `decide`)."""
+    return next((v for v in reversed(rule.versions) if v.decision == "SENT"), None)
 
-    Cycle : soumise → en observation (Airflow l'exécute, rien n'est envoyé au prestataire) → en
-    production (l'analyste a décidé de l'envoyer) ou écartée. L'exécution se constate dans
-    `rule_runs` (first_run_at / last_run_at) ; la décision est un geste de l'analyste.
+
+def registry_versions(rule: Rule) -> list[tuple[RuleVersion, bool]]:
+    """Versions qu'Airflow exécute (lignes de rules_registry), avec pour chacune « candidate ? ».
+
+    - Pas de version en production : la dernière version non écartée, seule (une nouvelle version
+      remplace la précédente, rien n'est envoyé de toute façon).
+    - Une version en production : elle continue de tourner ; une version plus récente non écartée tourne
+      à côté comme candidate, en observation, jusqu'à la décision (mise en production ou écart).
+    """
+    prod = production_version(rule)
+    latest = next((v for v in reversed(rule.versions) if v.decision != "DISCARDED"), None)
+    if latest is None:
+        return []
+    if prod is None:
+        return [(latest, False)]
+    if latest.version > prod.version:
+        return [(prod, False), (latest, True)]
+    return [(prod, False)]
+
+
+def is_candidate(rule: Rule, v: RuleVersion) -> bool:
+    return any(w.version == v.version and cand for w, cand in registry_versions(rule))
+
+
+def _run_status(v: RuleVersion, at: datetime | None) -> str | None:
+    """Statut constaté dans rule_runs : None si la version n'a jamais tourné."""
+    if not (v.first_run_at and v.last_run_at):
+        return None
+    idle = (at or now()) - as_utc(v.last_run_at)
+    if idle > SCHEDULE_PERIOD.get(v.schedule, timedelta(days=1)) * INACTIVE_AFTER_PERIODS:
+        return "INACTIVE"
+    return "IN_PRODUCTION" if v.decision == "SENT" else "OBSERVATION"
+
+
+def derive_status(rule: Rule, v: RuleVersion, at: datetime | None = None) -> str:
+    """Statut affiché d'une version (toutes les versions stockées ont été publiées).
+
+    Cycle : publiée → en observation (Airflow l'exécute, rien n'est envoyé au prestataire) → en
+    production (l'analyste a décidé de l'envoyer) ou écartée. Une nouvelle version d'une règle en
+    production tourne en parallèle comme candidate, sans remplacer la version en production. L'exécution
+    se constate dans `rule_runs` (first_run_at / last_run_at) ; la décision est un geste de l'analyste.
     """
     if v.decision == "DISCARDED":
         return "DISCARDED"
-    # Une version écartée ne remplace rien : la précédente reprend sa place dans rules_registry.
+    if any(w.version == v.version for w, _ in registry_versions(rule)):
+        return _run_status(v, at) or "SUBMITTED"
+    # Hors de rules_registry : une version plus récente a pris sa place.
     newer = [w for w in rule.versions if w.version > v.version and w.decision != "DISCARDED"]
     if any(w.first_run_at for w in newer):
-        return "REPLACED"  # une version plus récente tourne à sa place
-    if v.first_run_at and v.last_run_at:
-        idle = (at or now()) - as_utc(v.last_run_at)
-        limit = SCHEDULE_PERIOD.get(v.schedule, timedelta(days=1)) * INACTIVE_AFTER_PERIODS
-        if idle > limit:
-            return "INACTIVE"
-        return "IN_PRODUCTION" if v.decision == "SENT" else "OBSERVATION"
-    if newer:
-        return "REPLACED"  # une version plus récente a été soumise avant que celle-ci ne tourne
-    return "SUBMITTED"
+        return "REPLACED"
+    # La nouvelle version n'a pas encore tourné : celle-ci a pu tourner jusque-là.
+    return _run_status(v, at) or ("REPLACED" if newer else "SUBMITTED")
 
 
 def running_version(rule: Rule) -> RuleVersion | None:
-    """Version exécutée par Airflow (en observation, en production ou inactive), s'il y en a une."""
-    return next((v for v in rule.versions if derive_status(rule, v) in RUNNING), None)
-
-
-def registry_version(rule: Rule) -> RuleVersion | None:
-    """Version portée par la ligne de la règle dans rules_registry : la dernière non écartée."""
-    return next((v for v in reversed(rule.versions) if v.decision != "DISCARDED"), None)
+    """Version qui représente la règle à l'exécution (en observation, en production ou inactive) : la
+    version en production si elle tourne, sinon la plus récente qui tourne. Jamais la candidate."""
+    for v, candidate in registry_versions(rule):
+        if not candidate and derive_status(rule, v) in RUNNING:
+            return v
+    running = (v for v in reversed(rule.versions) if derive_status(rule, v) in RUNNING)
+    return next((v for v in running if not is_candidate(rule, v)), None)
 
 
 def withdrawable(rule: Rule, user: User) -> bool:
@@ -133,6 +168,7 @@ def _version_out(v: RuleVersion, rule: Rule, users: dict[str, User]) -> RuleVers
         airflow_dag_id=v.airflow_dag_id,
         first_run_at=v.first_run_at,
         last_run_at=v.last_run_at,
+        candidate=is_candidate(rule, v),
     )
 
 
@@ -216,18 +252,17 @@ def validate(db: Session, bq: BigQueryGateway, data: RuleInput, rule_id: str | N
 
 
 def sync_registry(bq: BigQueryGateway, rule: Rule) -> None:
-    """Aligne la ligne de la règle dans `rules_registry` sur sa dernière version non écartée.
+    """Aligne les lignes de la règle dans `rules_registry` sur les versions qu'Airflow doit exécuter.
 
-    Une ligne par règle : la requête qu'Airflow exécute au run suivant, et `send_to_provider`, qui dit
-    si ses commandes partent chez le prestataire (vrai seulement après la décision de l'analyste). Une
-    nouvelle version remplace donc la précédente en observation : l'envoi est suspendu jusqu'à décision.
-    L'historique reste dans `rule_versions` ; les brouillons n'y vont jamais.
+    Une ligne par version qui tourne (clé rule_id, version) : la version en production, et à côté une
+    éventuelle candidate. `send_to_provider` dit si ses commandes sont à transmettre au prestataire (vrai
+    seulement pour la version en production) ; `candidate` la distingue. L'historique reste dans
+    `rule_versions` ; les brouillons n'y vont jamais.
     """
-    v = registry_version(rule)
-    if v:
-        bq.upsert_rule(rule, v, derive_status(rule, v), send_to_provider=v.decision == "SENT")
-    else:
-        bq.delete_rule(rule.rule_id)
+    bq.set_registry(
+        rule,
+        [(v, derive_status(rule, v), v.decision == "SENT", cand) for v, cand in registry_versions(rule)],
+    )
 
 
 def sync_runs(db: Session, bq: BigQueryGateway) -> int:
@@ -333,7 +368,7 @@ DECISIONS = {
     "discard": (("SUBMITTED", "OBSERVATION", "INACTIVE"), "DISCARDED", "RULE_DISCARD", "RULE_DISCARDED"),
 }
 DECISION_LABEL = {
-    "send": "Envoi au prestataire décidé",
+    "send": "Mise en production : envoi au prestataire décidé",
     "suspend": "Envoi au prestataire suspendu : retour en observation",
     "discard": "Version écartée : Airflow ne l'exécute plus",
 }
@@ -347,14 +382,24 @@ def decide(
     db: Session = Depends(get_db),
     bq: BigQueryGateway = Depends(get_bigquery),
 ) -> RuleDetail:
-    """Décision de l'analyste sur la dernière version : l'envoyer au prestataire, suspendre l'envoi,
-    ou l'écarter. rules_registry est mis à jour ; le DAG en tient compte au run suivant."""
+    """Décision de l'analyste : mettre la dernière version en production (elle prend la place de la
+    version en production, qui s'arrête), l'écarter, ou suspendre l'envoi de la version en production.
+    rules_registry est mis à jour ; le DAG en tient compte au run suivant."""
     rule = load_rule(db, rule_id)
-    cur = rule.versions[-1]
+    # Envoyer / écarter : la dernière version (candidate ou seule). Suspendre : la version en production.
+    cur = production_version(rule) if body.action == "suspend" else rule.versions[-1]
+    if cur is None:
+        raise ApiError(409, "Action impossible : aucune version n'est en production.", "BAD_STATUS")
     allowed, decision, action, event = DECISIONS[body.action]
     status = derive_status(rule, cur)
     if status not in allowed or (body.action == "discard" and cur.decision == "SENT"):
         raise ApiError(409, f"Action impossible : la v{cur.version} est « {status} ».", "BAD_STATUS")
+    if body.action == "send":
+        # Une seule version en production : la précédente s'arrête au run suivant (sa décision est retirée,
+        # l'historique reste dans le journal d'audit).
+        for w in rule.versions:
+            if w is not cur and w.decision == "SENT":
+                w.decision = None
     cur.decision = decision
     cur.decided_at, cur.decided_by = now(), user.matricule
     record_audit(db, user, action, cur, DECISION_LABEL[body.action])

@@ -43,7 +43,7 @@ def test_parcours_complet_brouillon_test_soumission(client, bq):
     rule = r.json()
     assert (rule["ruleId"], rule["version"], rule["status"]) == (rid, 1, "SUBMITTED")
     assert rule["submittedByName"] == "Camille Martin"
-    assert bq.registry == {rid: (1, "SUBMITTED", False)}  # le brouillon n'a jamais été publié
+    assert bq.registry == {rid: [(1, "SUBMITTED", False, False)]}  # le brouillon n'a jamais été publié
     assert client.get("/drafts").json() == []  # le brouillon est devenu la v1
 
     # Les tests du brouillon suivent la version ; les lignes ne sont jamais persistées.
@@ -233,13 +233,13 @@ def test_statuts_deduits_des_runs_airflow(client, bq):
     assert client.post("/internal/sync-runs").json() == {"rulesUpdated": 1}
     detail = client.get(f"/rules/{rid}").json()
     assert detail["status"] == "OBSERVATION" and detail["airflowDagId"] == "fraud_rule_v1"
-    assert bq.registry == {rid: (1, "OBSERVATION", False)}
+    assert bq.registry == {rid: [(1, "OBSERVATION", False, False)]}
     assert [r["ruleId"] for r in client.get("/performance/production").json()] == [rid]
 
     # L'analyste décide de l'envoyer au prestataire : rules_registry le dit au DAG.
     d = client.post(f"/rules/{rid}/decision", json={"action": "send"}).json()
     assert (d["status"], d["decision"], d["decidedByName"]) == ("IN_PRODUCTION", "SENT", "Camille Martin")
-    assert bq.registry == {rid: (1, "IN_PRODUCTION", True)}
+    assert bq.registry == {rid: [(1, "IN_PRODUCTION", True, False)]}
 
     # Plus de run depuis 4 jours pour une règle quotidienne : inactive.
     bq.stats = [RunStats(rid, 1, now - timedelta(days=10), now - timedelta(days=4), "fraud_rule_v1")]
@@ -249,18 +249,32 @@ def test_statuts_deduits_des_runs_airflow(client, bq):
     assert client.post("/internal/sync-runs").json() == {"rulesUpdated": 0}
     assert client.get("/performance/production").json()[0]["status"] == "INACTIVE"
 
-    # Une v2 est soumise : elle remplace la v1 dans rules_registry, l'envoi est suspendu jusqu'à décision.
+    # Une v2 est publiée : la v1, en production, continue de tourner et d'être envoyée ; la v2 tourne à
+    # côté comme candidate, sans envoi.
     _submit(client, {**RULE, "sqlQuery": SQL + "\n  AND o.item_count > 1"}, rid)
     d = client.get(f"/rules/{rid}").json()
-    assert (d["status"], d["productionVersion"]) == ("SUBMITTED", 1)
-    assert bq.registry == {rid: (2, "SUBMITTED", False)}
+    assert (d["status"], d["productionVersion"], d["candidate"]) == ("SUBMITTED", 1, True)
+    assert bq.registry == {rid: [(1, "INACTIVE", True, False), (2, "SUBMITTED", False, True)]}
 
-    # La v2 démarre : la v1 est remplacée, la v2 est en observation.
-    bq.stats.append(RunStats(rid, 2, now, now, "fraud_rule_v2"))
+    # La v2 démarre : en observation, en parallèle de la v1 toujours en production.
+    bq.stats = [
+        RunStats(rid, 1, now - timedelta(days=10), now, "fraud_rule_v1"),
+        RunStats(rid, 2, now, now, "d"),
+    ]
     client.post("/internal/sync-runs")
     d = client.get(f"/rules/{rid}").json()
-    assert [v["status"] for v in d["versions"]] == ["OBSERVATION", "REPLACED"]
-    assert bq.registry == {rid: (2, "OBSERVATION", False)}
+    assert [v["status"] for v in d["versions"]] == ["OBSERVATION", "IN_PRODUCTION"]
+    assert bq.registry == {rid: [(1, "IN_PRODUCTION", True, False), (2, "OBSERVATION", False, True)]}
+    # Les totaux de la règle restent ceux de la version en production.
+    assert client.get("/performance/production").json()[0]["version"] == 1
+
+    # Mise en production de la v2, en un geste : elle prend la place de la v1, qui s'arrête.
+    d = client.post(f"/rules/{rid}/decision", json={"action": "send"}).json()
+    assert [(v["status"], v["decision"]) for v in d["versions"]] == [
+        ("IN_PRODUCTION", "SENT"),
+        ("REPLACED", None),
+    ]
+    assert bq.registry == {rid: [(2, "IN_PRODUCTION", True, False)]}
 
 
 def test_ecarter_une_v2_en_observation_remet_la_v1_envoyee(client, bq):
@@ -276,8 +290,8 @@ def test_ecarter_une_v2_en_observation_remet_la_v1_envoyee(client, bq):
     # Envoyer exige une version en observation ; on ne peut pas écarter une version envoyée.
     d = client.post(f"/rules/{rid}/decision", json={"action": "discard"}).json()
     assert [v["status"] for v in d["versions"]][0] == "DISCARDED"
-    # La ligne revient à la v1, toujours envoyée au prestataire.
-    assert bq.registry == {rid: (1, "IN_PRODUCTION", True)}
+    # La v1 n'a jamais cessé de tourner : elle reste seule, toujours envoyée au prestataire.
+    assert bq.registry == {rid: [(1, "IN_PRODUCTION", True, False)]}
     r = client.post(f"/rules/{rid}/decision", json={"action": "send"})
     assert r.status_code == 409 and r.json()["code"] == "BAD_STATUS"
     actions = [e["action"] for e in client.get("/audit", params={"ruleId": rid}).json()]
@@ -293,7 +307,7 @@ def test_suspendre_l_envoi(client, bq):
     # Une version qui n'a pas tourné ne peut pas être envoyée.
     client.post(f"/rules/{rid}/decision", json={"action": "send"})
     d = client.post(f"/rules/{rid}/decision", json={"action": "suspend"}).json()
-    assert d["status"] == "OBSERVATION" and bq.registry[rid] == (1, "OBSERVATION", False)
+    assert d["status"] == "OBSERVATION" and bq.registry[rid] == [(1, "OBSERVATION", False, False)]
 
 
 def test_version_qui_a_tourne_reste_figee(client, bq):
@@ -351,10 +365,11 @@ def test_reprise_d_une_v2_remet_la_v1_dans_rules_registry(client, bq):
     bq.stats = [RunStats(rid, 1, now, now, "fraud_rule_v1")]
     client.post("/internal/sync-runs")
     _submit(client, {**RULE, "description": "v2"}, rid)
-    assert bq.registry == {rid: (2, "SUBMITTED", False)}
+    # La v1 n'est pas en production : la v2 la remplace (rien n'est envoyé de toute façon).
+    assert bq.registry == {rid: [(2, "SUBMITTED", False, False)]}
     # La v2 n'a jamais tourné : son auteur la reprend, la ligne revient à la v1 qui tourne toujours.
     client.post("/drafts", json={**RULE, "description": "v2 corrigée", "ruleId": rid})
-    assert bq.registry == {rid: (1, "OBSERVATION", False)}
+    assert bq.registry == {rid: [(1, "OBSERVATION", False, False)]}
 
 
 def test_execution_compte_les_commandes_deja_remontees_par_une_autre_regle(client, bq):
@@ -374,3 +389,21 @@ def test_apercu_contient_toutes_les_colonnes_de_la_requete(client):
     ex = client.post("/query/execute", json={"sql": sql}).json()
     assert ex["columns"] == ["order_id", "amount_eur", "compte_cree_le"]
     assert set(ex["rows"][0]) == {"order_id", "amount_eur", "compte_cree_le"}
+
+
+def test_candidate_mise_en_production_seulement_apres_un_run(client, bq):
+    login(client)
+    rid = _submit(client)
+    now = datetime.now(UTC)
+    bq.stats = [RunStats(rid, 1, now, now, "d")]
+    client.post("/internal/sync-runs")
+    client.post(f"/rules/{rid}/decision", json={"action": "send"})
+    _submit(client, {**RULE, "description": "v2"}, rid)
+    # La candidate n'a pas encore tourné : pas de mise en production à l'aveugle.
+    r = client.post(f"/rules/{rid}/decision", json={"action": "send"})
+    assert r.status_code == 409 and r.json()["code"] == "BAD_STATUS"
+    # Suspendre vise la version en production, pas la candidate : la v1 passe en observation et la
+    # v2, n'ayant plus de version en production à côté, tourne seule à sa place.
+    d = client.post(f"/rules/{rid}/decision", json={"action": "suspend"}).json()
+    assert [v["decision"] for v in d["versions"]] == [None, None]
+    assert bq.registry == {rid: [(2, "SUBMITTED", False, False)]}

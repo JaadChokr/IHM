@@ -26,7 +26,7 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   └── tests/           pytest (SQLite en mémoire + BigQuery factice)
 ├── infra/
 │   ├── airflow/         DAG de référence : un DAG par fréquence, une tâche par règle
-│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), v_rule_performance, v_rule_orders_daily
+│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), v_rule_performance, v_rule_orders
 │   └── cloudbuild.yaml  build → Artifact Registry → Cloud Run (+ job de migration)
 ├── docker-compose.yml   environnement local complet (PostgreSQL + API + front)
 ├── .github/workflows/   CI : typecheck, tests, lint, migrations sur PostgreSQL, build des images
@@ -239,7 +239,7 @@ powershell -ExecutionPolicy Bypass -File infra\bigquery\apply.ps1
 navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (Cloud Run) ──► Cloud SQL (état applicatif)
                                                            │
                                                            └──► BigQuery : dry-run / tests, rules_registry,
-                                                                v_rule_performance, v_rule_orders_daily,
+                                                                v_rule_performance, v_rule_orders,
                                                                 rule_runs  ◄── Airflow
 ```
 
@@ -252,9 +252,10 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 ## Décisions prises dans ce squelette — à valider
 
 - **Q1, base applicative** : PostgreSQL (recommandation du PRD §8.3). L'exposition à l'équipe data se fait par
-  `rules_registry` dans BigQuery, alimentée à l'écriture (`upsert_rule` dans `backend/app/bigquery.py`, mode `real`).
-  **Une ligne par règle**, mise à jour à chaque publication (MERGE sur `rule_id`) : l'historique des versions vit
-  dans `rule_versions`, côté plateforme. Si vous choisissez
+  `rules_registry` dans BigQuery, alimentée à l'écriture (`set_registry` dans `backend/app/bigquery.py`, mode `real`).
+  **Une ligne par version qu'Airflow exécute** (clé `rule_id, version`, MERGE à chaque publication et décision) :
+  au plus deux par règle, la version en production et une candidate. L'historique des versions vit dans
+  `rule_versions`, côté plateforme, qui porte toute la logique des versions ; le DAG ne fait qu'exécuter les lignes. Si vous choisissez
   une vue fédérée `EXTERNAL_QUERY`, cette synchronisation devient inutile.
 - **Cycle de vie (écart au PRD F5 et §4.2)** : **pas d'étape de validation**. L'analyste publie lui-même sa
   règle, qui part en observation ; l'équipe data n'agit pas sur la plateforme et n'exploite que les DAG. Les gestes
@@ -270,11 +271,20 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     le run suivant le DAG marque ses commandes à transmettre (`to_send`) pour le script d'envoi. « Suspendre l'envoi » la ramène en observation ;
   - *Écartée* : l'analyste a décidé de ne pas l'envoyer ; elle sort de `rules_registry` et la version
     précédente reprend sa place (avec son envoi, si elle était envoyée) ;
-  - *Inactive depuis X* : plus de run depuis 3 périodes (3 h, 3 jours ou 3 semaines selon la fréquence) ;
+  - *Inactive depuis X* : plus de run réussi depuis 3 périodes (3 h, 3 jours ou 3 semaines selon la fréquence) ;
   - *Remplacée* : une version plus récente a été publiée ou tourne à sa place.
 
-  Une nouvelle version d'une règle envoyée la **remplace en observation** : l'envoi au prestataire est
-  suspendu jusqu'à la décision sur la nouvelle version. Les décisions sont tracées dans le journal d'audit
+  **Version candidate** : une nouvelle version d'une règle **en production ne la remplace pas**. Elle tourne
+  à côté comme *candidate*, en observation, sans envoi, pendant que la version en production continue de
+  tourner et d'être envoyée. Les deux sont ainsi comparées sur les mêmes périodes et les mêmes commandes. Après
+  au moins un run de la candidate, l'analyste choisit :
+  - « **Mettre en production** » : en un geste, la candidate prend la place de la version en production, qui
+    s'arrête au run suivant (pas de doublon chez le prestataire, pas de trou) ;
+  - « **Écarter** » : la candidate s'arrête, la version en production continue ;
+  - « Suspendre l'envoi » de la version en production : la candidate tourne alors seule, en observation.
+
+  Une règle sans version en production (encore en observation) n'a pas de candidate : une nouvelle version
+  remplace simplement la précédente, puisque rien n'est envoyé. Les décisions sont tracées dans le journal d'audit
   (`RULE_SEND_TO_PROVIDER`, `RULE_SUSPEND_SENDING`, `RULE_DISCARD`) et peuvent être notifiées à l'équipe data pour information. Une table
   `rules_registry` existante reçoit la colonne par `infra/bigquery/07_rules_registry_send.sql`.
 
@@ -293,9 +303,12 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 
   **Contrat côté Airflow, à valider avec l'équipe data** : **un DAG par fréquence** (`fraud_rules_hourly`,
   `fraud_rules_daily`, `fraud_rules_weekly`). À chaque exécution, il lit dans `rules_registry` les règles de sa
-  fréquence (une ligne par règle : sa dernière version non écartée) et lance une tâche par règle (mappage
-  dynamique d'Airflow) : une règle en échec ne bloque pas les autres et se relance seule (2 nouvelles
-  tentatives). La requête est exécutée telle quelle, sans être recopiée, avec pour seuls paramètres les bornes
+  fréquence (une ligne par version à exécuter : la version en production et une éventuelle candidate) et lance
+  une tâche par ligne (mappage dynamique d'Airflow) : une règle en échec ne bloque pas les autres et se relance
+  seule (2 nouvelles tentatives). L'identifiant de run d'une tâche contient la version, puisqu'une règle peut
+  tourner en deux versions dans le même run. Un seul run à la fois par DAG (`max_active_runs=1`) : deux runs
+  simultanés d'une même règle, lors d'un rattrapage, passeraient tous deux le dédoublonnage avant que l'autre
+  ait écrit. La requête est exécutée telle quelle, sans être recopiée, avec pour seuls paramètres les bornes
   de la période du run (voir « Période du run »). Le DAG écrit dans `rule_runs` la version exécutée et son
   `airflow_dag_id` : c'est ce qui permet à la plateforme d'afficher quelle version tourne. Une règle publiée,
   nouvelle ou nouvelle version, tourne donc **dès le run suivant, sans aucune action de l'équipe data** ; une
@@ -309,35 +322,41 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `rule_alerts` que les commandes que *cette version* n'a jamais remontées : une requête peut relire les mêmes
   jours (fenêtre glissante, règle horaire sur la veille) sans doublon, une fenêtre un peu plus large que la
   fréquence rattrape d'elle-même un run manqué, et chaque version est mesurée sur tout ce qu'elle trouve (une
-  v2 n'est pas amputée de ce que la v1 avait déjà remonté, sinon le comparatif serait faussé). Pour l'envoi, en
-  revanche, une commande n'est marquée à transmettre qu'une fois par *règle*, toutes versions confondues.
+  v2 n'est pas amputée de ce que la v1 avait déjà remonté, sinon le comparatif serait faussé). Le DAG ne fait
+  aucun autre dédoublonnage : le prestataire est protégé par le script d'envoi, et les chiffres d'une règle
+  comptent les commandes distinctes.
 
   **Envoi au prestataire** : le DAG n'envoie rien. Au moment du run, il marque chaque commande écrite dans
   `rule_alerts` :
-  - `to_send` (« à transmettre ») est vrai si la règle est en production à ce run (`send_to_provider` de
-    `rules_registry`) et ne l'avait jamais marquée, toutes versions confondues. La décision est figée au moment
-    du run : passer en production n'envoie pas le stock remonté en observation, suspendre l'envoi ne bloque pas
-    ce qui était déjà marqué, et passer à la v2 ne remarque pas les commandes de la v1 ;
+  - `to_send` (« à transmettre ») recopie `send_to_provider` de la ligne de `rules_registry` : vrai si la
+    version est en production à ce run. La décision est figée au moment du run : passer en production n'envoie
+    pas le stock remonté en observation, et suspendre l'envoi ne bloque pas ce qui était déjà marqué. Une
+    commande remontée par la v1 puis par la v2 est marquée par les deux ; le script ne l'envoie qu'une fois ;
+  - `candidate` recopie la colonne du même nom : commande remontée par une version candidate ;
   - `sent_at` (date de transmission) reste vide ; c'est le **script d'envoi externe** qui le renseigne.
 
   Le script lit les lignes `to_send AND sent_at IS NULL`, les insère dans la base du prestataire en
-  dédoublonnant par commande, toutes règles confondues (le prestataire ne reçoit jamais deux fois la même
-  commande), puis renseigne `sent_at`. Une nouvelle tentative du DAG efface et réécrit les lignes de son run
+  dédoublonnant par commande, toutes règles et versions confondues (le prestataire ne reçoit jamais deux fois la
+  même commande), puis renseigne `sent_at` sur **toutes** les lignes en attente, y compris celles qu'il écarte
+  parce que la commande est déjà partie (sinon il les relirait à chaque passage). Une nouvelle tentative du DAG efface et réécrit les lignes de son run
   pas encore transmises, et garde celles qui le sont. `rule_runs.rows_to_send` donne, par run, le nombre de
-  commandes marquées. Des tables existantes reçoivent `to_send`, `sent_at` et `rows_to_send` par
+  commandes marquées. Des tables existantes reçoivent `to_send`, `candidate`, `sent_at` et `rows_to_send` par
   `infra/bigquery/03_rule_upgrade_suivi.sql` ; les anciennes colonnes `sent_to_provider` et `rows_sent` ne
   sont plus écrites (le script indique comment les supprimer).
 
-  **Deux vues d'indicateurs**, pour ne pas compter deux fois une commande relue par une nouvelle version :
+  **Deux vues d'indicateurs** :
   - `v_rule_performance` (une ligne par règle, version et jour) sert au **comparatif des versions** : chaque
-    version y garde toutes ses commandes, y compris celles déjà remontées par la précédente ;
-  - `v_rule_orders_daily` (une ligne par règle et par jour) sert aux **chiffres de la règle** toutes versions
-    confondues : courbes et indicateurs de la page règle, totaux sur 30 jours de la vue d'ensemble. Chaque
-    commande y est comptée une seule fois, au jour où la règle l'a remontée pour la première fois.
+    version y garde toutes ses commandes, candidate comprise, y compris celles déjà remontées par une autre
+    version ;
+  - `v_rule_orders` (une ligne par commande et par version, avec le retour du prestataire) sert aux **chiffres
+    de la règle** : courbes et indicateurs de la page règle, totaux sur 30 jours. La plateforme y compte les
+    commandes **distinctes** des versions non candidates (« remontées ») et des commandes `to_send`
+    (« envoyées au prestataire ») : une commande remontée par deux versions n'est comptée qu'une fois, et la
+    candidate n'entre pas dans les chiffres de la règle tant qu'elle n'est pas en production.
 
   Les chiffres du comparatif ne s'additionnent donc pas pour donner ceux de la règle ; une ligne
   d'explication l'indique sous le tableau. Les deux vues sont créées par `apply.sh` / `apply.ps1`
-  (`04_v_rule_performance.sql`, `05_v_rule_orders_daily.sql`).
+  (`04_v_rule_performance.sql`, `05_v_rule_orders.sql`, qui supprime l'ancienne `v_rule_orders_daily`).
 
   **Période du run (`@period_start` / `@period_end`)** : Airflow passe à la requête les bornes `[début, fin[`
   de l'intervalle du run (`data_interval_start` / `data_interval_end`, TIMESTAMP), calées sur le cron du DAG en
@@ -428,4 +447,4 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   La topologie exacte (load balancer interne, routage `/api`) reste à arbitrer.
 - **Valeurs provisoires** : typologies de fraude (Q4, `frontend/src/lib/format.ts`),
   colonnes de la table de feedback (Q2, `infra/bigquery/04_v_rule_performance.sql` et
-  `05_v_rule_orders_daily.sql`).
+  `05_v_rule_orders.sql`).

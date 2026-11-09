@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_alerts` (
   -- À transmettre au prestataire, décision figée au moment du run par le DAG : vrai si la règle était en
   -- production (rules_registry.send_to_provider) et ne l'avait jamais marquée, toutes versions confondues.
   to_send      BOOL,
+  -- Recopié de rules_registry : commande remontée par une version candidate (en parallèle de la version
+  -- en production). Exclue des chiffres de la règle, comptée dans le comparatif des versions.
+  candidate    BOOL,
   -- Date de transmission, renseignée par le script d'envoi ; vide tant que la commande n'est pas partie.
   -- Le script lit les lignes « to_send AND sent_at IS NULL » et dédoublonne par commande, toutes règles
   -- confondues.

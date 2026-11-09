@@ -9,6 +9,8 @@ export interface MockRule {
    * du dernier run quand le DAG s'est arrêté. C'est d'ici que se déduisent les statuts.
    */
   productionSince: Record<number, string>;
+  /** Versions déjà envoyées au prestataire, même si une version plus récente les a remplacées depuis. */
+  wasSent?: number[];
   productionUntil: Record<number, string>;
   /** Comportement simulé des indicateurs. */
   profile?: { dailyVolume: number; processingRate: number; precision: number; brokenSinceDays?: number };

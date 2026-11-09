@@ -96,8 +96,9 @@ export function RuleDetailPage() {
         {flash === 'submitted' && (
           <Alert kind="success" title={`v${r.version} publiée.`}>
             Airflow l'exécutera au prochain run du DAG {{ DAILY: 'quotidien', HOURLY: 'horaire', WEEKLY: 'hebdomadaire' }[r.schedule]}, d'abord en observation :
-            ses commandes ne seront envoyées au prestataire qu'après votre décision. Vous pouvez encore la modifier tant qu'Airflow
-            ne l'a pas exécutée : elle redeviendra alors votre brouillon.
+            ses commandes ne seront envoyées au prestataire qu'après votre décision.
+            {r.candidate && r.productionVersion && ` La v${r.productionVersion} reste en production pendant ce temps : elle continue de tourner et d'être envoyée.`}{' '}
+            Vous pouvez encore la modifier tant qu'Airflow ne l'a pas exécutée : elle redeviendra alors votre brouillon.
           </Alert>
         )}
         <DecisionPanel r={r} onChange={rule.setData} />
@@ -113,10 +114,15 @@ export function RuleDetailPage() {
             reprendra son statut dès que les runs reprendront.
           </Alert>
         )}
-        {r.productionVersion && (
+        {r.productionVersion && !r.candidate && (
           <Alert kind="info" title={`La v${r.productionVersion} est encore exécutée par Airflow.`}>
-            La v{r.version}, publiée, la remplacera au prochain run, en observation : l'envoi au prestataire est suspendu jusqu'à votre
-            décision sur la v{r.version}.
+            La v{r.version}, publiée, la remplacera au prochain run, en observation, jusqu'à votre décision sur la v{r.version}.
+          </Alert>
+        )}
+        {r.candidate && r.productionVersion && r.status === 'SUBMITTED' && (
+          <Alert kind="info" title={`La v${r.version} tournera à côté de la v${r.productionVersion}, en production.`}>
+            Dès le prochain run, Airflow exécutera les deux versions : la v{r.productionVersion} continue d'être envoyée au prestataire, la
+            v{r.version} est observée sans envoi. Vous pourrez la mettre en production après son premier run.
           </Alert>
         )}
       </div>
@@ -307,6 +313,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                   </td>
                   <td>
                     <StatusBadge status={v.status} lastRunAt={v.lastRunAt} />
+                    {v.candidate && <div className="small muted">candidate, en parallèle de la production</div>}
                   </td>
                   <td className="small">{fmtDateTime(v.createdAt)}</td>
                   <td className="small">
@@ -434,22 +441,32 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
       setBusy(false);
     }
   };
+  const prod = r.candidate ? r.productionVersion : undefined;
   const CONFIRM: Record<DecisionAction, { title: string; text: string; label: string; danger?: boolean }> = {
-    send: {
-      title: `Envoyer la v${r.version} au prestataire ?`,
-      text: 'Ses commandes lui seront transmises dès le prochain run Airflow.',
-      label: "Confirmer l'envoi",
-    },
+    send: prod
+      ? {
+          title: `Mettre la v${r.version} en production à la place de la v${prod} ?`,
+          text: `Dès le prochain run Airflow, ses commandes seront transmises au prestataire et la v${prod} s'arrêtera.`,
+          label: 'Mettre en production',
+        }
+      : {
+          title: `Envoyer la v${r.version} au prestataire ?`,
+          text: 'Ses commandes lui seront transmises dès le prochain run Airflow.',
+          label: "Confirmer l'envoi",
+        },
     suspend: {
-      title: `Suspendre l'envoi de la v${r.version} ?`,
-      text: "Airflow continue de l'exécuter, mais ses commandes ne sont plus transmises au prestataire.",
+      title: `Suspendre l'envoi de la v${prod ?? r.version} ?`,
+      text: prod
+        ? `Ses commandes ne seront plus transmises au prestataire. La v${r.version}, candidate, tournera alors seule, en observation, à la place de la v${prod}.`
+        : "Airflow continue de l'exécuter, mais ses commandes ne sont plus transmises au prestataire.",
       label: 'Suspendre',
       danger: true,
     },
     discard: {
       title: `Écarter la v${r.version} ?`,
-      text:
-        r.versionCount > 1
+      text: prod
+        ? `Airflow ne l'exécutera plus ; la v${prod} reste en production.`
+        : r.versionCount > 1
           ? "Airflow ne l'exécutera plus ; la version précédente reprend sa place (et son envoi au prestataire, si elle était envoyée)."
           : "Airflow ne l'exécutera plus. Vous pourrez toujours en créer une nouvelle version.",
       label: 'Écarter',
@@ -458,7 +475,30 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
   };
 
   let panel: ReactNode = null;
-  if (r.status === 'OBSERVATION') {
+  if (r.status === 'OBSERVATION' && prod) {
+    panel = (
+      <div className="decision-card observing">
+        <div>
+          <strong>Candidate en observation{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}</strong>
+          <p>
+            Airflow exécute la v{r.version} à côté de la v{prod}, qui reste en production et continue d'être envoyée. Comparez-les dans
+            l'onglet Versions, sur la même période, puis décidez.
+          </p>
+        </div>
+        <div className="decision-actions">
+          <button type="button" className="btn btn-ghost" onClick={() => setConfirming('suspend')} disabled={busy}>
+            Suspendre l'envoi de la v{prod}
+          </button>
+          <button type="button" className="btn" onClick={() => setConfirming('discard')} disabled={busy}>
+            Écarter
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => setConfirming('send')} disabled={busy}>
+            Mettre en production
+          </button>
+        </div>
+      </div>
+    );
+  } else if (r.status === 'OBSERVATION') {
     panel = (
       <div className="decision-card observing">
         <div>

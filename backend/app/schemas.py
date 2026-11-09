@@ -82,6 +82,8 @@ class RuleVersionOut(RuleInput):
     airflow_dag_id: str | None = None
     first_run_at: datetime | None = None
     last_run_at: datetime | None = None
+    # Tourne en parallèle de la version en production, en observation, jusqu'à la décision.
+    candidate: bool = False
 
 
 class RuleSummary(RuleVersionOut):
@@ -195,6 +197,7 @@ class DailyPerformance(Model):
     date: date
     rule_version: int | None = None  # version qui a tourné ce jour-là
     orders_flagged: int
+    orders_to_send: int = 0  # dont marquées à transmettre au prestataire (version en production)
     orders_processed: int
     orders_confirmed_fraud: int
 
@@ -222,12 +225,24 @@ class RuleRun(Model):
     error_message: str | None = None
 
 
+class PeriodTotals(Model):
+    """Chiffres d'une règle sur une période, en commandes distinctes : exacts même si deux versions ont
+    remonté la même commande (la somme des jours peut la compter deux fois)."""
+
+    orders_flagged: int
+    orders_to_send: int
+    orders_processed: int
+    orders_confirmed_fraud: int
+
+
 class PerformanceResponse(Model):
     rule_id: str
     from_: date = Field(alias="from")
     to: date
     daily: list[DailyPerformance]
     previous: list[DailyPerformance]
+    totals: PeriodTotals | None = None
+    previous_totals: PeriodTotals | None = None
     runs: list[RuleRun]
     versions: list[VersionPerformance]
     latency_days: int
@@ -245,6 +260,7 @@ class ConsolidatedRow(Model):
     orders_flagged30d: int = Field(alias="ordersFlagged30d")
     orders_processed30d: int = Field(alias="ordersProcessed30d")
     orders_confirmed30d: int = Field(alias="ordersConfirmed30d")
+    orders_to_send30d: int = Field(0, alias="ordersToSend30d")
 
 
 class AuditEventOut(Model):

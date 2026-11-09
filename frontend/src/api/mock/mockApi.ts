@@ -9,6 +9,7 @@ import {
   type DailyPerformance,
   type Draft,
   type Guardrails,
+  type PeriodTotals,
   type RuleDetail,
   type RuleInput,
   type RuleRun,
@@ -134,24 +135,46 @@ export function createMockApi(): Api {
     return { ...clone(v), firstRunAt: `${since}T03:00:00.000Z`, lastRunAt };
   }
 
-  function deriveStatus(r: MockRule, v: RuleVersion): RuleVersion['status'] {
-    if (v.decision === 'DISCARDED') return 'DISCARDED';
-    // Une version écartée ne remplace rien : la précédente reprend sa place dans rules_registry.
-    const newer = r.versions.filter((w) => w.version > v.version && w.decision !== 'DISCARDED');
-    if (newer.some((w) => r.productionSince[w.version] !== undefined)) return 'REPLACED';
+  /** Version en production : la plus récente que l'analyste a décidé d'envoyer au prestataire. */
+  const productionVersion = (r: MockRule) => [...r.versions].reverse().find((v) => v.decision === 'SENT');
+
+  /**
+   * Versions qu'Airflow exécute (lignes de rules_registry), avec « candidate ? ». Sans version en
+   * production : la dernière non écartée, seule. Sinon : la version en production, et une version plus
+   * récente non écartée à côté, comme candidate.
+   */
+  function registryVersions(r: MockRule): [RuleVersion, boolean][] {
+    const prod = productionVersion(r);
+    const latest = [...r.versions].reverse().find((v) => v.decision !== 'DISCARDED');
+    if (!latest) return [];
+    if (!prod) return [[latest, false]];
+    return latest.version > prod.version ? [[prod, false], [latest, true]] : [[prod, false]];
+  }
+  const isCandidate = (r: MockRule, v: RuleVersion) => registryVersions(r).some(([w, c]) => c && w.version === v.version);
+
+  function runStatus(r: MockRule, v: RuleVersion): RuleVersion['status'] | undefined {
     const run = withRuns(r, v);
-    if (run.lastRunAt) {
-      const idleDays = (Date.now() - new Date(run.lastRunAt).getTime()) / 86400000;
-      if (idleDays > PERIOD_DAYS[v.schedule] * INACTIVE_AFTER_PERIODS) return 'INACTIVE';
-      return v.decision === 'SENT' ? 'IN_PRODUCTION' : 'OBSERVATION';
-    }
-    if (newer.length) return 'REPLACED'; // une version plus récente a été soumise avant que celle-ci ne tourne
-    return 'SUBMITTED';
+    if (!run.lastRunAt) return undefined;
+    const idleDays = (Date.now() - new Date(run.lastRunAt).getTime()) / 86400000;
+    if (idleDays > PERIOD_DAYS[v.schedule] * INACTIVE_AFTER_PERIODS) return 'INACTIVE';
+    return v.decision === 'SENT' ? 'IN_PRODUCTION' : 'OBSERVATION';
   }
 
-  const view = (r: MockRule, v: RuleVersion): RuleVersion => ({ ...withRuns(r, v), status: deriveStatus(r, v) });
+  function deriveStatus(r: MockRule, v: RuleVersion): RuleVersion['status'] {
+    if (v.decision === 'DISCARDED') return 'DISCARDED';
+    if (registryVersions(r).some(([w]) => w.version === v.version)) return runStatus(r, v) ?? 'SUBMITTED';
+    // Hors de rules_registry : une version plus récente a pris sa place.
+    const newer = r.versions.filter((w) => w.version > v.version && w.decision !== 'DISCARDED');
+    if (newer.some((w) => r.productionSince[w.version] !== undefined)) return 'REPLACED';
+    return runStatus(r, v) ?? (newer.length ? 'REPLACED' : 'SUBMITTED');
+  }
+
+  const view = (r: MockRule, v: RuleVersion): RuleVersion => ({ ...withRuns(r, v), status: deriveStatus(r, v), candidate: isCandidate(r, v) });
   const RUNNING: RuleVersion['status'][] = ['OBSERVATION', 'IN_PRODUCTION', 'INACTIVE'];
-  const running = (r: MockRule) => r.versions.find((v) => RUNNING.includes(deriveStatus(r, v)));
+  /** Version qui représente la règle à l'exécution : la version en production si elle tourne, jamais la candidate. */
+  const running = (r: MockRule) =>
+    registryVersions(r).find(([v, c]) => !c && RUNNING.includes(deriveStatus(r, v)))?.[0] ??
+    [...r.versions].reverse().find((v) => RUNNING.includes(deriveStatus(r, v)) && !isCandidate(r, v));
 
   function summary(r: MockRule): RuleSummary {
     const cur = current(r);
@@ -239,27 +262,54 @@ export function createMockApi(): Api {
   }
 
   // ---------- indicateurs simulés ----------
-  function versionAt(r: MockRule, date: string): number | undefined {
-    for (const [v, since] of Object.entries(r.productionSince)) {
-      const until = r.productionUntil[Number(v)];
-      if (since <= date && (!until || date <= until)) return Number(v);
-    }
-    return undefined;
+  /** Versions exécutées un jour donné (la version en production et, à côté, une éventuelle candidate). */
+  function versionsAt(r: MockRule, date: string): number[] {
+    return Object.entries(r.productionSince)
+      .filter(([v, since]) => since <= date && (!r.productionUntil[Number(v)] || date <= r.productionUntil[Number(v)]))
+      .map(([v]) => Number(v));
+  }
+  /** Version qui représente la règle ce jour-là : la plus ancienne qui tourne (une candidate est toujours plus récente). */
+  const versionAt = (r: MockRule, date: string) => (versionsAt(r, date).length ? Math.min(...versionsAt(r, date)) : undefined);
+
+  /** Indicateurs simulés d'une version un jour donné. */
+  function dayPerf(r: MockRule, d: string, version: number): DailyPerformance {
+    const today = isoDate(new Date());
+    const p = { ...r.profile!, ...r.versionProfiles?.[version] };
+    const age = Math.round((new Date(today).getTime() - new Date(d).getTime()) / 86400000);
+    const broken = p.brokenSinceDays !== undefined && age < p.brokenSinceDays;
+    const s = r.ruleId + d + (version === versionAt(r, d) ? '' : `v${version}`);
+    const dow = new Date(d + 'T00:00:00').getDay();
+    const weekly = dow === 0 || dow === 6 ? 1.3 : 1;
+    const flagged = broken ? 0 : Math.round(p.dailyVolume * weekly * (0.55 + rnd(s + 'f') * 0.9));
+    const latency = Math.min(1, age / LATENCY_DAYS);
+    // En observation, rien n'est envoyé au prestataire : seules les commandes aussi remontées par une
+    // règle envoyée sont traitées (environ un tiers).
+    const sent = r.versions.find((v) => v.version === version)?.decision === 'SENT' || !!r.wasSent?.includes(version);
+    const rate = p.processingRate * (sent ? 1 : 0.3);
+    const processed = Math.min(flagged, Math.round(flagged * rate * latency * (0.85 + rnd(s + 'p') * 0.3)));
+    const confirmed = Math.min(processed, Math.round(processed * p.precision * (0.6 + rnd(s + 'c') * 0.8)));
+    return { date: d, ruleVersion: version, ordersFlagged: flagged, ordersToSend: sent ? flagged : 0, ordersProcessed: processed, ordersConfirmedFraud: confirmed };
   }
 
+  /** Comparatif : chaque version sur toute sa période d'exécution, candidate comprise (v_rule_performance). */
   function versionTotals(r: MockRule): VersionPerformance[] {
-    const start = Object.values(r.productionSince).sort()[0];
-    if (!start) return [];
-    const by = new Map<number, DailyPerformance[]>();
-    for (const d of daily(r, start, isoDate(new Date()))) by.set(d.ruleVersion!, [...(by.get(d.ruleVersion!) ?? []), d]);
-    const sorted = [...by.entries()].sort((a, b) => a[0] - b[0]);
+    if (!r.profile) return [];
+    const today = isoDate(new Date());
+    const byVersion = Object.entries(r.productionSince)
+      .map(([v, since]) => {
+        const version = Number(v);
+        const ds: DailyPerformance[] = [];
+        for (let d = since; d <= (r.productionUntil[version] ?? today) && d <= today; d = addDays(d, 1)) ds.push(dayPerf(r, d, version));
+        return [version, ds] as const;
+      })
+      .filter(([, ds]) => ds.length)
+      .sort((a, b) => a[0] - b[0]);
     const sum = (ds: DailyPerformance[], k: 'ordersFlagged' | 'ordersProcessed' | 'ordersConfirmedFraud') => ds.reduce((s, x) => s + x[k], 0);
-    return sorted.map(([version, ds], i) => {
-      // `daily` compte chaque commande une fois par règle (v_rule_orders_daily). Une version à fenêtre
-      // glissante relit en plus, à ses premiers runs, des commandes déjà remontées par la précédente :
-      // elles comptent dans sa propre mesure (v_rule_performance), pas dans les chiffres de la règle.
+    return byVersion.map(([version, ds], i) => {
+      // Une version à fenêtre glissante relit, à ses premiers runs, des commandes déjà remontées par la
+      // précédente : elles comptent dans sa propre mesure, pas dans les chiffres de la règle.
       const window = Number(/INTERVAL\s+(\d+)\s+DAY/i.exec(r.versions.find((v) => v.version === version)?.sqlQuery ?? '')?.[1] ?? 0);
-      const prev = i > 0 ? sorted[i - 1][1].slice(-window) : [];
+      const prev = i > 0 ? byVersion[i - 1][1].filter((x) => x.date < ds[0].date).slice(-window) : [];
       const reread = (k: Parameters<typeof sum>[1]) => (window ? Math.round(sum(prev, k) * 0.8) : 0);
       return {
         version,
@@ -273,29 +323,21 @@ export function createMockApi(): Api {
     });
   }
 
+  /** Chiffres de la règle : chaque jour, la version qui la représente, jamais la candidate (v_rule_orders). */
   function daily(r: MockRule, from: string, to: string): DailyPerformance[] {
     const out: DailyPerformance[] = [];
     const today = isoDate(new Date());
     for (let d = from; d <= to && d <= today; d = addDays(d, 1)) {
       const version = versionAt(r, d);
-      if (!r.profile || version === undefined) continue;
-      const p = { ...r.profile, ...r.versionProfiles?.[version] };
-      const age = Math.round((new Date(today).getTime() - new Date(d).getTime()) / 86400000);
-      const broken = p.brokenSinceDays !== undefined && age < p.brokenSinceDays;
-      const s = r.ruleId + d;
-      const dow = new Date(d + 'T00:00:00').getDay();
-      const weekly = dow === 0 || dow === 6 ? 1.3 : 1;
-      const flagged = broken ? 0 : Math.round(p.dailyVolume * weekly * (0.55 + rnd(s + 'f') * 0.9));
-      const latency = Math.min(1, age / LATENCY_DAYS);
-      // En observation, rien n'est envoyé au prestataire : seules les commandes aussi remontées par une
-      // règle envoyée sont traitées (environ un tiers).
-      const sent = r.versions.find((v) => v.version === version)?.decision === 'SENT';
-      const rate = p.processingRate * (sent ? 1 : 0.3);
-      const processed = Math.min(flagged, Math.round(flagged * rate * latency * (0.85 + rnd(s + 'p') * 0.3)));
-      const confirmed = Math.min(processed, Math.round(processed * p.precision * (0.6 + rnd(s + 'c') * 0.8)));
-      out.push({ date: d, ruleVersion: version, ordersFlagged: flagged, ordersProcessed: processed, ordersConfirmedFraud: confirmed });
+      if (r.profile && version !== undefined) out.push(dayPerf(r, d, version));
     }
     return out;
+  }
+
+  /** Totaux d'une période (côté serveur : commandes distinctes ; ici, la somme des jours simulés). */
+  function periodTotals(rows: DailyPerformance[]): PeriodTotals {
+    const sum = (k: 'ordersFlagged' | 'ordersToSend' | 'ordersProcessed' | 'ordersConfirmedFraud') => rows.reduce((s, x) => s + (x[k] ?? 0), 0);
+    return { ordersFlagged: sum('ordersFlagged'), ordersToSend: sum('ordersToSend'), ordersProcessed: sum('ordersProcessed'), ordersConfirmedFraud: sum('ordersConfirmedFraud') };
   }
 
   function runs(r: MockRule, from: string, to: string): RuleRun[] {
@@ -420,8 +462,11 @@ export function createMockApi(): Api {
       await delay();
       const u = currentUser();
       const r = findRule(id);
-      const cur = current(r);
+      // Envoyer / écarter : la dernière version (candidate ou seule). Suspendre : la version en production.
+      const cur = action === 'suspend' ? productionVersion(r) : current(r);
+      if (!cur) throw new ApiError(409, "Action impossible : aucune version n'est en production.", 'BAD_STATUS');
       const status = deriveStatus(r, cur);
+      const before = registryVersions(r).map(([v]) => v.version);
       const allowed: Record<typeof action, RuleVersion['status'][]> = {
         send: ['OBSERVATION'],
         suspend: ['IN_PRODUCTION', 'INACTIVE'],
@@ -430,15 +475,20 @@ export function createMockApi(): Api {
       if (!allowed[action].includes(status) || (action === 'discard' && cur.decision === 'SENT')) {
         throw new ApiError(409, `Action impossible : la v${cur.version} est « ${status} ».`, 'BAD_STATUS');
       }
+      // Une seule version en production : la précédente s'arrête (sa décision est retirée, l'audit la garde).
+      if (action === 'send') {
+        for (const w of r.versions) if (w !== cur && w.decision === 'SENT') (r.wasSent ??= []).push(w.version), (w.decision = undefined);
+      }
       cur.decision = action === 'send' ? 'SENT' : action === 'discard' ? 'DISCARDED' : undefined;
       cur.decidedAt = now();
       cur.decidedByName = fullName(u);
-      if (action === 'discard' && r.productionSince[cur.version] !== undefined && !r.productionUntil[cur.version]) {
-        // Airflow ne l'exécute plus (la ligne de rules_registry revient à la version précédente).
-        r.productionUntil[cur.version] = isoDate(new Date());
+      // Les versions sorties de rules_registry ne sont plus exécutées par Airflow.
+      const after = registryVersions(r).map(([v]) => v.version);
+      for (const v of before) {
+        if (!after.includes(v) && r.productionSince[v] !== undefined && !r.productionUntil[v]) r.productionUntil[v] = isoDate(new Date());
       }
       const label = {
-        send: 'Envoi au prestataire décidé',
+        send: 'Mise en production : envoi au prestataire décidé',
         suspend: 'Envoi au prestataire suspendu : retour en observation',
         discard: "Version écartée : Airflow ne l'exécute plus",
       }[action];
@@ -631,6 +681,8 @@ export function createMockApi(): Api {
         to,
         daily: daily(r, from, to),
         previous: daily(r, addDays(from, -len), addDays(from, -1)),
+        totals: periodTotals(daily(r, from, to)),
+        previousTotals: periodTotals(daily(r, addDays(from, -len), addDays(from, -1))),
         runs: runs(r, from, to),
         versions: versionTotals(r),
         latencyDays: LATENCY_DAYS,
@@ -658,6 +710,7 @@ export function createMockApi(): Api {
             ordersFlagged30d: d.reduce((s, x) => s + x.ordersFlagged, 0),
             ordersProcessed30d: d.reduce((s, x) => s + x.ordersProcessed, 0),
             ordersConfirmed30d: d.reduce((s, x) => s + x.ordersConfirmedFraud, 0),
+            ordersToSend30d: d.reduce((s, x) => s + (x.ordersToSend ?? 0), 0),
           };
         });
     },
@@ -676,9 +729,10 @@ export function createMockApi(): Api {
         const target = [...r.versions].reverse().find((v) => r.productionSince[v.version] === undefined && v.decision !== 'DISCARDED');
         if (!target) throw new ApiError(409, 'Aucune version publiée en attente de son premier run.');
         const today = isoDate(new Date());
-        // La version qui tournait s'arrête : Airflow exécute désormais la dernière version soumise.
+        // La version qui tournait s'arrête, sauf si elle est en production : la nouvelle tourne alors à côté,
+        // comme candidate.
         const prev = running(r);
-        if (prev && prev.version !== target.version) r.productionUntil[prev.version] = addDays(today, -1);
+        if (prev && prev.version !== target.version && !isCandidate(r, target)) r.productionUntil[prev.version] = addDays(today, -1);
         r.productionSince[target.version] = today;
         target.airflowDagId = `fraud_rules_${target.schedule.toLowerCase()}`; // un DAG par fréquence
         r.profile ??= { dailyVolume: 10 + Math.round(rnd(id) * 40), processingRate: 0.75, precision: 0.2 + rnd(id + 'p') * 0.4 };

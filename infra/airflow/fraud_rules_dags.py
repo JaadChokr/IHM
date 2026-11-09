@@ -11,13 +11,18 @@ une relance d'un run passé repasse donc les bornes de la période d'origine, sa
 L'IHM teste la requête avec la dernière période complète du même calendrier (backend/app/periods.py :
 garder les crons alignés).
 
-Pour chaque règle, la tâche :
+rules_registry a une ligne par version à exécuter (au plus deux par règle : la version en production et
+une candidate). Le DAG en lance une tâche par ligne, sans logique propre aux versions : c'est la
+plateforme qui décide des lignes et de leurs colonnes.
+
+Pour chaque version, la tâche :
   1. exécute `sql_query` et écrit dans `rule_alerts` les commandes que **cette version** n'a encore jamais
      remontées (une seule fois chacune) : une fenêtre glissante ou une règle écrite avec CURRENT_DATE() ne
      crée pas de doublon, et chaque version est mesurée sur tout ce qu'elle trouve ;
-  2. marque chacune `to_send` (« à transmettre au prestataire ») si la règle est en production à ce run
-     (`send_to_provider` de rules_registry, décision de l'analyste) et si la règle ne l'a jamais marquée,
-     toutes versions confondues : la décision est figée au moment du run ;
+  2. recopie sur chaque commande deux colonnes de rules_registry, sans les interpréter : `to_send`
+     (« à transmettre au prestataire » : la version est en production à ce run) et `candidate` (version
+     candidate, qui tourne en parallèle de la version en production) ; la décision est figée au moment
+     du run ;
   3. trace l'exécution dans `rule_runs` (version, période, statut) : c'est ce que lit la plateforme.
 
 Envoi au prestataire : le DAG n'envoie rien. Un script externe lit dans `rule_alerts` les lignes
@@ -110,7 +115,9 @@ def make_dag(frequency: str, cron: str):
         # Rattrapage des périodes manquées (déploiement, panne) : sans doublon grâce au dédoublonnage par
         # version, et chaque run reçoit les bornes de sa propre période.
         catchup=True,
-        max_active_runs=3,
+        # Un run à la fois : deux runs simultanés d'une même règle (rattrapage) passeraient tous deux le
+        # dédoublonnage avant que l'autre ait écrit. Les règles d'un même run restent en parallèle.
+        max_active_runs=1,
         max_active_tasks=8,  # règles exécutées en parallèle
         default_args={
             "owner": "fraud-rules",
@@ -128,16 +135,17 @@ def make_dag(frequency: str, cron: str):
     def fraud_rules():
         @task
         def get_rules() -> list[dict]:
-            """Règles de cette fréquence : une ligne par règle, sa dernière version non écartée. Pour un
-            rattrapage de moins de 7 jours, le référentiel tel qu'il était en fin de période : c'est la
-            version alors en place qui est exécutée (au-delà : la version actuelle)."""
+            """Versions à exécuter pour cette fréquence : une ligne par version (production, candidate).
+            Pour un rattrapage de moins de 7 jours, le référentiel tel qu'il était en fin de période : ce
+            sont les versions alors en place qui sont exécutées (au-delà : les versions actuelles)."""
             client, ds = _bq()
             end = get_current_context()["data_interval_end"]
             late = datetime.now(UTC) - end
             when = " FOR SYSTEM_TIME AS OF @period_end" if LATE_AFTER < late < TIME_TRAVEL_MAX else ""
             rows = _query(
                 client,
-                f"SELECT rule_id, version, name, sql_query, send_to_provider FROM {ds}.rules_registry{when}"
+                "SELECT rule_id, version, name, sql_query, send_to_provider,"
+                f" IFNULL(candidate, FALSE) AS candidate FROM {ds}.rules_registry{when}"
                 " WHERE schedule = @schedule",
                 schedule=("STRING", frequency),
                 **({"period_end": ("TIMESTAMP", end)} if when else {}),
@@ -151,8 +159,9 @@ def make_dag(frequency: str, cron: str):
             client, ds = _bq()
             dag_id = context["dag"].dag_id
             # Identifiant stable entre deux tentatives : une nouvelle tentative remplace les commandes
-            # (pas encore transmises) de la tentative ratée.
-            run_id = f"{context['run_id']}__{rule['rule_id']}"
+            # (pas encore transmises) de la tentative ratée. La version y figure : une règle peut tourner
+            # en deux versions dans le même run (production et candidate).
+            run_id = f"{context['run_id']}__{rule['rule_id']}__v{rule['version']}"
             period_start = context["data_interval_start"]
             period_end = context["data_interval_end"]
             run_date = period_end.in_timezone(TZ).date()
@@ -182,16 +191,14 @@ def make_dag(frequency: str, cron: str):
                 job = _query(
                     client,
                     f"""INSERT INTO {ds}.rule_alerts
-                          (rule_id, rule_version, run_id, run_date, order_id, detected_at, details, to_send)
+                          (rule_id, rule_version, run_id, run_date, order_id, detected_at, details, to_send,
+                           candidate)
                         SELECT @rule_id, @version, @run_id, @run_date,
                                CAST(t.order_id AS STRING), CURRENT_TIMESTAMP(), TO_JSON(t),
-                               -- À transmettre : règle en production à ce run, et commande jamais
-                               -- marquée par la règle (une autre version a pu la remonter avant).
-                               @send AND NOT EXISTS (
-                                 SELECT 1 FROM {ds}.rule_alerts s
-                                 WHERE s.rule_id = @rule_id AND s.order_id = CAST(t.order_id AS STRING)
-                                   AND s.to_send
-                               )
+                               -- Recopiés de rules_registry : version en production à ce run (à
+                               -- transmettre), version candidate. Le script d'envoi dédoublonne par
+                               -- commande ; les chiffres d'une règle comptent les commandes distinctes.
+                               @send, @candidate
                         FROM (
                     {sql}
                         ) AS t
@@ -207,6 +214,7 @@ def make_dag(frequency: str, cron: str):
                     run_id=("STRING", run_id),
                     run_date=("DATE", run_date),
                     send=("BOOL", bool(rule["send_to_provider"])),
+                    candidate=("BOOL", bool(rule["candidate"])),
                     period_start=("TIMESTAMP", period_start),
                     period_end=("TIMESTAMP", period_end),
                 )

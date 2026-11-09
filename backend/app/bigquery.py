@@ -77,10 +77,14 @@ class RunStats:
 
 @dataclass
 class ProductionTotals:
+    """Chiffres d'une règle sur une période, en commandes distinctes (une commande remontée par deux
+    versions n'est comptée qu'une fois) : remontées, envoyées (to_send), traitées, confirmées."""
+
     rule_id: str
     flagged: int
     processed: int
     confirmed: int
+    to_send: int = 0
 
 
 class BigQueryGateway(Protocol):
@@ -105,14 +109,10 @@ class BigQueryGateway(Protocol):
 
     def run_stats(self) -> list[RunStats]: ...
 
-    def upsert_rule(self, rule: Rule, v: RuleVersion, status: str, send_to_provider: bool) -> None:
-        """Écrit dans `rules_registry` la version à exécuter de la règle : une ligne par règle,
-        insérée à la première soumission puis mise à jour (UPDATE) à chaque nouvelle version ou décision.
-        `send_to_provider` : ses commandes partent-elles chez le prestataire (sinon observation) ?"""
-        ...
-
-    def delete_rule(self, rule_id: str) -> None:
-        """Retire la règle de `rules_registry` (sa seule version soumise a été reprise en brouillon)."""
+    def set_registry(self, rule: Rule, rows: list[tuple[RuleVersion, str, bool, bool]]) -> None:
+        """Aligne les lignes de la règle dans `rules_registry` : une par version qu'Airflow exécute, donnée
+        par (version, statut, send_to_provider, candidate). Les lignes des autres versions de la règle sont
+        supprimées ; une liste vide retire la règle du registre."""
         ...
 
 
@@ -214,12 +214,21 @@ class RealBigQueryGateway:
         return [dict(r.items()) for r in self.client.query(sql, job_config=cfg).result()]
 
     def daily_performance(self, rule_id, start, end):
-        # Toutes versions confondues : chaque commande comptée une fois par règle (v_rule_orders_daily).
+        # Chiffres de la règle : version en production (ou seule version qui tourne), jamais la candidate ;
+        # « envoyées » = commandes marquées à transmettre. Commandes distinctes de chaque jour.
         P = self._bq.ScalarQueryParameter
         rows = self._rows(
-            f"""SELECT run_date, rule_version, orders_flagged, orders_processed, orders_confirmed_fraud
-                FROM {self.ds}.v_rule_orders_daily
+            f"""SELECT run_date,
+                       MAX(IF(NOT candidate, rule_version, NULL)) AS rule_version,
+                       COUNT(DISTINCT IF(NOT candidate, order_id, NULL)) AS orders_flagged,
+                       COUNT(DISTINCT IF(to_send, order_id, NULL)) AS orders_to_send,
+                       COUNT(DISTINCT IF(NOT candidate AND is_processed, order_id, NULL)) AS orders_processed,
+                       COUNT(DISTINCT IF(NOT candidate AND is_fraud, order_id, NULL))
+                         AS orders_confirmed_fraud
+                FROM {self.ds}.v_rule_orders
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end
+                GROUP BY run_date
+                HAVING orders_flagged > 0
                 ORDER BY run_date""",
             [P("rule_id", "STRING", rule_id), P("start", "DATE", start), P("end", "DATE", end)],
         )
@@ -228,6 +237,7 @@ class RealBigQueryGateway:
                 date=r["run_date"],
                 rule_version=r["rule_version"],
                 orders_flagged=r["orders_flagged"],
+                orders_to_send=r["orders_to_send"],
                 orders_processed=r["orders_processed"],
                 orders_confirmed_fraud=r["orders_confirmed_fraud"],
             )
@@ -268,9 +278,14 @@ class RealBigQueryGateway:
             return []
         P = self._bq.ScalarQueryParameter
         rows = self._rows(
-            f"""SELECT rule_id, SUM(orders_flagged) AS flagged, SUM(orders_processed) AS processed,
-                       SUM(orders_confirmed_fraud) AS confirmed
-                FROM {self.ds}.v_rule_orders_daily
+            # Commandes distinctes sur toute la période : exact même si deux versions ont remonté la même
+            # commande à des jours différents.
+            f"""SELECT rule_id,
+                       COUNT(DISTINCT IF(NOT candidate, order_id, NULL)) AS flagged,
+                       COUNT(DISTINCT IF(to_send, order_id, NULL)) AS to_send,
+                       COUNT(DISTINCT IF(NOT candidate AND is_processed, order_id, NULL)) AS processed,
+                       COUNT(DISTINCT IF(NOT candidate AND is_fraud, order_id, NULL)) AS confirmed
+                FROM {self.ds}.v_rule_orders
                 WHERE rule_id IN UNNEST(@ids) AND run_date BETWEEN @start AND @end
                 GROUP BY rule_id""",
             [
@@ -280,7 +295,9 @@ class RealBigQueryGateway:
             ],
         )
         return [
-            ProductionTotals(r["rule_id"], r["flagged"] or 0, r["processed"] or 0, r["confirmed"] or 0)
+            ProductionTotals(
+                r["rule_id"], r["flagged"] or 0, r["processed"] or 0, r["confirmed"] or 0, r["to_send"] or 0
+            )
             for r in rows
         ]
 
@@ -297,48 +314,54 @@ class RealBigQueryGateway:
         )
         return [RunStats(**r) for r in rows]
 
-    def delete_rule(self, rule_id: str) -> None:
-        cfg = self._bq.QueryJobConfig(
-            query_parameters=[self._bq.ScalarQueryParameter("rule_id", "STRING", rule_id)]
-        )
-        sql = f"DELETE FROM {self.ds}.rules_registry WHERE rule_id = @rule_id"
-        self.client.query(sql, job_config=cfg).result()
-
-    def upsert_rule(self, rule: Rule, v: RuleVersion, status: str, send_to_provider: bool) -> None:
+    def set_registry(self, rule, rows):
         P = self._bq.ScalarQueryParameter
-        params = [
-            P("rule_id", "STRING", v.rule_id),
-            P("version", "INT64", v.version),
-            P("name", "STRING", v.name),
-            P("description", "STRING", v.description),
-            P("fraud_typology", "STRING", v.fraud_typology),
-            P("criticality", "STRING", v.criticality),
-            P("schedule", "STRING", v.schedule),
-            P("sql_query", "STRING", v.sql_query),
-            P("status", "STRING", status),
-            P("send_to_provider", "BOOL", send_to_provider),
-            P("owner_matricule", "STRING", rule.owner_matricule),
-            P("created_at", "TIMESTAMP", rule.created_at),
-            P("updated_at", "TIMESTAMP", v.updated_at),
-        ]
-        # Clé : rule_id seul. Une nouvelle version remplace la précédente dans la ligne ; l'historique
-        # des versions reste dans la base de la plateforme (rule_versions).
-        sql = f"""
-        MERGE {self.ds}.rules_registry t
-        USING (SELECT @rule_id AS rule_id) s
-        ON t.rule_id = s.rule_id
-        WHEN MATCHED THEN UPDATE SET
-          version = @version, name = @name, description = @description,
-          fraud_typology = @fraud_typology, criticality = @criticality, schedule = @schedule,
-          sql_query = @sql_query, status = @status, send_to_provider = @send_to_provider,
-          updated_at = @updated_at
-        WHEN NOT MATCHED THEN INSERT
-          (rule_id, version, name, description, fraud_typology, criticality, schedule, sql_query,
-           status, send_to_provider, owner_matricule, created_at, updated_at)
-        VALUES (@rule_id, @version, @name, @description, @fraud_typology, @criticality, @schedule,
-                @sql_query, @status, @send_to_provider, @owner_matricule, @created_at, @updated_at)
-        """
-        self.client.query(sql, job_config=self._bq.QueryJobConfig(query_parameters=params)).result()
+        keep = [v.version for v, *_ in rows]
+        # Versions arrêtées (remplacées, écartées, reprises en brouillon) : leurs lignes disparaissent.
+        cfg = self._bq.QueryJobConfig(
+            query_parameters=[
+                P("rule_id", "STRING", rule.rule_id),
+                self._bq.ArrayQueryParameter("keep", "INT64", keep),
+            ]
+        )
+        sql = f"""DELETE FROM {self.ds}.rules_registry
+                  WHERE rule_id = @rule_id AND version NOT IN UNNEST(@keep)"""
+        self.client.query(sql, job_config=cfg).result()
+        for v, status, send, candidate in rows:
+            params = [
+                P("rule_id", "STRING", v.rule_id),
+                P("version", "INT64", v.version),
+                P("name", "STRING", v.name),
+                P("description", "STRING", v.description),
+                P("fraud_typology", "STRING", v.fraud_typology),
+                P("criticality", "STRING", v.criticality),
+                P("schedule", "STRING", v.schedule),
+                P("sql_query", "STRING", v.sql_query),
+                P("status", "STRING", status),
+                P("send_to_provider", "BOOL", send),
+                P("candidate", "BOOL", candidate),
+                P("owner_matricule", "STRING", rule.owner_matricule),
+                P("created_at", "TIMESTAMP", rule.created_at),
+                P("updated_at", "TIMESTAMP", v.updated_at),
+            ]
+            # Clé : (rule_id, version). Au plus deux lignes par règle : la version en production et sa
+            # candidate. L'historique des versions reste dans la base de la plateforme (rule_versions).
+            sql = f"""
+            MERGE {self.ds}.rules_registry t
+            USING (SELECT @rule_id AS rule_id, @version AS version) s
+            ON t.rule_id = s.rule_id AND t.version = s.version
+            WHEN MATCHED THEN UPDATE SET
+              name = @name, description = @description, fraud_typology = @fraud_typology,
+              criticality = @criticality, schedule = @schedule, sql_query = @sql_query, status = @status,
+              send_to_provider = @send_to_provider, candidate = @candidate, updated_at = @updated_at
+            WHEN NOT MATCHED THEN INSERT
+              (rule_id, version, name, description, fraud_typology, criticality, schedule, sql_query,
+               status, send_to_provider, candidate, owner_matricule, created_at, updated_at)
+            VALUES (@rule_id, @version, @name, @description, @fraud_typology, @criticality, @schedule,
+                    @sql_query, @status, @send_to_provider, @candidate, @owner_matricule, @created_at,
+                    @updated_at)
+            """
+            self.client.query(sql, job_config=self._bq.QueryJobConfig(query_parameters=params)).result()
 
 
 def _jsonable(v: Any) -> Any:
@@ -411,8 +434,8 @@ class FakeBigQueryGateway:
     performance: dict[str, list[DailyPerformance]] = field(default_factory=dict)
     # … et de v_rule_orders_daily (règle toutes versions confondues) ; à défaut, le même contenu.
     rule_daily: dict[str, list[DailyPerformance]] = field(default_factory=dict)
-    # Contenu simulé de rules_registry : rule_id → (version, statut, envoi au prestataire).
-    registry: dict[str, tuple[int, str, bool]] = field(default_factory=dict)
+    # Contenu simulé de rules_registry : rule_id → [(version, statut, envoi au prestataire, candidate)].
+    registry: dict[str, list[tuple[int, str, bool, bool]]] = field(default_factory=dict)
     stats: list[RunStats] = field(default_factory=list)
     overlap: list[tuple[str, int]] = field(default_factory=list)
     last_period: Period | None = None  # période passée au dernier appel (contrôlée par les tests)
@@ -474,6 +497,7 @@ class FakeBigQueryGateway:
                     sum(x.orders_flagged for x in d),
                     sum(x.orders_processed for x in d),
                     sum(x.orders_confirmed_fraud for x in d),
+                    sum(x.orders_to_send for x in d),
                 )
             )
         return out
@@ -481,13 +505,12 @@ class FakeBigQueryGateway:
     def run_stats(self):
         return list(self.stats)
 
-    def upsert_rule(self, rule, v, status, send_to_provider):
-        log.info("rules_registry ← %s v%s (%s, envoi=%s)", v.rule_id, v.version, status, send_to_provider)
-        self.registry[v.rule_id] = (v.version, status, send_to_provider)
-
-    def delete_rule(self, rule_id):
-        log.info("rules_registry ✕ %s", rule_id)
-        self.registry.pop(rule_id, None)
+    def set_registry(self, rule, rows):
+        log.info("rules_registry ← %s %s", rule.rule_id, [(v.version, st, s, c) for v, st, s, c in rows])
+        if rows:
+            self.registry[rule.rule_id] = [(v.version, st, send, cand) for v, st, send, cand in rows]
+        else:
+            self.registry.pop(rule.rule_id, None)
 
 
 @lru_cache
