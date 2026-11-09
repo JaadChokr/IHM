@@ -1,18 +1,17 @@
 :root {
   color-scheme: light;
-  /* Thème corporate : blanc, gris neutres, rouge réservé aux actions et repères. */
-  --bg: #f5f5f5;
+  --bg: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f6f6f6;
-  --surface-3: #ebebeb;
-  --border: #e2e2e2;
-  --border-strong: #c6c6c6;
-  --text: #1a1a1a;
-  --text-2: #4a4a4a;
-  --text-3: #6b6b6b;
+  --surface-2: #f7f6f6;
+  --surface-3: #ecebeb;
+  --border: #e4e2e2;
+  --border-strong: #c3c2b7;
+  --text: #17171a;
+  --text-2: #52514e;
+  --text-3: #6f6e69;
   --accent: #c8102e;
-  --accent-hover: #a30c25;
-  --accent-soft: #fbeaed;
+  --accent-hover: #a00d25;
+  --accent-soft: #fdecee;
   --on-accent: #ffffff;
   --focus: #c8102e;
 
@@ -22,9 +21,9 @@
   --warn-soft: #fdf1d6;
   --bad: #b42828;
   --bad-soft: #fbe5e5;
-  --info: #4a4a4a;
-  --info-soft: #f6f6f6;
-  --muted-soft: #ececec;
+  --info: #3d3c39;
+  --info-soft: #f4f3f2;
+  --muted-soft: #ecebe7;
 
   --diff-add: #e3f3e3;
   --diff-del: #fbe5e5;
@@ -36,12 +35,12 @@
   --version-2: #2a78d6;
   --version-3: #1baf7a;
   --version-4: #6250d6;
-  --grid: #ececec;
-  --incomplete: rgba(107, 107, 107, 0.1);
+  --grid: #e6e5e1;
+  --incomplete: rgba(111, 110, 105, 0.1);
 
-  --radius: 6px;
-  --radius-sm: 4px;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.06);
+  --radius: 8px;
+  --radius-sm: 5px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(0, 0, 0, 0.04);
   --font: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
 }
@@ -49,15 +48,15 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
-    --bg: #111111;
-    --surface: #1a1a1a;
-    --surface-2: #222222;
-    --surface-3: #2c2c2c;
-    --border: #333333;
-    --border-strong: #4a4a4a;
-    --text: #f2f2f2;
-    --text-2: #c8c8c8;
-    --text-3: #9a9a9a;
+    --bg: #121211;
+    --surface: #1a1a19;
+    --surface-2: #232321;
+    --surface-3: #2d2d2a;
+    --border: #353532;
+    --border-strong: #4a4a46;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --text-3: #9c9b93;
     --accent: #f0646f;
     --accent-hover: #f48a92;
     --accent-soft: #3a1418;
@@ -69,9 +68,9 @@
     --warn-soft: #382a0c;
     --bad: #ef7373;
     --bad-soft: #3d1b1b;
-    --info: #d4d4d4;
-    --info-soft: #242424;
-    --muted-soft: #2a2a2a;
+    --info: #d6d5ce;
+    --info-soft: #262624;
+    --muted-soft: #2a2a27;
     --diff-add: #17301a;
     --diff-del: #3d1b1b;
     --series-1: #f0646f;
@@ -79,22 +78,22 @@
     --version-2: #3987e5;
     --version-3: #199e70;
     --version-4: #9085e9;
-    --grid: #2c2c2c;
+    --grid: #2d2d2a;
     --incomplete: rgba(200, 200, 190, 0.07);
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   }
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --bg: #111111;
-  --surface: #1a1a1a;
-  --surface-2: #222222;
-  --surface-3: #2c2c2c;
-  --border: #333333;
-  --border-strong: #4a4a4a;
-  --text: #f2f2f2;
-  --text-2: #c8c8c8;
-  --text-3: #9a9a9a;
+  --bg: #121211;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --surface-3: #2d2d2a;
+  --border: #353532;
+  --border-strong: #4a4a46;
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --text-3: #9c9b93;
   --accent: #f0646f;
   --accent-hover: #f48a92;
   --accent-soft: #3a1418;
@@ -106,9 +105,9 @@
   --warn-soft: #382a0c;
   --bad: #ef7373;
   --bad-soft: #3d1b1b;
-  --info: #d4d4d4;
-  --info-soft: #242424;
-  --muted-soft: #2a2a2a;
+  --info: #d6d5ce;
+  --info-soft: #262624;
+  --muted-soft: #2a2a27;
   --diff-add: #17301a;
   --diff-del: #3d1b1b;
   --series-1: #f0646f;
@@ -116,7 +115,7 @@
     --version-2: #3987e5;
     --version-3: #199e70;
     --version-4: #9085e9;
-  --grid: #2c2c2c;
+  --grid: #2d2d2a;
   --incomplete: rgba(200, 200, 190, 0.07);
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
 }
@@ -1858,109 +1857,3 @@ details summary {
   gap: 8px;
   margin-left: auto;
 }
-
-/* =====================================================================
-   Thème corporate, épuré : surfaces blanches à filet fin, sans ombre, angles
-   droits ; le rouge ne sert qu'aux actions principales et aux repères.
-   ===================================================================== */
-.app {
-  border-top: 3px solid var(--accent);
-}
-main {
-  padding: 32px 40px;
-}
-h1 {
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-.page-head {
-  padding-bottom: 16px;
-  margin-bottom: 24px;
-  border-bottom: 1px solid var(--border);
-}
-.card {
-  box-shadow: none;
-}
-.card-head h2,
-.card-head h3 {
-  font-weight: 600;
-}
-
-/* Barre latérale pleine hauteur, blanche, séparée par un filet */
-.sidebar,
-.app.collapsed .sidebar {
-  top: 0;
-  height: calc(100vh - 3px);
-  margin: 0;
-  border: none;
-  border-right: 1px solid var(--border);
-  border-radius: 0;
-  box-shadow: none;
-  padding: 20px 14px;
-}
-.app.collapsed .sidebar {
-  padding: 20px 12px;
-}
-.brand-mark {
-  border-radius: var(--radius-sm);
-}
-.sidebar-cta,
-.sidebar-toggle,
-.sidebar-demo,
-.nav a {
-  border-radius: var(--radius-sm);
-}
-.userchip {
-  border-radius: var(--radius);
-}
-.nav a.active {
-  background: var(--surface-2);
-  color: var(--accent);
-  box-shadow: inset 3px 0 0 var(--accent);
-}
-
-/* Indicateurs : libellé discret en capitales, chiffre lisible */
-.kpi-label {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-3);
-}
-.kpi-value {
-  font-size: 28px;
-}
-
-/* Tableaux, badges, alertes, onglets : plus sobres */
-table.data th {
-  background: var(--surface-2);
-}
-.badge {
-  border-radius: var(--radius-sm);
-}
-.alert {
-  border-left-width: 3px;
-}
-.tab {
-  font-weight: 500;
-}
-
-/* Connexion : même liseré rouge que l'application */
-.login-card {
-  border-top: 3px solid var(--accent);
-}
-
-@media (max-width: 900px) {
-  main {
-    padding: 16px;
-  }
-  .sidebar,
-  .app.collapsed .sidebar {
-    height: auto;
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-    padding: 8px 12px;
-  }
-}
-
