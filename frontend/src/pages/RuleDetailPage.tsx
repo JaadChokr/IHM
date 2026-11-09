@@ -1,3 +1,4 @@
+import { motion } from 'framer-motion';
 import { Pager, usePaged } from '../components/Pager';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -8,11 +9,11 @@ import { TestActions, TestResults, useQueryTest } from '../components/TestPanel'
 import { Breadcrumb } from '../components/Breadcrumb';
 import { usePageTitle } from '../nav/history';
 import { DiffView } from '../components/DiffView';
-import { PerformanceDashboard } from '../components/PerformanceDashboard';
+import { PerformanceDashboard, VersionComparison } from '../components/PerformanceDashboard';
 import { KpiTile } from '../components/KpiTile';
 import { Alert, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
 import { AuditTable } from './AuditPage';
-import { fmtDateTime, fmtDuration, fmtInt, scheduleLabel, scheduleWhen } from '../lib/format';
+import { fmtDateTime, fmtDuration, fmtInt, isoDate, scheduleLabel, scheduleWhen } from '../lib/format';
 import { fmtRun, nextRun } from '../lib/period';
 import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
@@ -160,8 +161,11 @@ export function RuleDetailPage() {
       <div className="tabs" role="tablist" aria-label="Sections de la règle">
         {tabs.map(([id, label, count]) => (
           <button key={id} type="button" role="tab" id={`tab-${id}`} aria-selected={tab === id} aria-controls={`panel-${id}`} className="tab" onClick={() => setTab(id)}>
-            {label}
-            {count !== undefined && <span className="count">{count}</span>}
+            {tab === id && <motion.span layoutId="tab-pill" className="tab-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+            <span className="tab-text">
+              {label}
+              {count !== undefined && <span className="count">{count}</span>}
+            </span>
           </button>
         ))}
       </div>
@@ -341,6 +345,15 @@ function RunsTab({ r }: { r: RuleDetail }) {
   );
 }
 
+/** Performances de chaque version sur toute sa durée (indépendant de la période de l'onglet Performance). */
+function VersionsPerformance({ ruleId }: { ruleId: string }) {
+  const today = isoDate(new Date());
+  const perf = useAsync(() => api.getPerformance(ruleId, today, today), [ruleId]);
+  if (perf.error) return <Alert kind="error" title={perf.error.message} />;
+  if (!perf.data || perf.data.versions.length === 0) return null;
+  return <VersionComparison versions={perf.data.versions} />;
+}
+
 function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: string, from: number) => void }) {
   const versions = r.versions; // plus récente d'abord
   const [confirming, setConfirming] = useState<number | null>(null);
@@ -450,6 +463,8 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
         </Alert>
       )}
       {restoreError && <Alert kind="error" title={restoreError} />}
+      <VersionsPerformance ruleId={r.ruleId} />
+
       {shown && (
         <section className="card">
           <div className="card-head">

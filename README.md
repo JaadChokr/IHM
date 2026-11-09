@@ -1,4 +1,4 @@
-# Rules Manager
+# Fraud Rules
 
 Plateforme de gestion des règles de détection de fraude : l'équipe fraude **crée, teste et suit** ses règles
 sans passer par le mail, et mesure leur efficacité grâce au retour du prestataire (PRD v0.1).
@@ -316,7 +316,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   règle qui change de fréquence change simplement de DAG. Les brouillons ne sont jamais exécutés. DAG de
   référence à adapter : `infra/airflow/fraud_rules_dags.py` (l'envoi au prestataire n'y figure pas : il est
   fait par un script externe, voir « Envoi au prestataire »). Toutes les versions restent conservées dans la plateforme : comparatif
-  SQL, comparaison des performances par version (repères sur les courbes, tableau par version) et
+  SQL, comparaison des performances par version (repères sur les courbes de l'onglet Performance, tableau de
+  comparaison dans l'onglet Versions) et
   **restauration** d'une version antérieure, recopiée dans un brouillon à tester puis soumettre.
 
   **Dédoublonnage : une fois par version pour le suivi, une fois par règle pour l'envoi.** Le DAG n'écrit dans

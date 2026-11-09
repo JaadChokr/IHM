@@ -1,7 +1,7 @@
 [project]
 name = "rules-manager-api"
 version = "0.1.0"
-description = "API de la plateforme Rules Manager (gestion des règles de détection de fraude)"
+description = "API de la plateforme Fraud Rules (gestion des règles de détection de fraude)"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi==0.115.6",

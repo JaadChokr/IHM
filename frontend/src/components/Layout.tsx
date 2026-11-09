@@ -1,4 +1,5 @@
-import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { API_MODE } from '../api/client';
@@ -9,8 +10,14 @@ import { IconAudit, IconChart, IconDraft, IconHome, IconPlus, IconRules, IconSea
 function NavItem({ to, end, icon, label }: { to: string; end?: boolean; icon: ReactNode; label: string }) {
   return (
     <NavLink to={to} end={end} title={label}>
-      {icon}
-      <span className="nav-label">{label}</span>
+      {({ isActive }) => (
+        <>
+          {/* Pastille de l'élément actif : glisse d'un élément à l'autre. */}
+          {isActive && <motion.span layoutId="nav-pill" className="nav-pill" transition={{ type: 'spring', stiffness: 500, damping: 38 }} />}
+          {icon}
+          <span className="nav-label">{label}</span>
+        </>
+      )}
     </NavLink>
   );
 }
@@ -40,6 +47,7 @@ function GlobalSearch() {
 
 export function Layout() {
   const { user } = useAuth();
+  const location = useLocation();
   const [collapsed, setCollapsed] = usePref('sidebarCollapsed', false);
   const name = user ? `${user.firstName} ${user.lastName}` : '';
   return (
@@ -49,9 +57,9 @@ export function Layout() {
       </a>
       <aside className="sidebar">
         <div className="sidebar-head">
-          <Link to="/" className="brand" title="Rules Manager">
-            <span className="brand-mark" aria-hidden="true">R</span>
-            <span className="nav-label">Rules Manager</span>
+          <Link to="/" className="brand" title="Fraud Rules">
+            <span className="brand-mark" aria-hidden="true">F</span>
+            <span className="nav-label">Fraud Rules</span>
           </Link>
         </div>
         <button
@@ -102,7 +110,10 @@ export function Layout() {
           )}
         </header>
         <main id="main">
-          <Outlet />
+          {/* Apparition de chaque page (pas au changement d'onglet ou de filtre : clé = chemin). */}
+          <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+            <Outlet />
+          </motion.div>
         </main>
       </div>
     </div>

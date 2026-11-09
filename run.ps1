@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  Lance Rules Manager en une commande sous Windows (équivalent du Makefile) : installe ce qui manque,
+  Lance Fraud Rules en une commande sous Windows (équivalent du Makefile) : installe ce qui manque,
   prépare la base locale, démarre l'API puis l'interface et ouvre le navigateur.
 
 .DESCRIPTION
@@ -136,7 +136,7 @@ function Reset-Folder($path, $label) {
   if (-not (Test-Path $path)) { return }
   Write-Host "  Suppression de $label…"
   try { Remove-Item -Recurse -Force $path }
-  catch { throw "Impossible de supprimer $label : fermer les autres fenêtres de Rules Manager (API, interface, VS Code) puis relancer." }
+  catch { throw "Impossible de supprimer $label : fermer les autres fenêtres de Fraud Rules (API, interface, VS Code) puis relancer." }
 }
 
 if ($Install) {

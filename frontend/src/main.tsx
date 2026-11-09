@@ -1,5 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MotionConfig } from 'framer-motion';
 import { App } from './App';
 // Polices embarquées (pas de CDN : réseau interne) — même rendu sous Windows, macOS et Linux.
 import '@fontsource/plus-jakarta-sans/latin-400.css';
@@ -12,6 +13,9 @@ import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    {/* Animations coupées si le poste demande de réduire les mouvements. */}
+    <MotionConfig reducedMotion="user">
+      <App />
+    </MotionConfig>
   </StrictMode>,
 );

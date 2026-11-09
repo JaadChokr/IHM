@@ -244,8 +244,6 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             </div>
           </section>
 
-          {data.versions.length > 0 && <VersionComparison versions={data.versions} />}
-
           <details className="card card-pad">
             <summary>Voir les données journalières</summary>
             <div className="table-wrap" style={{ marginTop: 10, maxHeight: 320, overflow: 'auto' }}>
@@ -280,7 +278,8 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
 }
 
 /** Indicateurs de chaque version sur toute sa période d'exécution, pour juger l'effet d'une modification. */
-function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
+/** Tableau de comparaison des versions (onglet Versions de la fiche). */
+export function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
   const rows = versions.map((v) => {
     const t = totals([{ date: v.lastDate, ordersFlagged: v.ordersFlagged, ordersProcessed: v.ordersProcessed, ordersConfirmedFraud: v.ordersConfirmedFraud }]);
     return { ...v, ...t, perDay: v.days ? v.ordersFlagged / v.days : 0 };
@@ -292,7 +291,7 @@ function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
           <h3>
             Comparaison des versions
             <InfoTip>
-              Chaque version sur toute sa durée d'exécution, quelle que soit la période choisie, y compris en observation. Une commande trouvée
+              Chaque version sur toute sa durée d'exécution, y compris en observation. Une commande trouvée
               par deux versions compte pour chacune : les lignes ne s'additionnent pas.
             </InfoTip>
           </h3>

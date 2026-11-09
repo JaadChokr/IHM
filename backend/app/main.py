@@ -14,7 +14,7 @@ def create_app() -> FastAPI:
     )
 
     # Le front appelle /api/... ; le préfixe est retiré par le proxy (Vite en local, Nginx en production).
-    app = FastAPI(title="Rules Manager API", version="0.1.0")
+    app = FastAPI(title="Fraud Rules API", version="0.1.0")
     app.add_exception_handler(ApiError, api_error_handler)
     if settings.env == "local":
         app.add_middleware(

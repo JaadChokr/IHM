@@ -38,6 +38,7 @@ const toInput = (r: RuleInput): RuleInput => ({
 
 /** Unités dans l'ordre du sélecteur de fréquence. */
 const UNITS: Schedule[] = ['HOURLY', 'DAILY', 'WEEKLY'];
+const UNIT_LABEL: Record<Schedule, string> = { HOURLY: 'Heures', DAILY: 'Jours', WEEKLY: 'Semaines' };
 /** « Toutes les heures », « Toutes les 2 heures », « Tous les 3 jours »… */
 function everyLabel(u: Schedule, n: number): string {
   const many = SCHEDULE_UNIT[u][1];
@@ -443,31 +444,48 @@ export function RuleEditorPage() {
                 </div>
               </fieldset>
               <div className="field">
-                <label htmlFor="schedule-every">
+                <label htmlFor="schedule-every" id="schedule-every-label">
                   Fréquence d'exécution souhaitée<span className="req" aria-hidden="true">*</span>
                   <InfoTip>
                     Les heures d'exécution sont fixes : toutes les 2 h = 0 h 05, 2 h 05, 4 h 05… ; chaque jour à 3 h ; chaque lundi à 4 h. La
                     requête porte sur la période écoulée depuis l'exécution précédente (@period_start / @period_end).
                   </InfoTip>
                 </label>
-                <select
-                  id="schedule-every"
-                  value={`${form.schedule}:${form.scheduleEvery}`}
-                  onChange={(e) => {
-                    const [s, n] = e.target.value.split(':');
-                    setForm((f) => ({ ...f, schedule: s as RuleInput['schedule'], scheduleEvery: Number(n) }));
-                  }}
-                >
-                  {UNITS.map((u) => (
-                    <optgroup key={u} label={SCHEDULE_UNIT[u][1][0].toUpperCase() + SCHEDULE_UNIT[u][1].slice(1)}>
-                      {EVERY[u].map((n) => (
-                        <option key={n} value={`${u}:${n}`}>
-                          {everyLabel(u, n)}
+                <div className="frequency">
+                  <div className="field">
+                    <span className="hint" id="schedule-unit-label">Unité</span>
+                    <select
+                      id="schedule-every"
+                      aria-labelledby="schedule-every-label schedule-unit-label"
+                      value={form.schedule}
+                      onChange={(e) => {
+                        const u = e.target.value as Schedule;
+                        // Pas impossible dans la nouvelle unité (ex. 5 jours → heures) : retour à 1.
+                        setForm((f) => ({ ...f, schedule: u, scheduleEvery: EVERY[u].includes(f.scheduleEvery) ? f.scheduleEvery : 1 }));
+                      }}
+                    >
+                      {UNITS.map((u) => (
+                        <option key={u} value={u}>
+                          {UNIT_LABEL[u]}
                         </option>
                       ))}
-                    </optgroup>
-                  ))}
-                </select>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <span className="hint" id="schedule-step-label">Pas</span>
+                    <select
+                      aria-labelledby="schedule-every-label schedule-step-label"
+                      value={form.scheduleEvery}
+                      onChange={(e) => set('scheduleEvery', Number(e.target.value))}
+                    >
+                      {EVERY[form.schedule].map((n) => (
+                        <option key={n} value={n}>
+                          {everyLabel(form.schedule, n)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
                 <p className="small muted">
                   Exécution {scheduleWhen(form.schedule, form.scheduleEvery)} · prochaine le {fmtRun(nextRun(form.schedule, form.scheduleEvery))}
                 </p>

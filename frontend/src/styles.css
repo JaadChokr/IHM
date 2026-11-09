@@ -743,8 +743,19 @@ table.data a:not(.btn):hover {
   cursor: pointer;
   white-space: nowrap;
 }
-.tab[aria-selected='true'] {
+.tab {
+  position: relative;
+}
+.tab-text {
+  position: relative;
+}
+.tab-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
   background: var(--brand);
+}
+.tab[aria-selected='true'] {
   color: #fff;
   font-weight: 600;
 }
@@ -1197,6 +1208,8 @@ table.data a:not(.btn):hover {
 }
 .seg {
   display: inline-flex;
+  /* Dans un champ (colonne flex), ne pas s'étirer sur toute la largeur. */
+  align-self: flex-start;
   gap: 2px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -1216,6 +1229,7 @@ table.data a:not(.btn):hover {
 /* Sélecteur étiré sur toute la largeur d'un champ : boutons de largeur égale. */
 .seg.seg-fill {
   display: flex;
+  align-self: stretch;
 }
 .seg.seg-fill button {
   flex: 1 1 0;
@@ -1498,6 +1512,7 @@ details summary {
   padding-top: 0;
 }
 .nav a {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -1517,10 +1532,19 @@ details summary {
   opacity: 1;
 }
 .nav a.active {
-  background: var(--brand);
   color: #fff;
   opacity: 1;
   font-weight: 600;
+}
+.nav a > :not(.nav-pill) {
+  position: relative;
+}
+/* Pastille de l'élément actif (animée par framer-motion d'un élément à l'autre). */
+.nav-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  background: var(--brand);
 }
 .sidebar-demo {
   display: flex;
@@ -2138,4 +2162,14 @@ details summary {
   display: flex;
   gap: 8px;
   margin-left: auto;
+}
+
+/* Fréquence d'exécution : unité, puis pas (éditeur) */
+.frequency {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 10px;
+}
+.frequency .field {
+  gap: 2px;
 }

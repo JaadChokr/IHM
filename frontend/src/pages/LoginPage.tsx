@@ -62,8 +62,8 @@ export function LoginPage() {
     <div className="login-wrap">
       <aside className="login-aside">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">R</span>
-          Rules Manager
+          <span className="brand-mark" aria-hidden="true">F</span>
+          Fraud Rules
         </div>
         <div className="login-pitch">
           <p className="login-title">Les règles de détection de fraude, de l'idée à la production.</p>
@@ -77,7 +77,7 @@ export function LoginPage() {
       <div className="login-main">
       <div className="card login-card stack">
         <div className="row" style={{ gap: 10 }}>
-          <span className="brand-mark login-card-mark" aria-hidden="true">R</span>
+          <span className="brand-mark login-card-mark" aria-hidden="true">F</span>
           <h1>Connexion</h1>
         </div>
         {step === 'code' ? (
