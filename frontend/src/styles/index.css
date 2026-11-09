@@ -1,0 +1,9 @@
+/*
+ * Feuille de style de l'application, dans l'ordre de la cascade :
+ *   1. tokens.css : les valeurs (couleurs des deux thèmes, rayons, espacements, textes) ;
+ *   2. ui.css     : base, composants communs (cartes, boutons, champs, tableaux, badges, onglets…),
+ *                   utilitaires, coquille de l'application, puis styles propres à certaines pages.
+ * Règles d'usage : frontend/STYLE.md.
+ */
+@import './tokens.css';
+@import './ui.css';

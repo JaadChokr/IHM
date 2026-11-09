@@ -11,7 +11,7 @@ import { usePageTitle } from '../nav/history';
 import { DiffView } from '../components/DiffView';
 import { PerformanceDashboard, VersionComparison } from '../components/PerformanceDashboard';
 import { KpiTile } from '../components/KpiTile';
-import { Alert, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
+import { Alert, Card, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
 import { AuditTable } from './AuditPage';
 import { fmtDateTime, fmtDuration, fmtInt, isoDate, scheduleLabel, scheduleWhen } from '../lib/format';
 import { fmtRun, nextRun } from '../lib/period';
@@ -67,12 +67,12 @@ export function RuleDetailPage() {
       <div className="page-head">
         <div>
           <Breadcrumb items={[{ label: 'Règles', to: '/rules' }, { label: r.name }]} />
-          <div className="row" style={{ gap: 10 }}>
+          <div className="row gap-3">
             <h1>{r.name}</h1>
             <span className="tag">v{r.version}</span>
             <StatusBadge status={r.status} lastRunAt={r.lastRunAt} />
           </div>
-          <p className="row small" style={{ gap: 14 }}>
+          <p className="row small gap-4">
             <span>{r.fraudTypology}</span>
             <CriticalityBadge value={r.criticality} />
             <span>{scheduleLabel(r.schedule, r.scheduleEvery)}</span>
@@ -96,7 +96,7 @@ export function RuleDetailPage() {
         </div>
       </div>
 
-      <div className="stack" style={{ marginBottom: 16 }}>
+      <div className="stack mb-4">
         {flash === 'draftDeleted' && <Alert kind="success" title="Brouillon supprimé." />}
         {flash === 'submitted' && (
           <Alert
@@ -194,9 +194,9 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
   const test = useQueryTest({ sql: r.sqlQuery, target: { ruleId: r.ruleId }, schedule: r.schedule, scheduleEvery: r.scheduleEvery, onIssues: setIssues, onTested });
   return (
     <div className="stack">
-      <div className="card card-pad stack" style={{ gap: 12 }}>
+      <div className="card card-pad stack gap-3">
         <Lifecycle status={r.status} lastRunAt={r.lastRunAt} />
-        <p style={{ margin: 0 }}>{r.description}</p>
+        <p className="m-0">{r.description}</p>
         <dl className="kv">
           <dt>Identifiant</dt>
           <dd className="mono small">{r.ruleId}</dd>
@@ -278,17 +278,16 @@ function RunsTab({ r }: { r: RuleDetail }) {
           info="Une exécution en échec est retentée automatiquement. Si les échecs se répètent, prévenez l'équipe data."
         />
       </div>
-      <div className="card">
-        <div className="card-head">
-          <h2>
-            Historique des exécutions
-            <InfoTip>Une ligne par exécution automatique, la plus récente en premier, toutes versions confondues.</InfoTip>
-          </h2>
+      <Card
+        title="Historique des exécutions"
+        info="Une ligne par exécution automatique, la plus récente en premier, toutes versions confondues."
+        actions={
           <label className="row small">
             <input type="checkbox" checked={onlyFailed} onChange={(e) => setOnlyFailed(e.target.checked)} />
             Échecs uniquement ({failed.length})
           </label>
-        </div>
+        }
+      >
         {shown.length === 0 ? (
           <div className="empty">Aucune exécution en échec sur les {DAYS} derniers jours.</div>
         ) : (
@@ -321,12 +320,12 @@ function RunsTab({ r }: { r: RuleDetail }) {
                     <td className="num">{x.rowsToSend == null ? '—' : fmtInt(x.rowsToSend)}</td>
                     <td>
                       {x.status === 'SUCCESS' ? (
-                        <span style={{ color: 'var(--good)' }}>
+                        <span className="text-good">
                           ✓ Réussie
                           {(x.attempts ?? 1) > 1 && <span className="small muted"> après {x.attempts} tentatives</span>}
                         </span>
                       ) : (
-                        <span style={{ color: 'var(--bad)' }}>
+                        <span className="text-bad">
                           ✕ Échec
                           {(x.attempts ?? 1) > 1 && <span className="small muted"> ({x.attempts} tentatives)</span>}
                           {x.errorMessage && <InfoTip align="end">Détail technique, à transmettre à l'équipe data : {x.errorMessage}</InfoTip>}
@@ -340,7 +339,7 @@ function RunsTab({ r }: { r: RuleDetail }) {
             <Pager {...pager} />
           </div>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -392,7 +391,11 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
 
   return (
     <div className="stack">
-      <div className="card">
+      <Card
+        title="Versions publiées"
+        subtitle={`${versions.length} version${versions.length > 1 ? 's' : ''}, la plus récente en premier`}
+        info="Toutes les versions restent conservées. « Restaurer » recopie une version antérieure dans votre brouillon, à tester puis publier."
+      >
         <div className="table-wrap">
           <table className="data">
             <thead>
@@ -423,7 +426,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                     <div className="muted">{v.submittedByName}</div>
                   </td>
                   <td>
-                    <div className="row" style={{ gap: 6, flexWrap: 'nowrap', justifyContent: 'flex-end' }}>
+                    <div className="row gap-2 nowrap-row justify-end">
                       <button type="button" className="btn btn-sm" onClick={() => setShown(shown?.version === v.version ? null : v)} aria-expanded={shown?.version === v.version}>
                         {shown?.version === v.version ? 'Masquer' : 'Voir le SQL'}
                       </button>
@@ -450,7 +453,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {confirming !== null && (
         <Alert kind="info" title={`Restaurer la v${confirming} ?`}>
@@ -466,25 +469,22 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
       <VersionsPerformance ruleId={r.ruleId} />
 
       {shown && (
-        <section className="card">
-          <div className="card-head">
-            <h3>Requête de la v{shown.version}</h3>
-          </div>
-          <div className="card-pad">
-            <SqlEditor value={shown.sqlQuery} readOnly ariaLabel={`Requête de la version ${shown.version}`} />
-          </div>
-        </section>
+        <Card title={`Requête de la v${shown.version}`} padded>
+          <SqlEditor value={shown.sqlQuery} readOnly ariaLabel={`Requête de la version ${shown.version}`} />
+        </Card>
       )}
 
       {versions.length > 1 ? (
-        <section className="card">
-          <div className="card-head">
-            <h3>Comparer deux versions</h3>
-            <div className="row">
+        <Card
+          title="Comparer deux versions"
+          subtitle="Différences de la requête SQL"
+          padded
+          actions={
+            <>
               <label htmlFor="va" className="small muted">
                 De
               </label>
-              <select id="va" value={a} onChange={(e) => setA(Number(e.target.value))} style={{ width: 'auto' }}>
+              <select id="va" value={a} onChange={(e) => setA(Number(e.target.value))} className="w-auto">
                 {versions.map((v) => (
                   <option key={v.version} value={v.version}>
                     v{v.version}
@@ -494,19 +494,18 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
               <label htmlFor="vb" className="small muted">
                 à
               </label>
-              <select id="vb" value={b} onChange={(e) => setB(Number(e.target.value))} style={{ width: 'auto' }}>
+              <select id="vb" value={b} onChange={(e) => setB(Number(e.target.value))} className="w-auto">
                 {versions.map((v) => (
                   <option key={v.version} value={v.version}>
                     v{v.version}
                   </option>
                 ))}
               </select>
-            </div>
-          </div>
-          <div className="card-pad stack">
-            <DiffView before={va.sqlQuery} after={vb.sqlQuery} />
-          </div>
-        </section>
+            </>
+          }
+        >
+          <DiffView before={va.sqlQuery} after={vb.sqlQuery} />
+        </Card>
       ) : (
         <p className="small muted">Une seule version : rien à comparer.</p>
       )}
@@ -518,9 +517,9 @@ function RuleAudit({ ruleId }: { ruleId: string }) {
   const events = useAsync(() => api.listAudit({ ruleId }), [ruleId]);
   if (!events.data) return <Spinner />;
   return (
-    <div className="card">
+    <Card title="Historique de la règle" subtitle="Création, tests, publications et décisions d'envoi, toutes versions confondues">
       <AuditTable events={events.data} showRule={false} />
-    </div>
+    </Card>
   );
 }
 
@@ -655,7 +654,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
       {c && confirming && (
         <Alert kind={c.danger ? 'warn' : 'info'} title={c.title}>
           {c.text}
-          <div className="row" style={{ marginTop: 8 }}>
+          <div className="row mt-2">
             <button type="button" className={`btn btn-sm ${c.danger ? 'btn-danger' : 'btn-primary'}`} onClick={() => decide(confirming)} disabled={busy}>
               {busy && <span className="spinner" aria-hidden="true" />}
               {c.label}
@@ -685,7 +684,7 @@ function DemoPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) =
     }
   };
   return (
-    <div className="demo-panel stack" style={{ marginTop: 24, gap: 8 }}>
+    <div className="demo-panel stack mt-6 gap-2">
       <div>
         <strong>Simulation des exécutions</strong> <span className="small muted">— mode démo uniquement</span>
         <InfoTip>

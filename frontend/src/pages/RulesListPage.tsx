@@ -48,9 +48,9 @@ export function RulesListPage() {
       </div>
 
       <div className="card rules-card">
-        <div className="card-pad stack" style={{ gap: 10, borderBottom: '1px solid var(--border)' }}>
+        <div className="card-pad stack gap-3 divider-bottom">
           <div className="row">
-            <div className="field" style={{ flex: '1 1 280px' }}>
+            <div className="field grow-field">
               <label htmlFor="q" className="sr-only">
                 Rechercher
               </label>
@@ -99,7 +99,7 @@ export function RulesListPage() {
           <div className="empty">
             Aucune règle ne correspond à ces critères.
             {active && (
-              <div style={{ marginTop: 8 }}>
+              <div className="mt-2">
                 <button type="button" className="linkish" onClick={() => { setQ(''); setFilters(DEFAULT_FILTERS); }}>
                   Réinitialiser les filtres
                 </button>
@@ -129,16 +129,16 @@ export function RulesListPage() {
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.ruleId}>
-                    <td style={{ maxWidth: 300 }}>
+                    <td className="cell-wide">
                       <Link to={`/rules/${r.ruleId}`} className="rule-link">
                         {r.name}
                       </Link>
-                      <div className="small muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div className="small muted ellipsis">
                         {r.description}
                       </div>
                     </td>
                     <td>
-                      <div className="stack" style={{ gap: 2 }}>
+                      <div className="stack gap-1">
                         <StatusBadge status={r.status} lastRunAt={r.lastRunAt} />
                         {r.productionVersion && <span className="small muted">v{r.productionVersion} en production</span>}
                       </div>
@@ -153,9 +153,9 @@ export function RulesListPage() {
                       {!r.lastTest ? (
                         <span className="muted">Jamais testée</span>
                       ) : r.lastTest.success ? (
-                        <span style={{ color: 'var(--good)' }}>✓ {r.lastTest.phase === 'EXECUTION' ? 'Testée' : 'Syntaxe'}</span>
+                        <span className="text-good">✓ {r.lastTest.phase === 'EXECUTION' ? 'Testée' : 'Syntaxe'}</span>
                       ) : (
-                        <span style={{ color: 'var(--bad)' }}>✕ Échec</span>
+                        <span className="text-bad">✕ Échec</span>
                       )}
                     </td>
                   </tr>
@@ -173,11 +173,11 @@ export function RulesListPage() {
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: [string, string][] }) {
   const id = `f-${label}`;
   return (
-    <div className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
+    <div className="row gap-2 nowrap-row">
       <label htmlFor={id} className="small muted">
         {label}
       </label>
-      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} style={{ width: 'auto', minHeight: 30, padding: '3px 8px' }}>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} className="select-sm">
         <option value="">Tous</option>
         {options.map(([v, l]) => (
           <option key={v} value={v}>

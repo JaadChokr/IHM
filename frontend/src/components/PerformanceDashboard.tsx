@@ -6,7 +6,7 @@ import { delta, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
 import { LineChart, versionColor, type Series } from './LineChart';
-import { Alert, InfoTip, Spinner } from './ui';
+import { Alert, Card, InfoTip, Spinner } from './ui';
 
 type Preset = 7 | 30 | 90 | 'all' | 'custom';
 
@@ -126,7 +126,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
   return (
     <div className="stack">
       {observing && (
-        <p className="small muted" style={{ margin: 0 }}>
+        <p className="small muted m-0">
           En observation : rien n'est envoyé au prestataire.
           <InfoTip align="start">
             Le volume remonté est réel. La précision, elle, ne porte que sur les commandes qu'une autre règle a envoyées au prestataire :
@@ -153,11 +153,11 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             <label className="small muted" htmlFor="from">
               Du
             </label>
-            <input id="from" type="date" value={custom.from} max={today} onChange={(e) => setCustom({ ...custom, from: e.target.value })} style={{ width: 'auto' }} />
+            <input id="from" type="date" value={custom.from} max={today} onChange={(e) => setCustom({ ...custom, from: e.target.value })} className="w-auto" />
             <label className="small muted" htmlFor="to">
               au
             </label>
-            <input id="to" type="date" value={custom.to} max={today} onChange={(e) => setCustom({ ...custom, to: e.target.value })} style={{ width: 'auto' }} />
+            <input id="to" type="date" value={custom.to} max={today} onChange={(e) => setCustom({ ...custom, to: e.target.value })} className="w-auto" />
           </div>
         )}
         <span className="spacer" />
@@ -203,50 +203,30 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             />
           </div>
 
-          <section className="card">
-            <div className="card-head">
-              <div>
-                <h3>
-                  Volume remonté par jour
-                  <InfoTip>Une courbe par version. Trait plein : la version est en production (commandes envoyées au prestataire). Pointillé : en observation.</InfoTip>
-                </h3>
-              </div>
-            </div>
-            <div className="card-pad">
-              <LineChart
-                label="Volume remonté par jour"
-                dates={view.dates}
-                series={view.volume}
-                format={(v) => fmtInt(Math.round(v))}
-                markers={view.markers}
-              />
-            </div>
-          </section>
+          <Card title="Volume remonté par jour" info="Une courbe par version. Trait plein : la version est en production (commandes envoyées au prestataire). Pointillé : en observation." padded>
+            <LineChart
+              label="Volume remonté par jour"
+              dates={view.dates}
+              series={view.volume}
+              format={(v) => fmtInt(Math.round(v))}
+              markers={view.markers}
+            />
+          </Card>
 
-          <section className="card">
-            <div className="card-head">
-              <div>
-                <h3>
-                  Taux de précision par jour
-                  <InfoTip>Confirmées frauduleuses ÷ commandes vérifiées, pour les versions en production. Pas de point les jours sans commande vérifiée.</InfoTip>
-                </h3>
-              </div>
-            </div>
-            <div className="card-pad">
-              <LineChart
-                label="Taux de précision par jour"
-                dates={view.dates}
-                series={view.precision}
-                format={(v) => fmtPct(v)}
-                yMax={1}
-                markers={view.markers}
-              />
-            </div>
-          </section>
+          <Card title="Taux de précision par jour" info="Confirmées frauduleuses ÷ commandes vérifiées, pour les versions en production. Pas de point les jours sans commande vérifiée." padded>
+            <LineChart
+              label="Taux de précision par jour"
+              dates={view.dates}
+              series={view.precision}
+              format={(v) => fmtPct(v)}
+              yMax={1}
+              markers={view.markers}
+            />
+          </Card>
 
           <details className="card card-pad">
             <summary>Voir les données journalières</summary>
-            <div className="table-wrap" style={{ marginTop: 10, maxHeight: 320, overflow: 'auto' }}>
+            <div className="table-wrap scroll-box mt-2">
               <table className="data">
                 <thead>
                   <tr>
@@ -285,18 +265,11 @@ export function VersionComparison({ versions }: { versions: VersionPerformance[]
     return { ...v, ...t, perDay: v.days ? v.ordersFlagged / v.days : 0 };
   });
   return (
-    <section className="card">
-      <div className="card-head">
-        <div>
-          <h3>
-            Comparaison des versions
-            <InfoTip>
-              Chaque version sur toute sa durée d'exécution, y compris en observation. Une commande trouvée
-              par deux versions compte pour chacune : les lignes ne s'additionnent pas.
-            </InfoTip>
-          </h3>
-        </div>
-      </div>
+    <Card
+      title="Comparaison des versions"
+      subtitle="Performances de chaque version sur toute sa durée d'exécution"
+      info="Y compris en observation. Une commande trouvée par deux versions compte pour chacune : les lignes ne s'additionnent pas."
+    >
       <div className="table-wrap">
         <table className="data">
           <thead>
@@ -315,7 +288,7 @@ export function VersionComparison({ versions }: { versions: VersionPerformance[]
               return (
                 <tr key={r.version}>
                   <td>
-                    <span className="row" style={{ gap: 8, flexWrap: 'nowrap' }}>
+                    <span className="row gap-2 nowrap-row">
                       <span className="legend-key" style={{ background: versionColor(r.version) }} aria-hidden="true" />
                       <strong>v{r.version}</strong>
                     </span>
@@ -334,7 +307,7 @@ export function VersionComparison({ versions }: { versions: VersionPerformance[]
                         {Math.abs(d * 100).toFixed(1).replace('.', ',')} pts)
                       </span>
                     )}
-                    {r.ordersFlagged === 0 && <div className="small" style={{ color: 'var(--bad)' }}>✕ aucune remontée : requête à vérifier</div>}
+                    {r.ordersFlagged === 0 && <div className="small text-bad">✕ aucune remontée : requête à vérifier</div>}
                   </td>
                 </tr>
               );
@@ -342,6 +315,6 @@ export function VersionComparison({ versions }: { versions: VersionPerformance[]
           </tbody>
         </table>
       </div>
-    </section>
+    </Card>
   );
 }

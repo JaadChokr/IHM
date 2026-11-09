@@ -322,7 +322,7 @@ export function RuleEditorPage() {
         )}
         {restorable && (
           <Alert kind="info" title="Un brouillon non enregistré a été retrouvé sur ce poste.">
-            <div className="row" style={{ marginTop: 6 }}>
+            <div className="row mt-2">
               <span className="small muted">Dernière saisie : {fmtDateTime(restorable.savedAt)}</span>
               <button type="button" className="btn btn-sm" onClick={() => { setForm(toInput(restorable.form)); setRestorable(null); }}>
                 Restaurer
@@ -365,7 +365,7 @@ export function RuleEditorPage() {
         {confirmDelete && draft && (
           <Alert kind="warn" title="Supprimer ce brouillon ?">
             Son contenu sera perdu{draft.newRule ? '' : ` ; la règle et ses versions publiées ne changent pas`}.
-            <div className="row" style={{ marginTop: 8 }}>
+            <div className="row mt-2">
               <button type="button" className="btn btn-sm btn-danger" onClick={remove} disabled={!!saving}>
                 {saving === 'delete' && <span className="spinner" aria-hidden="true" />}
                 Supprimer
@@ -430,12 +430,12 @@ export function RuleEditorPage() {
                 {err('description') ? 'La description est obligatoire.' : 'Le scénario de fraude visé, en quelques phrases.'}
               </span>
             </div>
-            <div className="stack" style={{ gap: 14 }}>
-              <fieldset className="field" style={{ border: 'none', padding: 0, margin: 0 }}>
+            <div className="stack gap-4">
+              <fieldset className="field fieldset-reset">
                 <legend className="label">
                   Criticité<span className="req" aria-hidden="true">*</span>
                 </legend>
-                <div className="seg seg-fill" style={{ marginTop: 4 }}>
+                <div className="seg seg-fill mt-1">
                   {CRITICALITIES.map((c) => (
                     <button type="button" key={c} aria-pressed={form.criticality === c} onClick={() => set('criticality', c)}>
                       {CRITICALITY_LABEL[c]}
@@ -562,7 +562,7 @@ export function RuleEditorPage() {
           </button>
         </div>
         {!canSubmit && (
-          <p className="small muted" style={{ margin: 0, textAlign: 'right' }}>
+          <p className="small muted m-0 text-right">
             La publication exige tous les champs obligatoires et une exécution de test réussie sur la requête actuelle.
           </p>
         )}

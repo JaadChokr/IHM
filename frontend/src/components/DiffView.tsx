@@ -6,10 +6,10 @@ export function DiffView({ before, after }: { before: string; after: string }) {
   const added = lines.filter((l) => l.kind === 'add').length;
   const removed = lines.filter((l) => l.kind === 'del').length;
   return (
-    <div className="stack" style={{ gap: 8 }}>
-      <p className="small muted" style={{ margin: 0 }}>
-        <span style={{ color: 'var(--good)' }}>+{added} ligne{added > 1 ? 's' : ''}</span> ·{' '}
-        <span style={{ color: 'var(--bad)' }}>−{removed} ligne{removed > 1 ? 's' : ''}</span>
+    <div className="stack gap-2">
+      <p className="small muted m-0">
+        <span className="text-good">+{added} ligne{added > 1 ? 's' : ''}</span> ·{' '}
+        <span className="text-bad">−{removed} ligne{removed > 1 ? 's' : ''}</span>
       </p>
       <div className="diff" role="table" aria-label="Différences SQL">
         {lines.map((l, i) => (

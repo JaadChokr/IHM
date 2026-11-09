@@ -61,7 +61,7 @@ export function Alert({ kind, title, children }: { kind: AlertKind; title?: Reac
         {ICON[kind]}
       </span>
       <div>
-        {title && <p style={{ fontWeight: 600 }}>{title}</p>}
+        {title && <p className="strong">{title}</p>}
         {children && <div>{children}</div>}
       </div>
     </div>
@@ -78,7 +78,7 @@ export function Lifecycle({ status, lastRunAt }: { status: DisplayStatus; lastRu
   return (
     <div className="lifecycle" aria-label={`Cycle de vie, statut actuel : ${STATUS_LABEL[status]}`}>
       {main.map((s, i) => (
-        <span key={s} className="row" style={{ gap: 4 }}>
+        <span key={s} className="row gap-1">
           {i > 0 && <span className="arrow" aria-hidden="true">→</span>}
           <StatusBadge status={s} dim={s !== status} />
         </span>
@@ -115,5 +115,46 @@ export function Initials({ name }: { name: string }) {
     <span className="avatar" aria-hidden="true">
       {s}
     </span>
+  );
+}
+
+interface CardProps {
+  /** Titre de la carte (h2). Sans titre : carte nue (contenu seul). */
+  title?: ReactNode;
+  /** Ligne d'explication sous le titre. */
+  subtitle?: ReactNode;
+  /** Explication en infobulle à côté du titre (préférée aux blocs de texte). */
+  info?: ReactNode;
+  /** Actions à droite de l'en-tête (boutons, filtres, case à cocher). */
+  actions?: ReactNode;
+  /** Contenu avec la marge intérieure standard (formulaires, textes) ; sans : contenu bord à bord
+   * (tableau, liste), qui suit alors les coins arrondis de la carte. */
+  padded?: boolean;
+  className?: string;
+  children?: ReactNode;
+}
+
+/**
+ * Carte standard de l'interface : fond, coins, en-tête (titre, explication, actions) et marges identiques
+ * sur toutes les pages. À utiliser pour toute nouvelle section plutôt qu'un <div className="card">.
+ */
+export function Card({ title, subtitle, info, actions, padded, className, children }: CardProps) {
+  const id = useId();
+  return (
+    <section className={`card${className ? ` ${className}` : ''}`} aria-labelledby={title ? id : undefined}>
+      {title && (
+        <div className="card-head">
+          <div>
+            <h2 id={id}>
+              {title}
+              {info && <InfoTip>{info}</InfoTip>}
+            </h2>
+            {subtitle && <p>{subtitle}</p>}
+          </div>
+          {actions && <div className="row card-actions">{actions}</div>}
+        </div>
+      )}
+      {padded ? <div className="card-pad">{children}</div> : children}
+    </section>
   );
 }

@@ -92,9 +92,9 @@ export function ProfilePage() {
             </div>
           </div>
           <div className="card-pad stack">
-            <fieldset className="field" style={{ border: 'none', padding: 0, margin: 0 }}>
+            <fieldset className="field fieldset-reset">
               <legend className="label">Thème</legend>
-              <div className="seg" style={{ marginTop: 4 }}>
+              <div className="seg mt-1">
                 {(
                   [
                     ['system', 'Système'],
@@ -114,7 +114,7 @@ export function ProfilePage() {
               </button>
             </div>
             {api.demo && (
-              <div className="demo-panel stack" style={{ gap: 6 }}>
+              <div className="demo-panel stack gap-2">
                 <span className="small">
                   <strong>Mode démo</strong> — réinitialiser les données simulées.
                 </span>

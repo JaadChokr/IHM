@@ -90,11 +90,11 @@ export function AuditPage() {
       </div>
       <div className="stack">
         <div className="card">
-          <div className="card-pad row" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="card-pad row divider-bottom">
             <label htmlFor="au-user" className="small muted">
               Utilisateur
             </label>
-            <select id="au-user" value={matricule} onChange={(e) => setMatricule(e.target.value)} style={{ width: 'auto' }}>
+            <select id="au-user" value={matricule} onChange={(e) => setMatricule(e.target.value)} className="w-auto">
               <option value="">Tous</option>
               {users.data?.map((u) => (
                 <option key={u.matricule} value={u.matricule}>
@@ -105,7 +105,7 @@ export function AuditPage() {
             <label htmlFor="au-action" className="small muted">
               Action
             </label>
-            <select id="au-action" value={action} onChange={(e) => setAction(e.target.value as AuditAction | '')} style={{ width: 'auto' }}>
+            <select id="au-action" value={action} onChange={(e) => setAction(e.target.value as AuditAction | '')} className="w-auto">
               <option value="">Toutes</option>
               {Object.entries(ACTION_LABEL).map(([k, l]) => (
                 <option key={k} value={k}>

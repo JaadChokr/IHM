@@ -76,13 +76,13 @@ export function LoginPage() {
       </aside>
       <div className="login-main">
       <div className="card login-card stack">
-        <div className="row" style={{ gap: 10 }}>
+        <div className="row gap-3">
           <span className="brand-mark login-card-mark" aria-hidden="true">F</span>
           <h1>Connexion</h1>
         </div>
         {step === 'code' ? (
           <form className="stack" onSubmit={submitCode} noValidate>
-            <p className="muted" style={{ margin: 0 }}>
+            <p className="muted m-0">
               Plateforme de gestion des règles de détection de fraude.
             </p>
             <div className="field">
@@ -111,7 +111,7 @@ export function LoginPage() {
               {busy && <span className="spinner" aria-hidden="true" />}
               Continuer
             </button>
-            <p className="small muted" style={{ margin: 0 }}>
+            <p className="small muted m-0">
               Le matricule sert à attribuer vos actions dans le journal d'audit ; il n'est pas vérifié. L'accès à la plateforme est
               restreint au réseau interne. Session de 8 h, prolongée à chaque action.
             </p>

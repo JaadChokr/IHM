@@ -56,7 +56,7 @@ export function ProductionPage() {
       </div>
       <div className="stack">
         <div className="card prod-card">
-          <div className="card-pad row" style={{ borderBottom: '1px solid var(--border)' }}>
+          <div className="card-pad row divider-bottom">
             <label htmlFor="thr" className="small">
               Seuil d'alerte de précision
             </label>
@@ -67,12 +67,10 @@ export function ProductionPage() {
               max={100}
               step={1}
               value={Math.round(threshold * 100)}
-              onChange={(e) => setThreshold(Math.max(0, Math.min(100, Number(e.target.value))) / 100)}
-              style={{ width: 80 }}
-            />
+              onChange={(e) => setThreshold(Math.max(0, Math.min(100, Number(e.target.value))) / 100)} className="input-narrow" />
             <span className="small muted">%</span>
             <span className="spacer" />
-            <label className="row small" style={{ gap: 6 }}>
+            <label className="row small gap-2">
               <input type="checkbox" checked={onlyWatch} onChange={(e) => setOnlyWatch(e.target.checked)} />
               Seulement les règles avec alerte ({watchCount})
             </label>
@@ -101,7 +99,7 @@ export function ProductionPage() {
                   {sorted.map((r) => (
                     <tr key={r.ruleId}>
                       <td>
-                        <div className="row" style={{ gap: 8 }}>
+                        <div className="row gap-2">
                           <Link to={`/rules/${r.ruleId}`} className="rule-link">
                             {r.name}
                           </Link>
@@ -121,7 +119,7 @@ export function ProductionPage() {
                       </td>
                       <td className="small">
                         {r.reasons.length ? (
-                          <ul style={{ margin: 0, paddingLeft: 16, color: 'var(--bad)' }}>
+                          <ul className="m-0 list-compact text-bad">
                             {r.reasons.map((x) => (
                               <li key={x}>{x}</li>
                             ))}

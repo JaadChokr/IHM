@@ -169,7 +169,7 @@ export function TestResults({ t, onGoTo }: { t: QueryTest; onGoTo: (line: number
           {stale && <p>La requête a changé depuis : ce résultat porte sur la version précédente.</p>}
         </div>
       </div>
-      <div className="card-pad stack" style={{ gap: 12 }}>
+      <div className="card-pad stack gap-3">
         {error && <Alert kind="error" title={error} />}
 
         {/* Requête refusée : les erreurs d'abord, cliquables vers la ligne fautive */}
@@ -220,7 +220,7 @@ export function TestResults({ t, onGoTo }: { t: QueryTest; onGoTo: (line: number
                 <table className="data">
                   <thead>
                     <tr>
-                      <th className="num" style={{ width: 1 }}>#</th>
+                      <th className="num col-shrink">#</th>
                       {exec.columns.map((c) => (
                         <th key={c}>{c}</th>
                       ))}
@@ -291,7 +291,7 @@ function ExecSummary({ exec }: { exec: ExecutionResult }) {
         </div>
       )}
 
-      {known && total > 0 && already === 0 && <p className="small muted" style={{ margin: 0 }}>Aucune de ces commandes n'est remontée par une autre règle.</p>}
+      {known && total > 0 && already === 0 && <p className="small muted m-0">Aucune de ces commandes n'est remontée par une autre règle.</p>}
     </section>
   );
 }
@@ -300,7 +300,7 @@ function IssueItem({ issue, onGoTo }: { issue: SqlIssue; onGoTo: (l: number, c?:
   return (
     <li>
       <span className={`issue-sev ${issue.severity}`}>{issue.severity === 'error' ? 'Erreur' : 'Alerte'}</span>
-      <span style={{ wordBreak: 'break-word' }}>
+      <span className="break-word">
         {issue.message}{' '}
         {issue.line && (
           <button type="button" className="linkish small" onClick={() => onGoTo(issue.line!, issue.column)}>

@@ -49,11 +49,11 @@ export function DraftsPage() {
                 <tbody>
                   {drafts.data.map((d) => (
                     <tr key={d.id}>
-                      <td style={{ maxWidth: 320 }}>
+                      <td className="cell-wide">
                         <Link to={`/drafts/${d.id}`} className="rule-link">
                           {d.name}
                         </Link>
-                        <div className="small muted" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <div className="small muted ellipsis">
                           {d.description}
                         </div>
                       </td>
@@ -64,7 +64,7 @@ export function DraftsPage() {
                           <>
                             {draftKind(d)}
                             {d.latestVersion !== d.baseVersion && (
-                              <div style={{ color: 'var(--warn)' }}>⚠ v{d.latestVersion} publiée depuis</div>
+                              <div className="text-warn">⚠ v{d.latestVersion} publiée depuis</div>
                             )}
                           </>
                         )}
@@ -75,11 +75,11 @@ export function DraftsPage() {
                       <td className="small">{fmtDateTime(d.updatedAt)}</td>
                       <td className="small nowrap">
                         {readyToSubmit(d) ? (
-                          <span style={{ color: 'var(--good)' }}>✓ Prêt à publier</span>
+                          <span className="text-good">✓ Prêt à publier</span>
                         ) : !d.lastTest ? (
                           <span className="muted">Jamais testé</span>
                         ) : !d.lastTest.success ? (
-                          <span style={{ color: 'var(--bad)' }}>✕ Dernier test en échec</span>
+                          <span className="text-bad">✕ Dernier test en échec</span>
                         ) : (
                           <span className="muted">Test à refaire</span>
                         )}

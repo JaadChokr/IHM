@@ -10,6 +10,7 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 ├── frontend/            React + TypeScript + Vite — l'IHM (Nginx non-root en production)
 │   ├── src/api/         contrat d'API (client.ts, types.ts) + implémentation mock pour la démo
 │   ├── src/pages/       écrans (liste, éditeur, détail, vue production, audit, profil)
+│   ├── src/styles/      style centralisé : tokens.css (valeurs) + ui.css (classes communes), voir frontend/STYLE.md
 │   └── nginx/           conf Nginx : sert la SPA et relaie /api vers l'API
 ├── backend/             Python 3.12 + FastAPI — l'API, un fichier par domaine (routes + logique)
 │   ├── app/main.py      création de l'application, branchement des routes

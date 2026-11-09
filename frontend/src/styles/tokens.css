@@ -1,0 +1,183 @@
+/*
+ * JETONS DE STYLE — source unique des valeurs de l'interface (couleurs des deux thèmes, rayons,
+ * espacements, tailles de texte, hauteurs de contrôle, ombres).
+ *
+ * Règle : aucune couleur en dur ailleurs que dans ce fichier (vérifié par src/__tests__/style.test.ts).
+ * Pour changer l'apparence de toute l'application, c'est ici. Voir frontend/STYLE.md.
+ */
+:root {
+  color-scheme: light;
+  --bg: #f2f3f5;
+  --surface: #ffffff;
+  --surface-2: #f6f7f8;
+  --surface-3: #eceef1;
+  --border: #e9eaee;
+  --border-strong: #d5d7dd;
+  --text: #16181d;
+  --text-2: #4b4f58;
+  --text-3: #6c717b;
+  /* Anthracite : barre latérale, carte mise en avant, bouton principal de la barre supérieure */
+  --ink: #1c1f24;
+  --ink-2: #2a2e35;
+  --ink-text: #f4f5f7;
+  --ink-muted: #9ba1ab;
+  /* Rouge de la marque, identique dans les deux thèmes (fond d'élément actif, texte blanc) */
+  --brand: #c8102e;
+  --brand-hover: #a00d25;
+  --featured: var(--ink);
+  --accent: #c8102e;
+  --accent-hover: #a00d25;
+  --accent-soft: #fdecee;
+  --on-accent: #ffffff;
+  --focus: #c8102e;
+
+  --good: #0a7d0a;
+  --good-soft: #e3f3e3;
+  --warn: #8a5a00;
+  --warn-soft: #fdf1d6;
+  --bad: #b42828;
+  --bad-soft: #fbe5e5;
+  --info: #3d3c39;
+  --info-soft: #f4f3f2;
+  --muted-soft: #ecebe7;
+
+  --diff-add: #e3f3e3;
+  --diff-del: #fbe5e5;
+
+  /* graphiques */
+  --series-1: #c8102e;
+  /* Une couleur par version de règle sur les courbes */
+  --version-1: #c8102e;
+  --version-2: #2a78d6;
+  --version-3: #1baf7a;
+  --version-4: #6250d6;
+  --grid: #e6e7eb;
+  --incomplete: rgba(111, 110, 105, 0.1);
+
+  --radius: 20px;
+  --radius-sm: 10px;
+  --shadow: none;
+  --pop-shadow: 0 8px 24px rgba(20, 22, 28, 0.12);
+  --font: 'Plus Jakarta Sans', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
+
+  /* ---- Rouge de la marque sur fond plein ---- */
+  --on-brand: #ffffff;
+  --on-brand-soft: rgba(255, 255, 255, 0.22);
+  --shadow-xs: 0 1px 2px rgba(20, 22, 28, 0.08);
+
+  /* ---- Rayons ---- */
+  --radius-lg: 20px; /* cartes */
+  --radius-md: 12px; /* contrôles larges, pastilles de navigation */
+  --radius-pill: 999px; /* badges, pastilles */
+
+  /* ---- Espacements (multiples de 4 px) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --card-pad-x: 24px;
+
+  /* ---- Texte ---- */
+  --fs-2xs: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 12.5px;
+  --fs-md: 14px;
+  --fs-lg: 17px;
+  --fs-xl: 26px;
+  --fs-kpi: 34px;
+
+  /* ---- Contrôles ---- */
+  --control-h: 38px;
+  --control-h-sm: 30px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #0f1012;
+    --surface: #18191c;
+    --surface-2: #202226;
+    --surface-3: #2a2c31;
+    --ink: #0a0b0d;
+    --ink-2: #1d1f24;
+    --ink-text: #f0f1f3;
+    --ink-muted: #8f959f;
+  --featured: #2a2d33;
+    --border: #353532;
+    --border-strong: #4a4a46;
+    --text: #f0efec;
+    --text-2: #c3c2b7;
+    --text-3: #9c9b93;
+    --accent: #f0646f;
+    --accent-hover: #f48a92;
+    --accent-soft: #3a1418;
+    --on-accent: #1a0507;
+    --focus: #f0646f;
+    --good: #5cc45c;
+    --good-soft: #17301a;
+    --warn: #f0b440;
+    --warn-soft: #382a0c;
+    --bad: #ef7373;
+    --bad-soft: #3d1b1b;
+    --info: #d6d5ce;
+    --info-soft: #262624;
+    --muted-soft: #2a2a27;
+    --diff-add: #17301a;
+    --diff-del: #3d1b1b;
+    --series-1: #f0646f;
+    --version-1: #e66767;
+    --version-2: #3987e5;
+    --version-3: #199e70;
+    --version-4: #9085e9;
+    --grid: #2d2d2a;
+    --incomplete: rgba(200, 200, 190, 0.07);
+    --shadow: none;
+    --pop-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0f1012;
+  --surface: #18191c;
+  --surface-2: #202226;
+  --surface-3: #2a2c31;
+  --ink: #0a0b0d;
+  --ink-2: #1d1f24;
+  --ink-text: #f0f1f3;
+  --ink-muted: #8f959f;
+  --featured: #2a2d33;
+  --border: #353532;
+  --border-strong: #4a4a46;
+  --text: #f0efec;
+  --text-2: #c3c2b7;
+  --text-3: #9c9b93;
+  --accent: #f0646f;
+  --accent-hover: #f48a92;
+  --accent-soft: #3a1418;
+  --on-accent: #1a0507;
+  --focus: #f0646f;
+  --good: #5cc45c;
+  --good-soft: #17301a;
+  --warn: #f0b440;
+  --warn-soft: #382a0c;
+  --bad: #ef7373;
+  --bad-soft: #3d1b1b;
+  --info: #d6d5ce;
+  --info-soft: #262624;
+  --muted-soft: #2a2a27;
+  --diff-add: #17301a;
+  --diff-del: #3d1b1b;
+  --series-1: #f0646f;
+    --version-1: #e66767;
+    --version-2: #3987e5;
+    --version-3: #199e70;
+    --version-4: #9085e9;
+  --grid: #2d2d2a;
+  --incomplete: rgba(200, 200, 190, 0.07);
+  --shadow: none;
+  --pop-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+

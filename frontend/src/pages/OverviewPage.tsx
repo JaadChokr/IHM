@@ -161,7 +161,7 @@ export function OverviewPage() {
                       {w.name}
                     </Link>
                     {w.reasons.map((r) => (
-                      <span key={r} className="small" style={{ color: 'var(--bad)' }}>
+                      <span key={r} className="small text-bad">
                         {r}
                       </span>
                     ))}
@@ -185,7 +185,7 @@ export function OverviewPage() {
                       {r.name} <span className="muted small">{r.newRule ? 'nouvelle règle' : `v${(r.latestVersion ?? 0) + 1}`}</span>
                     </Link>
                     {readyToSubmit(r) ? (
-                      <span className="small" style={{ color: 'var(--good)' }}>
+                      <span className="small text-good">
                         ✓ Testée, prête à publier
                       </span>
                     ) : (
@@ -257,7 +257,7 @@ function PrecisionBars({ rows, threshold }: { rows: ProductionHealth[]; threshol
             </div>
             <span className="pbar-value" role="cell">
               {r.precision === null ? (
-                <span style={{ color: 'var(--bad)' }}>{label}</span>
+                <span className="text-bad">{label}</span>
               ) : (
                 <strong>{fmtPct(r.precision)}</strong>
               )}
