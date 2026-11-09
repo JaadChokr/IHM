@@ -18,7 +18,7 @@ from app.bigquery import BigQueryGateway, get_bigquery
 from app.core import ApiError, Settings, get_settings
 from app.database import AuditEvent, Rule, User, get_db
 from app.rules import derive_status, load_rule, production_version, running_version, sync_runs
-from app.schemas import AuditEventOut, ConsolidatedRow, PerformanceResponse, PeriodTotals
+from app.schemas import AuditEventOut, ConsolidatedRow, PerformanceResponse, PeriodTotals, RuleRun
 
 router = APIRouter(tags=["pilotage"])
 
@@ -52,6 +52,21 @@ def performance(
         runs=bq.runs(rule_id, from_, to),
         versions=bq.version_totals(rule_id),
     )
+
+
+@router.get("/rules/{rule_id}/runs", response_model=list[RuleRun])
+def rule_runs(
+    rule_id: str,
+    days: int = Query(90, ge=1, le=400),
+    limit: int = Query(200, ge=1, le=1000),
+    _: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    bq: BigQueryGateway = Depends(get_bigquery),
+):
+    """Historique des exécutions automatiques de la règle (toutes versions), la plus récente d'abord."""
+    load_rule(db, rule_id)
+    end = date.today()
+    return bq.runs(rule_id, end - timedelta(days=days - 1), end, limit)
 
 
 def _totals(bq: BigQueryGateway, rule_id: str, sent: bool, start: date, end: date) -> PeriodTotals:

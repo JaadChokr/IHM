@@ -224,15 +224,24 @@ export interface VersionPerformance {
   ordersConfirmedFraud: number;
 }
 
+/** Une exécution automatique d'une version : sa dernière tentative (une exécution en échec est retentée automatiquement). */
 export interface RuleRun {
   runId: string;
   ruleVersion: number;
   runDate: string;
+  /** Période traitée par l'exécution. */
+  periodStart?: string;
+  periodEnd?: string;
   startedAt: string;
   finishedAt?: string;
   status: 'SUCCESS' | 'FAILED';
+  /** Commandes remontées. */
   rowsReturned?: number;
+  /** Dont à transmettre au prestataire. */
+  rowsToSend?: number;
   errorMessage?: string;
+  /** Nombre de tentatives (1 sans nouvelle tentative). */
+  attempts?: number;
 }
 
 export interface PerformanceResponse {

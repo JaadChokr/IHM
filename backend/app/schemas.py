@@ -215,14 +215,21 @@ class VersionPerformance(Model):
 
 
 class RuleRun(Model):
+    """Une exécution automatique d'une version : sa dernière tentative (une exécution en échec est
+    retentée automatiquement ; `attempts` en donne le nombre)."""
+
     run_id: str
     rule_version: int
     run_date: date
+    period_start: datetime | None = None
+    period_end: datetime | None = None
     started_at: datetime
     finished_at: datetime | None = None
     status: Literal["SUCCESS", "FAILED"]
-    rows_returned: int | None = None
+    rows_returned: int | None = None  # commandes remontées
+    rows_to_send: int | None = None  # dont à transmettre au prestataire
     error_message: str | None = None
+    attempts: int = 1
 
 
 class VersionDaily(Model):

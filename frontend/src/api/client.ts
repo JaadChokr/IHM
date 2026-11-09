@@ -7,6 +7,7 @@ import type {
   ExecutionResult,
   Guardrails,
   PerformanceResponse,
+  RuleRun,
   RuleDetail,
   RuleFilters,
   RuleInput,
@@ -58,6 +59,8 @@ export interface Api {
 
   // F6 / F7
   getPerformance(ruleId: string, from: string, to: string): Promise<PerformanceResponse>;
+  /** Historique des exécutions automatiques de la règle sur `days` jours, la plus récente d'abord. */
+  getRuns(ruleId: string, days?: number): Promise<RuleRun[]>;
   getConsolidated(): Promise<ConsolidatedRow[]>;
 
   // Audit
@@ -123,6 +126,7 @@ export function createHttpApi(): Api {
     execute: (sql, target) => http('POST', '/query/execute', { sql, ...target }),
     submitDraft: (id) => http('POST', `/drafts/${id}/submit`),
     getPerformance: (id, from, to) => http('GET', `/rules/${id}/performance${qs({ from, to })}`),
+    getRuns: (id, days = 90) => http('GET', `/rules/${id}/runs${qs({ days: String(days) })}`),
     getConsolidated: () => http('GET', '/performance/production'),
     listAudit: (f) => http('GET', `/audit${qs(f)}`),
   };

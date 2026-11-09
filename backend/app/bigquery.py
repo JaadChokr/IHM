@@ -289,8 +289,10 @@ class RealBigQueryGateway:
     def runs(self, rule_id, start, end, limit=20):
         P = self._bq.ScalarQueryParameter
         rows = self._rows(
-            f"""SELECT * FROM {self.ds}.rule_runs
+            # Une ligne par exécution : sa dernière tentative, avec le nombre de tentatives.
+            f"""SELECT *, COUNT(*) OVER (PARTITION BY run_id) AS attempts FROM {self.ds}.rule_runs
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end
+                QUALIFY ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY started_at DESC) = 1
                 ORDER BY started_at DESC LIMIT @limit""",
             [
                 P("rule_id", "STRING", rule_id),
@@ -478,6 +480,7 @@ class FakeBigQueryGateway:
     stats: list[RunStats] = field(default_factory=list)
     overlap: list[tuple[str, int]] = field(default_factory=list)
     last_period: Period | None = None  # période passée au dernier appel (contrôlée par les tests)
+    run_history: list[tuple[str, RuleRun]] = field(default_factory=list)
 
     def dry_run(self, sql, period):
         self.last_period = period
@@ -506,8 +509,10 @@ class FakeBigQueryGateway:
         rows = self.rule_daily.get(rule_id, self.performance.get(rule_id, []))
         return [d for d in rows if start <= d.date <= end]
 
+    # Exécutions simulées (rule_runs, dernière tentative de chacune), préremplies par les tests.
     def runs(self, rule_id, start, end, limit=20):
-        return []
+        out = [r for rid, r in self.run_history if rid == rule_id and start <= r.run_date <= end]
+        return sorted(out, key=lambda r: r.started_at, reverse=True)[:limit]
 
     def version_daily(self, rule_id, start, end):
         return [

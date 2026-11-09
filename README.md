@@ -355,6 +355,13 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     les chiffres d'une règle en production ; pour une version précise, candidate comprise, on lit le
     comparatif des versions.
 
+  **Onglet « Exécutions » de la page règle** : l'historique des exécutions automatiques sur 90 jours
+  (`GET /rules/{id}/runs`, lu dans `rule_runs`), une ligne par exécution avec sa période, sa version, sa durée,
+  les commandes remontées et envoyées et son résultat. Une exécution retentée apparaît une seule fois, avec
+  son nombre de tentatives ; le détail technique d'un échec est en infobulle, à transmettre à l'équipe data.
+  Il remplace l'ancien onglet « Tests » (l'historique des vérifications faites avant publication) et la
+  section « Dernières exécutions » de l'onglet Performance.
+
   **Courbes de la page règle** : une courbe **par version** sur toute la période, en **trait plein** quand elle
   est en production (`to_send`) et en **pointillé** quand elle est en observation (avant sa mise en production,
   ou candidate à côté de la version en production). Une candidate et la version en production se comparent

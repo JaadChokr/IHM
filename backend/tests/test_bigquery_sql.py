@@ -35,3 +35,17 @@ def test_chiffres_de_la_regle_selon_son_etat():
     assert ("sent_ids", "STRING", ["a"]) in totals[1] and ("observed_ids", "STRING", ["b"]) in totals[1]
     for sql, _ in seen:
         assert "v_rule_orders" in sql and "COUNT(DISTINCT" in sql
+
+
+def test_une_ligne_par_execution_avec_ses_tentatives():
+    from datetime import date
+
+    g = RealBigQueryGateway.__new__(RealBigQueryGateway)
+    g.ds = "`p.d`"
+    param = staticmethod(lambda *a: a)
+    g._bq = type("bq", (), {"ScalarQueryParameter": param})
+    seen: list[str] = []
+    g._rows = lambda sql, params: seen.append(sql) or []
+    g.runs("r", date(2026, 11, 1), date(2026, 11, 2), 50)
+    assert "COUNT(*) OVER (PARTITION BY run_id) AS attempts" in seen[0]
+    assert "QUALIFY ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY started_at DESC) = 1" in seen[0]

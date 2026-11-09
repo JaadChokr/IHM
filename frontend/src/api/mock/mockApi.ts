@@ -375,22 +375,34 @@ export function createMockApi(): Api {
     ordersObserved: byVersion.filter((x) => !x.toSend).reduce((s, x) => s + x.ordersFlagged, 0),
   });
 
+  /** Exécutions simulées (rule_runs) : une par jour et par version qui tourne, la plus récente d'abord. */
   function runs(r: MockRule, from: string, to: string): RuleRun[] {
     const out: RuleRun[] = [];
-    for (const d of daily(r, from, to).reverse().slice(0, 20)) {
-      const failed = rnd(r.ruleId + d.date + 'run') < 0.05;
-      const start = new Date(d.date + 'T03:00:00');
-      start.setMinutes(Math.floor(rnd(d.date + 'm') * 50));
-      out.push({
-        runId: `run_${d.date.replace(/-/g, '')}_${r.ruleId.slice(-4)}`,
-        ruleVersion: versionAt(r, d.date)!,
-        runDate: d.date,
-        startedAt: start.toISOString(),
-        finishedAt: new Date(start.getTime() + (40 + rnd(d.date) * 200) * 1000).toISOString(),
-        status: failed ? 'FAILED' : 'SUCCESS',
-        rowsReturned: failed ? undefined : d.ordersFlagged,
-        errorMessage: failed ? 'Quota exceeded: Your project exceeded quota for concurrent queries.' : undefined,
-      });
+    const today = isoDate(new Date());
+    for (let d = to > today ? today : to; d >= from; d = addDays(d, -1)) {
+      for (const version of versionsAt(r, d)) {
+        const v = r.versions.find((x) => x.version === version)!;
+        const seed = r.ruleId + d + version;
+        const failed = rnd(seed + 'run') < 0.04;
+        const retried = !failed && rnd(seed + 'retry') < 0.06; // réussie à la 2e tentative
+        const start = new Date(d + 'T03:00:00');
+        start.setMinutes(Math.floor(rnd(seed + 'm') * 20) + (retried ? 7 : 0));
+        const p = dayPerf(r, d, version);
+        out.push({
+          runId: `run_${d.replace(/-/g, '')}_${r.ruleId.slice(-4)}_v${version}`,
+          ruleVersion: version,
+          runDate: d,
+          periodStart: new Date(addDays(d, -1) + 'T03:00:00').toISOString(),
+          periodEnd: new Date(d + 'T03:00:00').toISOString(),
+          startedAt: start.toISOString(),
+          finishedAt: new Date(start.getTime() + (40 + rnd(seed) * 200) * 1000).toISOString(),
+          status: failed ? 'FAILED' : 'SUCCESS',
+          rowsReturned: failed ? undefined : p.ordersFlagged,
+          rowsToSend: failed ? undefined : sentAt(r, v, d) ? p.ordersFlagged : 0,
+          errorMessage: failed ? 'Quota exceeded: Your project exceeded quota for concurrent queries.' : undefined,
+          attempts: failed ? 3 : retried ? 2 : 1,
+        });
+      }
     }
     return out;
   }
@@ -722,9 +734,16 @@ export function createMockApi(): Api {
           versionDaily(r, addDays(from, -len), addDays(from, -1)),
         ),
         byVersion: versionDaily(r, from, to),
-        runs: runs(r, from, to),
+        runs: runs(r, from, to).slice(0, 20),
         versions: versionTotals(r),
       };
+    },
+    async getRuns(id, days = 90) {
+      await delay(150, 350);
+      currentUser();
+      const r = findRule(id);
+      const to = isoDate(new Date());
+      return runs(r, addDays(to, -(days - 1)), to);
     },
     async getConsolidated() {
       await delay(200, 400);

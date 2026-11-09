@@ -1,28 +1,31 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api/client';
-import type { DecisionAction, RuleDetail, RuleVersion, SqlIssue } from '../api/types';
+import type { DecisionAction, RuleDetail, RuleRun, RuleVersion, SqlIssue } from '../api/types';
 import { SqlEditor, type SqlEditorHandle } from '../components/SqlEditor';
 import { TestActions, TestResults, useQueryTest } from '../components/TestPanel';
 import { Breadcrumb } from '../components/Breadcrumb';
 import { usePageTitle } from '../nav/history';
 import { DiffView } from '../components/DiffView';
 import { PerformanceDashboard } from '../components/PerformanceDashboard';
+import { KpiTile } from '../components/KpiTile';
 import { Alert, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
 import { AuditTable } from './AuditPage';
-import { SCHEDULE_LABEL, SCHEDULE_WHEN, fmtBytes, fmtDateTime, fmtDuration, fmtInt } from '../lib/format';
-import { queryHash } from '../lib/sql';
+import { SCHEDULE_LABEL, SCHEDULE_WHEN, fmtDateTime, fmtDuration, fmtInt } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
 
-type Tab = 'definition' | 'performance' | 'tests' | 'versions' | 'audit';
+type Tab = 'definition' | 'performance' | 'runs' | 'versions' | 'audit';
+const TABS: Tab[] = ['definition', 'performance', 'runs', 'versions', 'audit'];
 
 export function RuleDetailPage() {
   const { ruleId = '' } = useParams();
   const loc = useLocation();
   const nav = useNavigate();
   const rule = useAsync(() => api.getRule(ruleId), [ruleId]);
-  const [tab, setTab] = usePref<Tab>('ruleTab', 'definition');
+  const [savedTab, setTab] = usePref<Tab>('ruleTab', 'definition');
+  // Un onglet mémorisé qui n'existe plus (ancien onglet « Tests ») revient à la définition.
+  const tab: Tab = TABS.includes(savedTab) ? savedTab : 'definition';
   const [flash] = useState<string | undefined>((loc.state as { flash?: string } | null)?.flash);
 
   useEffect(() => {
@@ -36,7 +39,6 @@ export function RuleDetailPage() {
   if (!rule.data) return <Spinner />;
   const r = rule.data;
 
-  const hash = queryHash(r.sqlQuery);
   const ran = r.versions.filter((v) => !!v.firstRunAt);
   const firstRunDate = ran.map((v) => v.firstRunAt!.slice(0, 10)).sort()[0];
 
@@ -52,7 +54,7 @@ export function RuleDetailPage() {
   const tabs: [Tab, string, number?][] = [
     ['definition', 'Définition'],
     ['performance', 'Performance'],
-    ['tests', 'Tests', r.tests.length],
+    ['runs', 'Exécutions'],
     ['versions', 'Versions', r.versions.length],
     ['audit', 'Audit'],
   ];
@@ -165,7 +167,7 @@ export function RuleDetailPage() {
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'definition' && <DefinitionTab r={r} onTested={rule.reload} />}
         {tab === 'performance' && <PerformanceDashboard ruleId={r.ruleId} firstRunDate={firstRunDate} versionsRun={ran.length} observing={r.status === 'OBSERVATION' && !r.candidate} />}
-        {tab === 'tests' && <TestsTab r={r} hash={hash} />}
+        {tab === 'runs' && <RunsTab r={r} />}
         {tab === 'versions' && (
           <VersionsTab
             r={r}
@@ -232,54 +234,97 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
   );
 }
 
-function TestsTab({ r, hash }: { r: RuleDetail; hash: string }) {
-  if (r.tests.length === 0) return <div className="card empty">Aucun test enregistré pour cette règle.</div>;
+/** Historique des exécutions automatiques : l'utilisateur voit si elles se sont bien déroulées. */
+function RunsTab({ r }: { r: RuleDetail }) {
+  const DAYS = 90;
+  const runs = useAsync(() => api.getRuns(r.ruleId, DAYS), [r.ruleId]);
+  const [onlyFailed, setOnlyFailed] = useState(false);
+  if (runs.error) return <Alert kind="error" title={runs.error.message} />;
+  if (!runs.data) return <Spinner />;
+  const all = runs.data;
+  if (all.length === 0) return <div className="card empty">Cette règle ne s'est pas encore exécutée.</div>;
+  const failed = all.filter((x) => x.status === 'FAILED');
+  const shown = onlyFailed ? failed : all;
+  const last = all[0];
+  const duration = (x: RuleRun) =>
+    x.finishedAt ? fmtDuration(new Date(x.finishedAt).getTime() - new Date(x.startedAt).getTime()) : '—';
   return (
-    <div className="card">
-      <div className="card-head">
-        <div>
-          <h2>
-            Historique des tests
-            <InfoTip>Seuls le résultat et les volumes sont conservés, jamais les commandes renvoyées.</InfoTip>
-          </h2>
-        </div>
+    <div className="stack">
+      <div className="grid-3">
+        <KpiTile
+          label="Dernière exécution"
+          value={last.status === 'SUCCESS' ? 'Réussie' : 'En échec'}
+          sub={`${fmtDateTime(last.startedAt)} · v${last.ruleVersion}`}
+        />
+        <KpiTile label="Exécutions réussies" value={`${fmtInt(all.length - failed.length)} / ${fmtInt(all.length)}`} sub={`${DAYS} derniers jours`} />
+        <KpiTile
+          label="En échec"
+          value={fmtInt(failed.length)}
+          sub={failed.length ? `Dernier échec le ${fmtDateTime(failed[0].startedAt)}` : 'Aucun échec'}
+          info="Une exécution en échec est retentée automatiquement. Si les échecs se répètent, prévenez l'équipe data."
+        />
       </div>
-      <div className="table-wrap">
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Version</th>
-              <th>Étape</th>
-              <th>Résultat</th>
-              <th className="num">Volume lu</th>
-              <th className="num">Lignes</th>
-              <th className="num">Durée</th>
-              <th>Par</th>
-            </tr>
-          </thead>
-          <tbody>
-            {r.tests.map((t) => (
-              <tr key={t.id}>
-                <td className="small nowrap">{fmtDateTime(t.at)}</td>
-                <td>
-                  v{t.version}
-                  {t.version === r.version && t.queryHash !== hash && <span className="small muted"> (requête antérieure)</span>}
-                </td>
-                <td className="small">{t.phase === 'EXECUTION' ? 'Test' : 'Vérification de la syntaxe'}</td>
-                <td className="small" style={{ maxWidth: 360 }}>
-                  {t.success ? <span style={{ color: 'var(--good)' }}>✓ Succès</span> : <span style={{ color: 'var(--bad)' }}>✕ {t.error}</span>}
-                </td>
-                <td className="num small">
-                  {t.bytesProcessed != null ? fmtBytes(t.bytesProcessed) : '—'}
-                </td>
-                <td className="num small">{t.totalRows != null ? fmtInt(t.totalRows) : '—'}</td>
-                <td className="num small">{t.durationMs != null ? fmtDuration(t.durationMs) : '—'}</td>
-                <td className="small nowrap">{t.byName}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="card">
+        <div className="card-head">
+          <h2>
+            Historique des exécutions
+            <InfoTip>Une ligne par exécution automatique, la plus récente en premier, toutes versions confondues.</InfoTip>
+          </h2>
+          <label className="row small">
+            <input type="checkbox" checked={onlyFailed} onChange={(e) => setOnlyFailed(e.target.checked)} />
+            Échecs uniquement ({failed.length})
+          </label>
+        </div>
+        {shown.length === 0 ? (
+          <div className="empty">Aucune exécution en échec sur les {DAYS} derniers jours.</div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Exécution</th>
+                  <th>Version</th>
+                  <th>Durée</th>
+                  <th className="num">Commandes remontées</th>
+                  <th className="num">Envoyées</th>
+                  <th>Résultat</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((x) => (
+                  <tr key={x.runId}>
+                    <td>
+                      {fmtDateTime(x.startedAt)}
+                      {x.periodStart && x.periodEnd && (
+                        <div className="small muted">
+                          Période du {fmtDateTime(x.periodStart)} au {fmtDateTime(x.periodEnd)}
+                        </div>
+                      )}
+                    </td>
+                    <td>v{x.ruleVersion}</td>
+                    <td className="small">{duration(x)}</td>
+                    <td className="num">{x.rowsReturned == null ? '—' : fmtInt(x.rowsReturned)}</td>
+                    <td className="num">{x.rowsToSend == null ? '—' : fmtInt(x.rowsToSend)}</td>
+                    <td>
+                      {x.status === 'SUCCESS' ? (
+                        <span style={{ color: 'var(--good)' }}>
+                          ✓ Réussie
+                          {(x.attempts ?? 1) > 1 && <span className="small muted"> après {x.attempts} tentatives</span>}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--bad)' }}>
+                          ✕ Échec
+                          {(x.attempts ?? 1) > 1 && <span className="small muted"> ({x.attempts} tentatives)</span>}
+                          {x.errorMessage && <InfoTip align="end">Détail technique, à transmettre à l'équipe data : {x.errorMessage}</InfoTip>}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

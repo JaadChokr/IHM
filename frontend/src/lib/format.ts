@@ -78,7 +78,10 @@ export function fmtBytes(b: number): string {
 }
 
 export function fmtDuration(ms: number): string {
-  return ms < 1000 ? `${ms} ms` : `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(ms / 1000)} s`;
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60000) return `${new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 1 }).format(ms / 1000)} s`;
+  const s = Math.round(ms / 1000);
+  return `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s`;
 }
 
 export function isoDate(d: Date): string {

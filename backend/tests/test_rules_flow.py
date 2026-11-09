@@ -403,3 +403,47 @@ def test_candidate_mise_en_production_seulement_apres_un_run(client, bq):
     d = client.post(f"/rules/{rid}/decision", json={"action": "suspend"}).json()
     assert [v["decision"] for v in d["versions"]] == [None, None]
     assert bq.registry == {rid: [(2, "SUBMITTED", False)]}
+
+
+def test_historique_des_executions(client, bq):
+    from app.schemas import RuleRun
+
+    login(client)
+    rid = _submit(client)
+    now = datetime.now(UTC)
+    bq.run_history = [
+        (
+            rid,
+            RuleRun(
+                run_id="a",
+                rule_version=1,
+                run_date=date.today(),
+                started_at=now,
+                status="SUCCESS",
+                rows_returned=12,
+                rows_to_send=0,
+                attempts=2,
+            ),
+        ),
+        (
+            rid,
+            RuleRun(
+                run_id="b",
+                rule_version=1,
+                run_date=date.today() - timedelta(days=1),
+                started_at=now - timedelta(days=1),
+                status="FAILED",
+                error_message="quota",
+            ),
+        ),
+        (
+            "autre",
+            RuleRun(run_id="c", rule_version=1, run_date=date.today(), started_at=now, status="SUCCESS"),
+        ),
+    ]
+    runs = client.get(f"/rules/{rid}/runs").json()
+    assert [(r["runId"], r["status"], r["attempts"]) for r in runs] == [
+        ("a", "SUCCESS", 2),
+        ("b", "FAILED", 1),
+    ]
+    assert client.get("/rules/inconnue/runs").status_code == 404

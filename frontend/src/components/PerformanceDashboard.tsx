@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { DailyPerformance, PeriodTotals, VersionDaily, VersionPerformance } from '../api/types';
-import { addDays, daysBetween, fmtDate, fmtDateTime, fmtInt, fmtPct, isoDate } from '../lib/format';
+import { addDays, daysBetween, fmtDate, fmtInt, fmtPct, isoDate } from '../lib/format';
 import { delta, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
@@ -272,48 +272,6 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               </table>
             </div>
           </details>
-
-          <section className="card">
-            <div className="card-head">
-              <h3>Dernières exécutions</h3>
-            </div>
-            {data.runs.length === 0 ? (
-              <div className="empty">Aucune exécution sur la période.</div>
-            ) : (
-              <div className="table-wrap">
-                <table className="data">
-                  <thead>
-                    <tr>
-                      <th>Date d'exécution</th>
-                      <th>Version</th>
-                      <th>Démarré</th>
-                      <th className="num">Volume remonté</th>
-                      <th>Statut</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.runs.map((r) => (
-                      <tr key={r.runId}>
-                        <td>{fmtDate(r.runDate)}</td>
-                        <td>v{r.ruleVersion}</td>
-                        <td className="small">{fmtDateTime(r.startedAt)}</td>
-                        <td className="num">{r.rowsReturned == null ? '—' : fmtInt(r.rowsReturned)}</td>
-                        <td>
-                          {r.status === 'SUCCESS' ? (
-                            <span style={{ color: 'var(--good)' }}>✓ Succès</span>
-                          ) : (
-                            <span style={{ color: 'var(--bad)' }} title={r.errorMessage}>
-                              ✕ Échec <span className="small muted">— {r.errorMessage}</span>
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
         </>
       )}
     </div>
