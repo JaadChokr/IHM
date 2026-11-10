@@ -9,11 +9,12 @@ import { TestActions, TestResults, useQueryTest } from '../components/TestPanel'
 import { Breadcrumb } from '../components/Breadcrumb';
 import { usePageTitle } from '../nav/history';
 import { DiffView } from '../components/DiffView';
-import { PerformanceDashboard, VersionComparison } from '../components/PerformanceDashboard';
+import { PerformanceDashboard, versionStats } from '../components/PerformanceDashboard';
+import { versionColor } from '../components/LineChart';
 import { KpiTile } from '../components/KpiTile';
 import { Alert, Card, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
 import { AuditTable } from './AuditPage';
-import { fmtDateTime, fmtDuration, fmtInt, isoDate, scheduleLabel, scheduleWhen } from '../lib/format';
+import { fmtDate, fmtDateTime, fmtDuration, fmtInt, fmtPct, isoDate, scheduleLabel, scheduleWhen } from '../lib/format';
 import { fmtRun, nextRun } from '../lib/period';
 import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
@@ -344,17 +345,12 @@ function RunsTab({ r }: { r: RuleDetail }) {
   );
 }
 
-/** Performances de chaque version sur toute sa durée (indépendant de la période de l'onglet Performance). */
-function VersionsPerformance({ ruleId }: { ruleId: string }) {
-  const today = isoDate(new Date());
-  const perf = useAsync(() => api.getPerformance(ruleId, today, today), [ruleId]);
-  if (perf.error) return <Alert kind="error" title={perf.error.message} />;
-  if (!perf.data || perf.data.versions.length === 0) return null;
-  return <VersionComparison versions={perf.data.versions} />;
-}
-
 function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: string, from: number) => void }) {
   const versions = r.versions; // plus récente d'abord
+  // Performances de chaque version sur toute sa durée (indépendantes de la période de l'onglet Performance).
+  const today = isoDate(new Date());
+  const perf = useAsync(() => api.getPerformance(r.ruleId, today, today), [r.ruleId]);
+  const stats = versionStats(perf.data?.versions ?? []);
   const [confirming, setConfirming] = useState<number | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState<string>();
@@ -392,39 +388,75 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
   return (
     <div className="stack">
       <Card
-        title="Versions publiées"
-        subtitle={`${versions.length} version${versions.length > 1 ? 's' : ''}, la plus récente en premier`}
-        info="Toutes les versions restent conservées. « Restaurer » recopie une version antérieure dans votre brouillon, à tester puis publier."
+        title="Versions"
+        subtitle={`${versions.length} version${versions.length > 1 ? 's' : ''}, la plus récente en premier, et leurs performances sur toute leur durée d'exécution`}
+        info="Performances : chaque version mesurée sur toute la période où elle a tourné, y compris en observation. Une commande trouvée par deux versions compte pour chacune : les lignes ne s'additionnent pas. Toutes les versions restent conservées : « Restaurer » recopie une version antérieure dans votre brouillon, à tester puis publier."
       >
+        {perf.error && <Alert kind="error" title={`Performances indisponibles : ${perf.error.message}`} />}
         <div className="table-wrap">
           <table className="data">
             <thead>
               <tr>
                 <th>Version</th>
                 <th>Statut</th>
-                <th>Créée le</th>
                 <th>Publiée</th>
+                <th>Période d'exécution</th>
+                <th className="num">Remontées / jour</th>
+                <th className="num">
+                  En attente
+                  <InfoTip align="end">Commandes remontées pas encore vérifiées par le prestataire.</InfoTip>
+                </th>
+                <th className="num">Taux de précision</th>
                 <th>
                   <span className="sr-only">Actions</span>
                 </th>
               </tr>
             </thead>
             <tbody>
-              {versions.map((v) => (
+              {versions.map((v) => {
+                const st = stats.get(v.version);
+                return (
                 <tr key={v.version}>
                   <td>
-                    <strong>v{v.version}</strong>
-                    {v.version === r.version && <span className="small muted"> (courante)</span>}
+                    <span className="row gap-2 nowrap-row">
+                      {/* Même couleur que la courbe de la version dans l'onglet Performance */}
+                      <span className="legend-key" style={{ background: versionColor(v.version) }} aria-hidden="true" />
+                      <strong>v{v.version}</strong>
+                    </span>
+                    {v.version === r.version && <div className="small muted">courante</div>}
                   </td>
                   <td>
                     <StatusBadge status={v.status} lastRunAt={v.lastRunAt} />
                     {v.candidate && <div className="small muted">candidate</div>}
                   </td>
-                  <td className="small">{fmtDateTime(v.createdAt)}</td>
-                  <td className="small">
-                    {fmtDateTime(v.submittedAt)}
+                  <td className="small nowrap" title={fmtDateTime(v.submittedAt)}>
+                    {fmtDate(v.submittedAt)}
                     <div className="muted">{v.submittedByName}</div>
                   </td>
+                  {st ? (
+                    <>
+                      <td className="small nowrap">
+                        {fmtDate(st.firstDate)} → {fmtDate(st.lastDate)}
+                        <div className="muted">{fmtInt(st.days)} j</div>
+                      </td>
+                      <td className="num">{fmtInt(Math.round(st.perDay))}</td>
+                      <td className="num">{fmtInt(st.pending)}</td>
+                      <td className="num">
+                        <strong>{fmtPct(st.precision)}</strong>
+                        {st.deltaPts !== null && (
+                          <div className="small muted">
+                            {st.deltaPts >= 0 ? '+' : '−'}
+                            {Math.abs(st.deltaPts * 100).toFixed(1).replace('.', ',')} pts vs v{st.prevVersion}
+                          </div>
+                        )}
+                        {st.ordersFlagged === 0 && <div className="small text-bad">✕ aucune remontée : requête à vérifier</div>}
+                      </td>
+                    </>
+                  ) : (
+                    <td colSpan={4} className="small muted">
+                      {perf.data ? "Pas encore exécutée" : '…'}
+                    </td>
+                  )}
                   <td>
                     <div className="row gap-2 nowrap-row justify-end">
                       <button type="button" className="btn btn-sm" onClick={() => setShown(shown?.version === v.version ? null : v)} aria-expanded={shown?.version === v.version}>
@@ -449,7 +481,8 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                     </div>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -466,8 +499,6 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
         </Alert>
       )}
       {restoreError && <Alert kind="error" title={restoreError} />}
-      <VersionsPerformance ruleId={r.ruleId} />
-
       {shown && (
         <Card title={`Requête de la v${shown.version}`} padded>
           <SqlEditor value={shown.sqlQuery} readOnly ariaLabel={`Requête de la version ${shown.version}`} />

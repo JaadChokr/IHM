@@ -5,7 +5,7 @@ import { addDays, daysBetween, fmtDate, fmtInt, fmtPct, isoDate } from '../lib/f
 import { delta, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
-import { LineChart, versionColor, type Series } from './LineChart';
+import { LineChart, type Series } from './LineChart';
 import { Alert, Card, InfoTip, Spinner } from './ui';
 
 type Preset = 7 | 30 | 90 | 'all' | 'custom';
@@ -258,63 +258,39 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
 }
 
 /** Indicateurs de chaque version sur toute sa période d'exécution, pour juger l'effet d'une modification. */
-/** Tableau de comparaison des versions (onglet Versions de la fiche). */
-export function VersionComparison({ versions }: { versions: VersionPerformance[] }) {
-  const rows = versions.map((v) => {
+/** Performances d'une version sur toute sa durée d'exécution (colonnes du tableau de l'onglet Versions). */
+export interface VersionStats {
+  firstDate: string;
+  lastDate: string;
+  days: number;
+  ordersFlagged: number;
+  perDay: number;
+  pending: number;
+  precision: number | null;
+  /** Écart de précision avec la version précédente, en points (null : pas de précédente ou non calculable). */
+  deltaPts: number | null;
+  /** Version de référence de cet écart (la précédente qui a tourné). */
+  prevVersion: number | null;
+}
+
+/** Statistiques par numéro de version, à partir des totaux de chaque version (v_rule_performance). */
+export function versionStats(versions: VersionPerformance[]): Map<number, VersionStats> {
+  const sorted = [...versions].sort((a, b) => a.version - b.version);
+  const out = new Map<number, VersionStats>();
+  sorted.forEach((v, i) => {
     const t = totals([{ date: v.lastDate, ordersFlagged: v.ordersFlagged, ordersProcessed: v.ordersProcessed, ordersConfirmedFraud: v.ordersConfirmedFraud }]);
-    return { ...v, ...t, perDay: v.days ? v.ordersFlagged / v.days : 0 };
+    const before = i > 0 ? out.get(sorted[i - 1].version) : undefined;
+    out.set(v.version, {
+      firstDate: v.firstDate,
+      lastDate: v.lastDate,
+      days: v.days,
+      ordersFlagged: v.ordersFlagged,
+      perDay: v.days ? v.ordersFlagged / v.days : 0,
+      pending: t.pending,
+      precision: t.precision,
+      deltaPts: before ? delta(t.precision, before.precision, 'points') : null,
+      prevVersion: i > 0 ? sorted[i - 1].version : null,
+    });
   });
-  return (
-    <Card
-      title="Comparaison des versions"
-      subtitle="Performances de chaque version sur toute sa durée d'exécution"
-      info="Y compris en observation. Une commande trouvée par deux versions compte pour chacune : les lignes ne s'additionnent pas."
-    >
-      <div className="table-wrap">
-        <table className="data">
-          <thead>
-            <tr>
-              <th>Version</th>
-              <th>Période d'exécution</th>
-              <th className="num">Remontées / jour</th>
-              <th className="num">En attente de vérification</th>
-              <th className="num">Taux de précision</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => {
-              const before = i > 0 ? rows[i - 1] : null;
-              const d = before ? delta(r.precision, before.precision, 'points') : null;
-              return (
-                <tr key={r.version}>
-                  <td>
-                    <span className="row gap-2 nowrap-row">
-                      <span className="legend-key" style={{ background: versionColor(r.version) }} aria-hidden="true" />
-                      <strong>v{r.version}</strong>
-                    </span>
-                  </td>
-                  <td className="small">
-                    {fmtDate(r.firstDate)} → {fmtDate(r.lastDate)} <span className="muted">· {fmtInt(r.days)} j</span>
-                  </td>
-                  <td className="num">{fmtInt(Math.round(r.perDay))}</td>
-                  <td className="num">{fmtInt(r.pending)}</td>
-                  <td className="num">
-                    <strong>{fmtPct(r.precision)}</strong>
-                    {d !== null && (
-                      <span className="small muted">
-                        {' '}
-                        ({d >= 0 ? '+' : '−'}
-                        {Math.abs(d * 100).toFixed(1).replace('.', ',')} pts)
-                      </span>
-                    )}
-                    {r.ordersFlagged === 0 && <div className="small text-bad">✕ aucune remontée : requête à vérifier</div>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
+  return out;
 }
