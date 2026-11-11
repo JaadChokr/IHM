@@ -376,13 +376,14 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   Il remplace l'ancien onglet « Tests » (l'historique des vérifications faites avant publication) et la
   section « Dernières exécutions » de l'onglet Performance.
 
-  **Graphique de la page règle** : un histogramme journalier en deux étages alignés sur les mêmes jours, le
-  volume remonté et le taux de précision, chacun avec sa propre échelle (jamais deux échelles sur un même
-  étage). L'analyste affiche l'un, l'autre ou les deux. Une barre **par version** et par jour, **pleine** quand la
-  version est en production (`to_send`) et **hachurée** quand elle est en observation (avant sa mise en
-  production, ou candidate à côté de la version en production). Une candidate et la version en production se
-  comparent ainsi côte à côte sur les mêmes jours ; les barres de la v1 deviennent pleines le jour où elle est
-  envoyée. La précision n'est tracée qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
+  **Graphique de la page règle** : un histogramme journalier sur une seule échelle, en nombre de commandes.
+  Une barre **par version** et par jour : la barre entière donne les commandes **remontées** (teinte claire,
+  **hachurée** quand la version est en observation : avant sa mise en production, ou candidate à côté de la
+  version en production) ; superposée en bas, en couleur franche, la part **confirmée frauduleuse** par le
+  prestataire. On voit ainsi, barre par barre, combien de remontées sont de vraies fraudes ; la précision du jour
+  (confirmées ÷ vérifiées) s'affiche au survol. L'analyste affiche les remontées, les fraudes confirmées ou les
+  deux. Une candidate et la version en production se comparent côte à côte sur les mêmes jours. Les fraudes
+  confirmées ne sont comptées qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
   par une règle envoyée. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :
   envoyées au prestataire, et remontées en observation (ils ne s'additionnent pas, une commande pouvant être
   remontée par la version en production et par la candidate).

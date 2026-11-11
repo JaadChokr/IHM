@@ -11,7 +11,7 @@ l'existant, sans ajouter de styles propres à un écran. Ainsi, toutes les pages
 | `src/styles/ui.css` | **Les classes communes**, construites uniquement avec les jetons `var(--…)`. Elles couvrent la base, les cartes, les boutons, les champs, les tableaux, la pagination, les badges, les alertes, les onglets, les indicateurs et les graphiques. On y trouve aussi les utilitaires, la coquille de l'application (barre latérale, barre supérieure), puis quelques styles propres à certaines pages. |
 | `src/styles/index.css` | Point d'entrée : importe les deux fichiers, dans cet ordre. |
 | `src/components/ui.tsx` | **Les composants React communs** : `Card`, `StatusBadge`, `CriticalityBadge`, `InfoTip`, `Alert`, `Spinner`… |
-| `src/components/KpiTile.tsx`, `Pager.tsx`, `DailyBars.tsx` | Tuile d'indicateur, pagination des tableaux, histogramme journalier à un ou deux étages. |
+| `src/components/KpiTile.tsx`, `Pager.tsx`, `DailyBars.tsx` | Tuile d'indicateur, pagination des tableaux, histogramme journalier (remontées et fraudes confirmées superposées). |
 
 ## Règles
 

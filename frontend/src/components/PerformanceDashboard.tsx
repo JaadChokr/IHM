@@ -5,7 +5,7 @@ import { addDays, daysBetween, fmtDate, fmtInt, fmtPct, isoDate } from '../lib/f
 import { delta, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
-import { DailyBars, type Panel, type Series } from './DailyBars';
+import { DailyBars, type BarMeasure, type VersionBars } from './DailyBars';
 import { usePref } from '../prefs/prefs';
 import { Alert, Card, InfoTip, Spinner } from './ui';
 
@@ -16,48 +16,35 @@ const fallback = (daily: DailyPerformance[]): VersionDaily[] =>
   daily.map((d) => ({ date: d.date, ruleVersion: d.ruleVersion ?? 1, toSend: (d.ordersToSend ?? 0) > 0, ordersFlagged: d.ordersFlagged, ordersProcessed: d.ordersProcessed, ordersConfirmedFraud: d.ordersConfirmedFraud }));
 
 /**
- * Une série de barres par version sur toute la période : pleines quand elle est en production, hachurées en
- * observation (avant sa mise en production, ou candidate à côté de la version en production). La précision
- * ne se trace qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
- * par une règle envoyée.
+ * Les barres de chaque version sur toute la période : remontées par jour, et pour les jours où la version est
+ * en production, commandes vérifiées et confirmées frauduleuses. En observation, pas de fraudes confirmées : le
+ * prestataire ne vérifie que les commandes aussi remontées par une règle envoyée, le chiffre serait trompeur.
  */
 function byVersion(dates: string[], rows: VersionDaily[]) {
   const versions = [...new Set(rows.map((r) => r.ruleVersion))].sort((a, b) => a - b);
   const at = new Map(dates.map((d, i) => [d, i]));
-  const volume: Series[] = [];
-  const precision: Series[] = [];
+  const series: VersionBars[] = [];
   const markers: { date: string; label: string }[] = [];
   for (const v of versions) {
-    const vol: Series = { version: v, values: dates.map(() => null), observed: dates.map(() => false), details: dates.map(() => undefined) };
-    const pre: Series = { version: v, values: dates.map(() => null), observed: dates.map(() => false), details: dates.map(() => undefined) };
-    const processed = dates.map(() => 0);
-    const confirmed = dates.map(() => 0);
-    const sent = dates.map(() => false);
+    const none = () => dates.map(() => null as number | null);
+    const s: VersionBars = { version: v, flagged: none(), processed: none(), confirmed: none(), observed: dates.map(() => true) };
     for (const r of rows.filter((x) => x.ruleVersion === v)) {
       const i = at.get(r.date);
       if (i === undefined) continue;
-      // Un jour à cheval sur une décision (règle horaire) : les deux états s'additionnent, trait plein.
-      vol.values[i] = (vol.values[i] ?? 0) + r.ordersFlagged;
+      // Un jour à cheval sur une décision (règle horaire) : les deux états s'additionnent, barre pleine.
+      s.flagged[i] = (s.flagged[i] ?? 0) + r.ordersFlagged;
       if (r.toSend) {
-        sent[i] = true;
-        processed[i] += r.ordersProcessed;
-        confirmed[i] += r.ordersConfirmedFraud;
+        s.observed[i] = false;
+        s.processed[i] = (s.processed[i] ?? 0) + r.ordersProcessed;
+        s.confirmed[i] = (s.confirmed[i] ?? 0) + r.ordersConfirmedFraud;
       }
     }
-    dates.forEach((_, i) => {
-      vol.observed[i] = !sent[i];
-      if (processed[i] > 0) {
-        pre.values[i] = confirmed[i] / processed[i];
-        pre.details![i] = `${fmtInt(confirmed[i])} confirmées / ${fmtInt(processed[i])} vérifiées`;
-      }
-    });
-    volume.push(vol);
-    precision.push(pre);
+    series.push(s);
     // Repère au premier jour de chaque version dans la période (sauf la première version affichée).
-    const first = vol.values.findIndex((x) => x !== null);
-    if (first > 0 && volume.length > 1) markers.push({ date: dates[first], label: `v${v}` });
+    const first = s.flagged.findIndex((x) => x !== null);
+    if (first > 0 && series.length > 1) markers.push({ date: dates[first], label: `v${v}` });
   }
-  return { volume, precision, markers };
+  return { series, markers };
 }
 
 /** Remplit les jours sans ligne (aucune version en production) par des trous. */
@@ -78,16 +65,15 @@ interface Props {
   observing?: boolean;
 }
 
-type Metric = 'volume' | 'precision';
-const METRICS: [Metric, string][] = [
-  ['volume', 'Volume'],
-  ['precision', 'Précision'],
+const MEASURES: [BarMeasure, string][] = [
+  ['flagged', 'Remontées'],
+  ['confirmed', 'Fraudes confirmées'],
 ];
-const METRIC_ORDER: Record<Metric, number> = { volume: 0, precision: 1 };
+const MEASURE_ORDER: Record<BarMeasure, number> = { flagged: 0, confirmed: 1 };
 
 export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observing }: Props) {
   const today = isoDate(new Date());
-  const [metrics, setMetrics] = usePref<Metric[]>('perfMetrics', ['volume', 'precision']);
+  const [measures, setMeasures] = usePref<BarMeasure[]>('perfBars', ['flagged', 'confirmed']);
   const [preset, setPreset] = useState<Preset>(versionsRun > 1 ? 'all' : 30);
   const [custom, setCustom] = useState({ from: addDays(today, -59), to: today });
   const from =
@@ -110,28 +96,11 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
     const cur = exact(data.totals, data.daily);
     const prev = exact(data.previousTotals, data.previous);
     const dates = fill(data.from, data.to, []).map((d) => d.date);
-    const { volume, precision, markers } = byVersion(dates, data.byVersion ?? fallback(data.daily));
+    const { series, markers } = byVersion(dates, data.byVersion ?? fallback(data.daily));
     const toSend = data.totals?.ordersToSend ?? 0;
     const observed = data.totals?.ordersObserved ?? 0;
-    return { cur, prev, dates, volume, precision, markers, toSend, observed };
+    return { cur, prev, dates, series, markers, toSend, observed };
   }, [data, today]);
-
-  const panels: Panel[] = view
-    ? metrics.map((m) =>
-        m === 'volume'
-          ? { key: 'volume', label: 'Volume remonté', series: view.volume, format: (v: number) => fmtInt(Math.round(v)) }
-          : {
-              key: 'precision',
-              label: 'Taux de précision',
-              series: view.precision,
-              format: (v: number) => fmtPct(v),
-              yMax: 1,
-              emptyText: observing
-                ? "Pas de taux de précision en observation : les commandes ne sont pas envoyées au prestataire."
-                : 'Aucune commande vérifiée par le prestataire sur la période.',
-            },
-      )
-    : [];
 
   if (!everInProduction) {
     return (
@@ -230,17 +199,25 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
           </div>
 
           <Card
-            title="Volume et précision par jour"
-            info="Une barre par version et par jour. Barre pleine : la version est en production (commandes envoyées au prestataire) ; hachurée : en observation. Précision : confirmées frauduleuses ÷ commandes vérifiées, pour les versions en production ; pas de barre les jours sans commande vérifiée."
+            title="Remontées et fraudes confirmées par jour"
+            info="Une barre par version et par jour. La barre entière : les commandes remontées (hachurée quand la version est en observation). En couleur franche, en bas : celles que le prestataire a confirmées frauduleuses, pour les versions en production. Le survol donne la précision du jour (confirmées ÷ vérifiées)."
             actions={
               <div className="seg" role="group" aria-label="Mesures affichées">
-                {METRICS.map(([key, name]) => (
+                {MEASURES.map(([key, name]) => (
                   <button
                     key={key}
                     type="button"
-                    aria-pressed={metrics.includes(key)}
+                    aria-pressed={measures.includes(key)}
                     // Au moins une mesure reste affichée.
-                    onClick={() => setMetrics(metrics.includes(key) ? (metrics.length > 1 ? metrics.filter((m) => m !== key) : metrics) : [...metrics, key].sort((x, y) => METRIC_ORDER[x] - METRIC_ORDER[y]))}
+                    onClick={() =>
+                      setMeasures(
+                        measures.includes(key)
+                          ? measures.length > 1
+                            ? measures.filter((m) => m !== key)
+                            : measures
+                          : [...measures, key].sort((x, y) => MEASURE_ORDER[x] - MEASURE_ORDER[y]),
+                      )
+                    }
                   >
                     {name}
                   </button>
@@ -249,7 +226,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             }
             padded
           >
-            <DailyBars label="Volume remonté et taux de précision par jour" dates={view.dates} panels={panels} markers={view.markers} />
+            <DailyBars label="Commandes remontées et fraudes confirmées par jour" dates={view.dates} series={view.series} show={measures} markers={view.markers} />
           </Card>
 
           <details className="card card-pad">

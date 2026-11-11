@@ -1038,6 +1038,14 @@ table.data a:not(.btn):hover {
 .chart .bar {
   stroke: none;
 }
+/* Remontées en production : teinte claire de la couleur de la version ; les fraudes confirmées se
+   superposent en couleur franche. */
+.chart .bar-tint {
+  opacity: 0.32;
+}
+.chart .hatch-bg {
+  opacity: 0.22;
+}
 .chart .bar-hover {
   fill: var(--surface-3);
   opacity: 0.7;
@@ -1056,6 +1064,10 @@ table.data a:not(.btn):hover {
   width: 12px;
   height: 12px;
   border-radius: 3px;
+}
+.legend-swatch.legend-tint {
+  background: var(--text-3);
+  opacity: 0.35;
 }
 .legend-swatch.legend-solid {
   background: var(--text-3);
