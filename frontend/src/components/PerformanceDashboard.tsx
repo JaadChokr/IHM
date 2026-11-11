@@ -5,17 +5,18 @@ import { addDays, daysBetween, fmtDate, fmtInt, fmtPct, isoDate } from '../lib/f
 import { delta, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
-import { LineChart, type Series } from './LineChart';
+import { DailyBars, type Panel, type Series } from './DailyBars';
+import { usePref } from '../prefs/prefs';
 import { Alert, Card, InfoTip, Spinner } from './ui';
 
 type Preset = 7 | 30 | 90 | 'all' | 'custom';
 
-/** Sans courbe par version (ancienne API) : une série par version, d'après les chiffres de la règle. */
+/** Sans série par version (ancienne API) : une série par version, d'après les chiffres de la règle. */
 const fallback = (daily: DailyPerformance[]): VersionDaily[] =>
   daily.map((d) => ({ date: d.date, ruleVersion: d.ruleVersion ?? 1, toSend: (d.ordersToSend ?? 0) > 0, ordersFlagged: d.ordersFlagged, ordersProcessed: d.ordersProcessed, ordersConfirmedFraud: d.ordersConfirmedFraud }));
 
 /**
- * Une courbe par version sur toute la période : pleine quand elle est en production, pointillée en
+ * Une série de barres par version sur toute la période : pleines quand elle est en production, hachurées en
  * observation (avant sa mise en production, ou candidate à côté de la version en production). La précision
  * ne se trace qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
  * par une règle envoyée.
@@ -52,7 +53,7 @@ function byVersion(dates: string[], rows: VersionDaily[]) {
     });
     volume.push(vol);
     precision.push(pre);
-    // Repère au premier jour de chaque version dans la période (sauf la première courbe affichée).
+    // Repère au premier jour de chaque version dans la période (sauf la première version affichée).
     const first = vol.values.findIndex((x) => x !== null);
     if (first > 0 && volume.length > 1) markers.push({ date: dates[first], label: `v${v}` });
   }
@@ -77,8 +78,16 @@ interface Props {
   observing?: boolean;
 }
 
+type Metric = 'volume' | 'precision';
+const METRICS: [Metric, string][] = [
+  ['volume', 'Volume'],
+  ['precision', 'Précision'],
+];
+const METRIC_ORDER: Record<Metric, number> = { volume: 0, precision: 1 };
+
 export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observing }: Props) {
   const today = isoDate(new Date());
+  const [metrics, setMetrics] = usePref<Metric[]>('perfMetrics', ['volume', 'precision']);
   const [preset, setPreset] = useState<Preset>(versionsRun > 1 ? 'all' : 30);
   const [custom, setCustom] = useState({ from: addDays(today, -59), to: today });
   const from =
@@ -106,6 +115,23 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
     const observed = data.totals?.ordersObserved ?? 0;
     return { cur, prev, dates, volume, precision, markers, toSend, observed };
   }, [data, today]);
+
+  const panels: Panel[] = view
+    ? metrics.map((m) =>
+        m === 'volume'
+          ? { key: 'volume', label: 'Volume remonté', series: view.volume, format: (v: number) => fmtInt(Math.round(v)) }
+          : {
+              key: 'precision',
+              label: 'Taux de précision',
+              series: view.precision,
+              format: (v: number) => fmtPct(v),
+              yMax: 1,
+              emptyText: observing
+                ? "Pas de taux de précision en observation : les commandes ne sont pas envoyées au prestataire."
+                : 'Aucune commande vérifiée par le prestataire sur la période.',
+            },
+      )
+    : [];
 
   if (!everInProduction) {
     return (
@@ -141,7 +167,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               {p} jours
             </button>
           ))}
-          <button type="button" aria-pressed={preset === 'all'} onClick={() => setPreset('all')} title="Depuis la première exécution de la v1 : toutes les versions sur la même courbe">
+          <button type="button" aria-pressed={preset === 'all'} onClick={() => setPreset('all')} title="Depuis la première exécution de la v1 : toutes les versions sur le même graphique">
             Tout l'historique
           </button>
           <button type="button" aria-pressed={preset === 'custom'} onClick={() => setPreset('custom')}>
@@ -203,25 +229,27 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             />
           </div>
 
-          <Card title="Volume remonté par jour" info="Une courbe par version. Trait plein : la version est en production (commandes envoyées au prestataire). Pointillé : en observation." padded>
-            <LineChart
-              label="Volume remonté par jour"
-              dates={view.dates}
-              series={view.volume}
-              format={(v) => fmtInt(Math.round(v))}
-              markers={view.markers}
-            />
-          </Card>
-
-          <Card title="Taux de précision par jour" info="Confirmées frauduleuses ÷ commandes vérifiées, pour les versions en production. Pas de point les jours sans commande vérifiée." padded>
-            <LineChart
-              label="Taux de précision par jour"
-              dates={view.dates}
-              series={view.precision}
-              format={(v) => fmtPct(v)}
-              yMax={1}
-              markers={view.markers}
-            />
+          <Card
+            title="Volume et précision par jour"
+            info="Une barre par version et par jour. Barre pleine : la version est en production (commandes envoyées au prestataire) ; hachurée : en observation. Précision : confirmées frauduleuses ÷ commandes vérifiées, pour les versions en production ; pas de barre les jours sans commande vérifiée."
+            actions={
+              <div className="seg" role="group" aria-label="Mesures affichées">
+                {METRICS.map(([key, name]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={metrics.includes(key)}
+                    // Au moins une mesure reste affichée.
+                    onClick={() => setMetrics(metrics.includes(key) ? (metrics.length > 1 ? metrics.filter((m) => m !== key) : metrics) : [...metrics, key].sort((x, y) => METRIC_ORDER[x] - METRIC_ORDER[y]))}
+                  >
+                    {name}
+                  </button>
+                ))}
+              </div>
+            }
+            padded
+          >
+            <DailyBars label="Volume remonté et taux de précision par jour" dates={view.dates} panels={panels} markers={view.markers} />
           </Card>
 
           <details className="card card-pad">

@@ -11,7 +11,7 @@ l'existant, sans ajouter de styles propres à un écran. Ainsi, toutes les pages
 | `src/styles/ui.css` | **Les classes communes**, construites uniquement avec les jetons `var(--…)`. Elles couvrent la base, les cartes, les boutons, les champs, les tableaux, la pagination, les badges, les alertes, les onglets, les indicateurs et les graphiques. On y trouve aussi les utilitaires, la coquille de l'application (barre latérale, barre supérieure), puis quelques styles propres à certaines pages. |
 | `src/styles/index.css` | Point d'entrée : importe les deux fichiers, dans cet ordre. |
 | `src/components/ui.tsx` | **Les composants React communs** : `Card`, `StatusBadge`, `CriticalityBadge`, `InfoTip`, `Alert`, `Spinner`… |
-| `src/components/KpiTile.tsx`, `Pager.tsx`, `LineChart.tsx` | Tuile d'indicateur, pagination des tableaux, courbes. |
+| `src/components/KpiTile.tsx`, `Pager.tsx`, `DailyBars.tsx` | Tuile d'indicateur, pagination des tableaux, histogramme journalier à un ou deux étages. |
 
 ## Règles
 
@@ -37,7 +37,7 @@ l'existant, sans ajouter de styles propres à un écran. Ainsi, toutes les pages
    - divers : `w-auto`, `select-sm`, `divider-bottom`, `fieldset-reset`, `scroll-box`.
 
    Un style inline n'est admis que pour une valeur **calculée**, par exemple la largeur d'une barre, la
-   position d'une infobulle ou la couleur d'une version sur une courbe.
+   position d'une infobulle ou la couleur d'une version sur un graphique.
 6. **Besoin d'un nouveau style** : on l'ajoute dans `ui.css`, à la bonne section, avec des jetons. On ne le
    met jamais dans le composant.
 

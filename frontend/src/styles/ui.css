@@ -1005,24 +1005,6 @@ table.data a:not(.btn):hover {
 .chart .baseline {
   stroke: var(--border-strong);
 }
-.chart .line {
-  fill: none;
-  stroke: var(--series-1);
-  stroke-width: 2.5;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-/* Version en observation (candidate ou avant la mise en production) : pointillé. */
-.chart .line.observed {
-  stroke-dasharray: 5 4;
-}
-.chart-legend .legend-line {
-  stroke: var(--text-3);
-  stroke-width: 2;
-}
-.chart-legend .legend-line.observed {
-  stroke-dasharray: 5 4;
-}
 .chart-legend {
   flex-wrap: wrap;
 }
@@ -1030,9 +1012,6 @@ table.data a:not(.btn):hover {
   font-weight: 400;
   color: var(--text-3);
   white-space: nowrap;
-}
-.chart .area {
-  stroke: none;
 }
 .chart-legend {
   display: flex;
@@ -1055,6 +1034,36 @@ table.data a:not(.btn):hover {
   height: 2px;
   border-radius: 1px;
 }
+/* Barres journalières (DailyBars) : pleine en production, hachurée en observation. */
+.chart .bar {
+  stroke: none;
+}
+.chart .bar-hover {
+  fill: var(--surface-3);
+  opacity: 0.7;
+}
+.chart .panel-empty {
+  fill: var(--text-3);
+  font-size: var(--fs-sm);
+}
+.chart .panel-label {
+  fill: var(--text-2);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+.legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+.legend-swatch.legend-solid {
+  background: var(--text-3);
+}
+.legend-swatch.legend-hatched {
+  background: repeating-linear-gradient(45deg, var(--text-3) 0 2px, transparent 2px 5px);
+  box-shadow: inset 0 0 0 1px var(--text-3);
+}
 .chart .marker line {
   stroke: var(--text-2);
   stroke-width: 1.5;
@@ -1065,27 +1074,12 @@ table.data a:not(.btn):hover {
   font-size: var(--fs-2xs);
   font-weight: 600;
 }
-.chart .crosshair {
-  stroke: var(--ink);
-  stroke-width: 1.25;
-  stroke-dasharray: 4 4;
-}
-.chart .dot {
-  fill: var(--series-1);
-  stroke: var(--surface);
-  stroke-width: 2;
-}
 .chart .incomplete {
   fill: var(--incomplete);
 }
 .chart .incomplete-label {
   fill: var(--text-3);
   font-size: var(--fs-2xs);
-}
-.chart .end-label {
-  fill: var(--text);
-  font-size: var(--fs-xs);
-  font-weight: 600;
 }
 /* Infobulle d'explication (icône « i ») : remplace les blocs de texte explicatifs. */
 .infotip {

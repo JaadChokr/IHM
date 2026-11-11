@@ -46,7 +46,7 @@
 
   /* graphiques */
   --series-1: #c8102e;
-  /* Une couleur par version de règle sur les courbes */
+  /* Une couleur par version de règle (graphique journalier, tableau des versions) */
   --version-1: #c8102e;
   --version-2: #2a78d6;
   --version-3: #1baf7a;

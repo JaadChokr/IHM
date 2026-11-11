@@ -318,7 +318,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   règle qui change de fréquence change simplement de DAG. Les brouillons ne sont jamais exécutés. DAG de
   référence à adapter : `infra/airflow/fraud_rules_dags.py` (l'envoi au prestataire n'y figure pas : il est
   fait par un script externe, voir « Envoi au prestataire »). Toutes les versions restent conservées dans la plateforme : comparatif
-  SQL, comparaison des performances par version (repères sur les courbes de l'onglet Performance, tableau de
+  SQL, comparaison des performances par version (repères sur le graphique de l'onglet Performance, tableau de
   comparaison dans l'onglet Versions) et
   **restauration** d'une version antérieure, recopiée dans un brouillon à tester puis soumettre.
 
@@ -362,7 +362,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     version y garde toutes ses commandes, candidate comprise, y compris celles déjà remontées par une autre
     version ;
   - `v_rule_orders` (une ligne par commande et par version, avec le retour du prestataire) sert aux **chiffres
-    de la règle** : courbes et indicateurs de la page règle, totaux sur 30 jours. Ils dépendent de l'état de la
+    de la règle** : graphique et indicateurs de la page règle, totaux sur 30 jours. Ils dépendent de l'état de la
     règle : **en production**, ses commandes à transmettre (`to_send`), c'est-à-dire celles de la version en
     production ; **en observation**, ses autres commandes. La plateforme compte les commandes **distinctes** :
     une commande remontée par deux versions n'est comptée qu'une fois. Une candidate n'entre donc jamais dans
@@ -376,11 +376,13 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   Il remplace l'ancien onglet « Tests » (l'historique des vérifications faites avant publication) et la
   section « Dernières exécutions » de l'onglet Performance.
 
-  **Courbes de la page règle** : une courbe **par version** sur toute la période, en **trait plein** quand elle
-  est en production (`to_send`) et en **pointillé** quand elle est en observation (avant sa mise en production,
-  ou candidate à côté de la version en production). Une candidate et la version en production se comparent
-  ainsi sur les mêmes jours ; la v1 passe du pointillé au trait plein le jour où elle est envoyée. La précision
-  n'est tracée qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
+  **Graphique de la page règle** : un histogramme journalier en deux étages alignés sur les mêmes jours, le
+  volume remonté et le taux de précision, chacun avec sa propre échelle (jamais deux échelles sur un même
+  étage). L'analyste affiche l'un, l'autre ou les deux. Une barre **par version** et par jour, **pleine** quand la
+  version est en production (`to_send`) et **hachurée** quand elle est en observation (avant sa mise en
+  production, ou candidate à côté de la version en production). Une candidate et la version en production se
+  comparent ainsi côte à côte sur les mêmes jours ; les barres de la v1 deviennent pleines le jour où elle est
+  envoyée. La précision n'est tracée qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
   par une règle envoyée. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :
   envoyées au prestataire, et remontées en observation (ils ne s'additionnent pas, une commande pouvant être
   remontée par la version en production et par la candidate).
@@ -418,7 +420,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   **Relance et rattrapage** : la requête est exécutée telle quelle, tables lues au présent. Avec une plage
   `@period_start` / `@period_end`, elle porte sur la période d'origine : résultat exact. Sans plage, elle relit
   toute la table : rien n'est perdu ni doublé (dédoublonnage par règle et par version), mais les commandes
-  passées depuis sont rattachées au run rejoué, ce qui décale légèrement les courbes. L'analyste reste libre
+  passées depuis sont rattachées au run rejoué, ce qui décale légèrement le graphique. L'analyste reste libre
   d'écrire sa requête sans plage ; l'éditeur l'incite à en poser une (alerte `NO_DATE_WINDOW`), ce qui évite
   aussi de relire à chaque run un volume inutilement grand. Il peut aussi dater lui-même une table
   (`FROM t FOR SYSTEM_TIME AS OF @period_end`) ; BigQuery ne le permet que sur 7 jours, et au-delà la tâche

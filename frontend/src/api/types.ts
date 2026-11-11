@@ -261,7 +261,7 @@ export interface PerformanceResponse {
   previous: DailyPerformance[];
   totals?: PeriodTotals;
   previousTotals?: PeriodTotals;
-  /** Courbe par version : une ligne par jour, version et état. */
+  /** Série par version : une ligne par jour, version et état. */
   byVersion?: VersionDaily[];
   runs: RuleRun[];
   /** Indicateurs cumulés de chaque version sur toute sa période d'exécution. */
