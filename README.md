@@ -161,6 +161,10 @@ cd ../backend
 - En local, BigQuery est simulé : un test de requête répond toujours « 6 Go, 5 lignes » et les tableaux de
   performance sont vides. Pour le vrai BigQuery : accès GCP et `RM_BIGQUERY_MODE=real`.
 - Le panneau « Simulation Airflow » (premiers runs d'une version publiée, arrêt du DAG) n'existe qu'en mode démo (3a).
+- Le mode démo couvre les principaux cas de figure : règles en production (dont une à trois versions successives),
+  une règle inactive, une en observation, une publiée pas encore exécutée, et « Cartes multiples sur un même
+  appareil » : sa v1 est en production et sa v2 **candidate** tourne en parallèle depuis 16 jours, en attente
+  de décision (barres côte à côte dans l'onglet Performance, décision « Mettre en production » dans la fiche).
 
 ### Dépannage : « npm is not recognized » (Windows)
 

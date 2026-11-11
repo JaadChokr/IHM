@@ -37,7 +37,7 @@ export interface MockDb {
   audit: AuditEvent[];
 }
 
-export const SCHEMA_VERSION = 17;
+export const SCHEMA_VERSION = 18;
 
 /** Marqueur : la version a tourné ; v() le remplace par le DAG de sa fréquence. */
 const dag = 'dag';
@@ -282,6 +282,27 @@ WHERE o.order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
   AND o.item_count >= 4`,
 };
 
+// Candidate en parallèle : la v1 est en production, la v2 (plus stricte) tourne à côté en observation,
+// sur les mêmes jours, en attente de la décision de mise en production.
+const R9: Def = {
+  id: '7f3c2a10-5b1e-4c8a-9d21-0a1b2c3d4e09',
+  owner: '104233',
+  name: 'Cartes multiples sur un même appareil',
+  description: "Plusieurs cartes bancaires différentes utilisées depuis le même appareil en moins de 24 h.",
+  fraudTypology: 'Fraude au moyen de paiement',
+  criticality: 'HIGH',
+  schedule: 'DAILY',
+  sql: `SELECT
+  o.order_id,
+  COUNT(DISTINCT p.card_fingerprint) OVER (PARTITION BY o.device_id) AS nb_cartes
+FROM \`sales.orders\` o
+JOIN \`sales.payments\` p USING (order_id)
+WHERE o.order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
+QUALIFY nb_cartes >= 3`,
+};
+// v2 : seuil relevé et cartes refusées exclues : moins de remontées, plus précises.
+const R9_V2_SQL = R9.sql.replace('>= 3', '>= 4').replace('INTERVAL 1 DAY)\n', "INTERVAL 1 DAY)\n  AND p.status = 'ACCEPTED'\n");
+
 function passedTest(r: RuleVersion, at: number, by: string, i: number): TestRecord {
   return {
     id: `seed-test-${r.ruleId.slice(-2)}-${r.version}-${i}`,
@@ -314,6 +335,8 @@ export function buildSeed(): MockDb {
   const r5v2 = v({ ...R5, sql: R5_V2_SQL }, 2, 6, { submittedAt: daysAgo(5) });
   const r6v1 = v(R6, 1, 12, { submittedAt: daysAgo(11), airflowDagId: dag });
   const r7v1 = v(R7, 1, 20, { submittedAt: daysAgo(19) });
+  const r9v1 = v(R9, 1, 82, { airflowDagId: dag });
+  const r9v2 = v({ ...R9, sql: R9_V2_SQL }, 2, 18, { airflowDagId: dag });
   // Brouillons personnels de Camille Martin : une nouvelle version de R3, une nouvelle règle.
   const drafts: MockDraft[] = [
     { id: 'seed-draft-r3', matricule: '104233', ruleId: R3.id, baseVersion: 1, ...content({ ...R3, sql: R3_V2_SQL }), createdAt: daysAgo(3), updatedAt: daysAgo(2) },
@@ -371,12 +394,23 @@ export function buildSeed(): MockDb {
       profile: { dailyVolume: 18, processingRate: 0.85, precision: 0.41 },
     },
     { ruleId: R7.id, versions: [r7v1], productionSince: {}, productionUntil: {} },
+    {
+      // v1 en production ; v2 candidate qui tourne en parallèle depuis 16 jours, en attente de décision.
+      ruleId: R9.id,
+      versions: [r9v1, r9v2],
+      productionSince: { 1: daysAgo(80).slice(0, 10), 2: daysAgo(16).slice(0, 10) },
+      productionUntil: {},
+      profile: { dailyVolume: 30, processingRate: 0.88, precision: 0.27 },
+      versionProfiles: { 2: { dailyVolume: 18, precision: 0.43 } },
+    },
   ];
 
-  // Les versions qui ont tourné ont été envoyées au prestataire, sauf R6 (en observation).
+  // Les versions qui ont tourné ont été envoyées au prestataire, sauf celles en observation : R6, et la
+  // candidate v2 de R9.
+  const observing = new Set([`${R6.id}:1`, `${R9.id}:2`]);
   for (const rule of rules) {
-    if (rule.ruleId === R6.id) continue;
     for (const ver of rule.versions) {
+      if (observing.has(`${rule.ruleId}:${ver.version}`)) continue;
       const since = rule.productionSince[ver.version];
       if (since) Object.assign(ver, { decision: 'SENT', decidedAt: `${since}T09:00:00.000Z`, decidedByName: ver.submittedByName });
     }
@@ -396,6 +430,8 @@ export function buildSeed(): MockDb {
     passedTest(r5v2, 6, '118870', 15),
     passedTest(r6v1, 12, '120415', 6),
     passedTest(r7v1, 20, '104233', 7),
+    passedTest(r9v1, 81, '104233', 9),
+    passedTest(r9v2, 17, '104233', 19),
     {
       id: 'seed-test-08-1-fail',
       draftId: 'seed-draft-r8',

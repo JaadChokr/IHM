@@ -41,7 +41,8 @@ function niceMax(v: number): number {
   if (v <= 0) return 1;
   const p = Math.pow(10, Math.floor(Math.log10(v)));
   const n = v / p;
-  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * p;
+  // Paliers serrés (56 → 60 et non 100) : les barres occupent la hauteur du graphique.
+  return ([1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((k) => n <= k) ?? 10) * p;
 }
 
 /** Barre aux coins supérieurs arrondis, posée sur la ligne de base. */
