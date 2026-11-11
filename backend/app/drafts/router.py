@@ -1,24 +1,27 @@
-"""Brouillons personnels (PRD F2, F4) : la sauvegarde de travail d'un analyste.
-
-Comme son profil, un brouillon est stocké dans la base de la plateforme et n'est visible que de
-lui : ni les collègues, ni le journal d'audit, ni BigQuery ne le voient. Il devient une version de
-règle — et la règle entre dans le référentiel partagé — au moment de la soumission.
-"""
+"""Brouillons personnels (F1, F2) et publication (F4)."""
 
 import uuid
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Response
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.audit.service import record_audit
+from app.auth.models import User
+from app.auth.service import get_current_user
 from app.bigquery import BigQueryGateway, get_bigquery
-from app.core import ApiError, as_utc, now
-from app.database import Draft, Rule, RuleVersion, TestRun, User, get_db, record_audit
-from app.rules import (
-    as_test_record,
+from app.core.clock import now
+from app.core.db import get_db
+from app.core.errors import ApiError
+from app.drafts.models import Draft
+from app.drafts.schemas import DraftIn, DraftOut
+from app.drafts.service import adopt_tests, apply_content, draft_out, draft_tests, load_draft
+from app.query.models import TestRun
+from app.query.sql_checks import query_hash
+from app.rules.models import Rule, RuleVersion
+from app.rules.schemas import RuleDetail, RuleInput
+from app.rules.service import (
     detail,
     find_rule,
     load_rule,
@@ -26,69 +29,11 @@ from app.rules import (
     name_key,
     notify_data_team,
     sync_registry,
-    users_by_matricule,
     validate,
     withdrawable,
 )
-from app.schemas import DraftIn, DraftOut, RuleDetail, RuleInput
-from app.sql_checks import query_hash
 
 router = APIRouter(prefix="/drafts", tags=["brouillons"])
-
-# Fenêtre pendant laquelle un test fait depuis l'éditeur est rattaché au brouillon enregistré ensuite.
-TEST_ADOPTION_WINDOW = timedelta(hours=1)
-CONTENT = ("name", "description", "fraud_typology", "criticality", "schedule", "schedule_every", "sql_query")
-
-
-def _tests(db: Session, draft_id: str) -> list[TestRun]:
-    return list(db.scalars(select(TestRun).where(TestRun.draft_id == draft_id).order_by(TestRun.at.desc())))
-
-
-def _out(db: Session, d: Draft, withdrawn: bool = False) -> DraftOut:
-    users = users_by_matricule(db)
-    rule = find_rule(db, d.rule_id)
-    tests = _tests(db, d.id)
-    return DraftOut(
-        id=d.id,
-        rule_id=d.rule_id,
-        base_version=d.base_version,
-        **{k: getattr(d, k) for k in CONTENT},
-        new_rule=rule is None,
-        latest_version=rule.versions[-1].version if rule and rule.versions else None,
-        withdrawn=withdrawn,
-        created_at=d.created_at,
-        updated_at=d.updated_at,
-        last_test=as_test_record(tests[0], users) if tests else None,
-        tests=[as_test_record(t, users) for t in tests],
-    )
-
-
-def _load(db: Session, draft_id: str, user: User) -> Draft:
-    d = db.get(Draft, draft_id)
-    if d is None or d.matricule != user.matricule:  # le brouillon d'un collègue n'existe pas pour vous
-        raise ApiError(404, "Brouillon introuvable.")
-    return d
-
-
-def _apply(target: Draft | RuleVersion, data: Draft | RuleInput) -> None:
-    for k in CONTENT:
-        setattr(target, k, getattr(data, k))
-    target.name = target.name.strip()
-
-
-def _adopt_tests(db: Session, user: User, d: Draft) -> None:
-    """Rattache au brouillon les tests récents de l'utilisateur, faits avant son premier enregistrement."""
-    since = now() - TEST_ADOPTION_WINDOW
-    for t in db.scalars(
-        select(TestRun).where(
-            TestRun.by_matricule == user.matricule,
-            TestRun.query_hash == query_hash(d.sql_query),
-            TestRun.rule_id.is_(None),
-            TestRun.draft_id.is_(None),
-        )
-    ):
-        if as_utc(t.at) >= since:
-            t.draft_id = d.id
 
 
 @router.get("", response_model=list[DraftOut])
@@ -96,14 +41,14 @@ def list_drafts(user: User = Depends(get_current_user), db: Session = Depends(ge
     drafts = db.scalars(
         select(Draft).where(Draft.matricule == user.matricule).order_by(Draft.updated_at.desc())
     )
-    return [_out(db, d) for d in drafts]
+    return [draft_out(db, d) for d in drafts]
 
 
 @router.get("/{draft_id}", response_model=DraftOut)
 def get_draft(
     draft_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ) -> DraftOut:
-    return _out(db, _load(db, draft_id, user))
+    return draft_out(db, load_draft(db, draft_id, user))
 
 
 @router.post("", response_model=DraftOut, status_code=201)
@@ -139,7 +84,7 @@ def create_draft(
     else:
         d = Draft(id=str(uuid.uuid4()), rule_id=str(uuid.uuid4()), base_version=None, created_at=t)
     d.matricule, d.updated_at = user.matricule, t
-    _apply(d, data)
+    apply_content(d, data)
     db.add(d)
     if withdrawn and rule:
         record_audit(
@@ -159,7 +104,7 @@ def create_draft(
         if not rule.versions:
             db.delete(rule)  # la règle n'avait que cette version : elle quitte le référentiel
     db.flush()
-    _adopt_tests(db, user, d)
+    adopt_tests(db, user, d)
     db.commit()
     if withdrawn and rule:
         # La ligne de rules_registry revient à la version précédente (ou disparaît s'il n'y en a pas) :
@@ -168,7 +113,7 @@ def create_draft(
         notify_data_team(
             "RULE_SUBMISSION_WITHDRAWN", rule.rule_id, withdrawn.version, withdrawn.name, user.matricule
         )
-    return _out(db, d, withdrawn=withdrawn is not None)
+    return draft_out(db, d, withdrawn=withdrawn is not None)
 
 
 @router.put("/{draft_id}", response_model=DraftOut)
@@ -179,17 +124,17 @@ def update_draft(
     db: Session = Depends(get_db),
     bq: BigQueryGateway = Depends(get_bigquery),
 ) -> DraftOut:
-    d = _load(db, draft_id, user)
+    d = load_draft(db, draft_id, user)
     validate(db, bq, data, d.rule_id)
-    _apply(d, data)
+    apply_content(d, data)
     d.updated_at = now()
     db.commit()
-    return _out(db, d)
+    return draft_out(db, d)
 
 
 @router.delete("/{draft_id}", status_code=204)
 def delete_draft(draft_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    d = _load(db, draft_id, user)
+    d = load_draft(db, draft_id, user)
     # Les tests restent (historique), simplement détachés.
     db.execute(update(TestRun).where(TestRun.draft_id == d.id).values(draft_id=None))
     db.delete(d)
@@ -204,8 +149,8 @@ def submit_draft(
     db: Session = Depends(get_db),
     bq: BigQueryGateway = Depends(get_bigquery),
 ) -> RuleDetail:
-    d = _load(db, draft_id, user)
-    tests = _tests(db, d.id)
+    d = load_draft(db, draft_id, user)
+    tests = draft_tests(db, d.id)
     last = tests[0] if tests else None
     if (
         not last
@@ -236,7 +181,7 @@ def submit_draft(
         updated_at=t,
         submitted_at=t,
     )
-    _apply(v, d)
+    apply_content(v, d)
     rule.versions.append(v)
     rule.name_key = name_key(d.name)
     db.flush()

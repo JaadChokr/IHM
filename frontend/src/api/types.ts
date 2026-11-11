@@ -17,7 +17,7 @@ export type Criticality = (typeof CRITICALITIES)[number];
 
 export const SCHEDULES = ['DAILY', 'HOURLY', 'WEEKLY'] as const;
 export type Schedule = (typeof SCHEDULES)[number];
-/** Pas autorisés par unité (miroir de backend/app/periods.py). Heures : diviseurs de 24. */
+/** Pas autorisés par unité (miroir de backend/app/query/periods.py). Heures : diviseurs de 24. */
 export const EVERY: Record<Schedule, readonly number[]> = {
   HOURLY: [1, 2, 3, 4, 6, 8, 12],
   DAILY: Array.from({ length: 30 }, (_, i) => i + 1),

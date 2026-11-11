@@ -11,8 +11,9 @@ from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
 from app.bigquery import FakeBigQueryGateway, get_bigquery  # noqa: E402
-from app.database import Base, get_db  # noqa: E402
+from app.core.db import get_db
 from app.main import create_app  # noqa: E402
+from app.models import Base  # noqa: E402
 
 
 @pytest.fixture

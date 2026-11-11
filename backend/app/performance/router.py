@@ -1,11 +1,4 @@
-"""Pilotage, en lecture seule : indicateurs de performance (F6, F7) et journal d'audit (F8).
-
-Les indicateurs sont lus dans BigQuery, table rule_runs et deux vues :
-  - v_rule_orders pour une règle, en commandes distinctes, selon son état : en production, ses commandes
-    à transmettre (to_send) ; en test, les autres. Courbes et indicateurs de la page règle, totaux
-    de la vue d'ensemble ;
-  - v_rule_performance pour la comparaison des versions (chaque version mesurée en entier).
-"""
+"""Indicateurs de performance (F6, F7), historique des exécutions, synchronisation des runs."""
 
 from datetime import date, timedelta
 
@@ -13,14 +6,17 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth import get_current_user
+from app.auth.models import User
+from app.auth.service import get_current_user
 from app.bigquery import BigQueryGateway, get_bigquery
-from app.core import ApiError, Settings, get_settings
-from app.database import AuditEvent, Rule, User, get_db
-from app.rules import derive_status, load_rule, production_version, running_version, sync_runs
-from app.schemas import AuditEventOut, ConsolidatedRow, PerformanceResponse, PeriodTotals, RuleRun
+from app.core.config import Settings, get_settings
+from app.core.db import get_db
+from app.core.errors import ApiError
+from app.performance.schemas import ConsolidatedRow, PerformanceResponse, PeriodTotals, RuleRun
+from app.rules.models import Rule
+from app.rules.service import derive_status, load_rule, production_version, running_version, sync_runs
 
-router = APIRouter(tags=["pilotage"])
+router = APIRouter(tags=["performance"])
 
 
 @router.get("/rules/{rule_id}/performance", response_model=PerformanceResponse)
@@ -114,22 +110,6 @@ def production(
             )
         )
     return out
-
-
-@router.get("/audit", response_model=list[AuditEventOut])
-def list_audit(
-    ruleId: str | None = None,  # noqa: N803 — nom du paramètre attendu par le front
-    matricule: str | None = None,
-    limit: int = 500,
-    _: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    q = select(AuditEvent).order_by(AuditEvent.at.desc()).limit(min(limit, 2000))
-    if ruleId:
-        q = q.where(AuditEvent.rule_id == ruleId)
-    if matricule:
-        q = q.where(AuditEvent.matricule == matricule)
-    return db.scalars(q).all()
 
 
 @router.post("/internal/sync-runs", include_in_schema=False)

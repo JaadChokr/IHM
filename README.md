@@ -12,17 +12,18 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   ├── src/pages/       écrans (liste, éditeur, détail, vue production, audit, profil)
 │   ├── src/styles/      style centralisé : tokens.css (valeurs) + ui.css (classes communes), voir frontend/STYLE.md
 │   └── nginx/           conf Nginx : sert la SPA et relaie /api vers l'API
-├── backend/             Python 3.12 + FastAPI — l'API, un fichier par domaine (routes + logique)
+├── backend/             Python 3.12 + FastAPI — l'API, un dossier par fonctionnalité
 │   ├── app/main.py      création de l'application, branchement des routes
-│   ├── app/core.py      configuration (variables RM_*), erreurs, horloge
-│   ├── app/database.py  connexion PostgreSQL, tables, écriture du journal d'audit
-│   ├── app/schemas.py   formats JSON échangés avec le front
-│   ├── app/auth.py      identification par matricule ; point UNIQUE de résolution de l'identité
-│   ├── app/rules.py     règles : liste, versions, décision d'envoi (F1, F5) ; app/drafts.py : brouillons et publication (F4)
-│   ├── app/query.py     test d'une requête : dry-run, exécution, garde-fous (F3)
-│   ├── app/sql_checks.py contrôles du SQL non couverts par BigQuery (paramètres, dates en dur…)
-│   ├── app/pilotage.py  indicateurs de performance et journal d'audit, en lecture (F6, F7, F8)
-│   ├── app/bigquery.py  tout l'accès BigQuery (réel ou factice), dont la publication dans rules_registry
+│   ├── app/core/        transverse : config.py (variables RM_*), errors.py, clock.py, db.py, schemas.py (base camelCase)
+│   ├── app/auth/        identification par matricule, sessions ; point UNIQUE de résolution de l'identité
+│   ├── app/rules/       règles : référentiel, versions, statuts, registre BigQuery, décisions (F1, F5)
+│   ├── app/drafts/      brouillons personnels et publication (F4)
+│   ├── app/query/       test d'une requête (F3) : contrôles SQL, période testée (periods.py), garde-fous
+│   ├── app/performance/ indicateurs de performance, historique des exécutions (F6, F7)
+│   ├── app/alerts/      alertes remontées et qualification par les analystes
+│   ├── app/audit/       journal d'audit, écriture et consultation (F8)
+│   ├── app/bigquery/    tout l'accès BigQuery : contract.py (interface), real.py, fake.py (développement, tests)
+│   ├── app/models.py    réunit les tables de toutes les fonctionnalités (Alembic, tests)
 │   ├── migrations/      Alembic (PostgreSQL / Cloud SQL)
 │   └── tests/           pytest (SQLite en mémoire + BigQuery factice)
 ├── infra/
@@ -252,13 +253,13 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - Le front ne détient aucun credential BigQuery ; il ne parle qu'à l'API, sur la même origine (cookie de session first-party).
 - Les garde-fous de test (`maximumBytesBilled`, `jobTimeoutMs`, `maxResults`) sont appliqués par l'API.
 - Les lignes renvoyées par un test ne sont jamais persistées ni journalisées : seules les métadonnées le sont.
-- L'identité (matricule) est résolue en un seul point, `get_current_user` dans `backend/app/auth.py` ; le front la relit toujours via `/me`.
+- L'identité (matricule) est résolue en un seul point, `get_current_user` dans `backend/app/auth/service.py` ; le front la relit toujours via `/me`.
   Passer au SSO (PRD §5.4) revient à réécrire `get_current_user`.
 
 ## Décisions prises dans ce squelette — à valider
 
 - **Q1, base applicative** : PostgreSQL (recommandation du PRD §8.3). L'exposition à l'équipe data se fait par
-  `rules_registry` dans BigQuery, alimentée à l'écriture (`set_registry` dans `backend/app/bigquery.py`, mode `real`).
+  `rules_registry` dans BigQuery, alimentée à l'écriture (`set_registry` dans `backend/app/bigquery/real.py`, mode `real`).
   **Une ligne par version qu'Airflow exécute** (clé `rule_id, version`, MERGE à chaque publication et décision) :
   au plus deux par règle, la version en production et une candidate. L'historique des versions vit dans
   `rule_versions`, côté plateforme, qui porte toute la logique des versions ; le DAG ne fait qu'exécuter les lignes. Si vous choisissez
@@ -448,7 +449,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `rule_runs` garde la période de chaque run (`period_start`, `period_end`) ; des tables existantes
   reçoivent les nouvelles colonnes par
   `infra/bigquery/03_rule_upgrade_suivi.sql`. Les crons sont à garder alignés entre le DAG et
-  `backend/app/periods.py`, qui calcule la période testée dans l'IHM.
+  `backend/app/query/periods.py`, qui calcule la période testée dans l'IHM.
 
   **Premier run d'une version** : le dédoublonnage ne joue qu'à partir du deuxième run. Une requête sans
   plage de dates remonte donc, à son premier run, toutes les commandes qu'elle lit ;

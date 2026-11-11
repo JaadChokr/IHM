@@ -1,0 +1,34 @@
+"""Connexion à la base applicative (Cloud SQL / PostgreSQL, SQLite en test) et base des modèles."""
+
+from collections.abc import Iterator
+
+from sqlalchemy import (
+    create_engine,
+)
+from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+from app.core.config import get_settings
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+_engine = None
+
+_SessionLocal: sessionmaker[Session] | None = None
+
+
+def init_engine(url: str | None = None, **kwargs):
+    global _engine, _SessionLocal
+    _engine = create_engine(url or get_settings().database_url, pool_pre_ping=True, **kwargs)
+    _SessionLocal = sessionmaker(_engine, expire_on_commit=False)
+    return _engine
+
+
+def get_db() -> Iterator[Session]:
+    if _SessionLocal is None:
+        init_engine()
+    assert _SessionLocal is not None
+    with _SessionLocal() as session:
+        yield session

@@ -5,7 +5,7 @@ import type { Schedule } from '../api/types';
  *
  * Fréquence = une unité (le DAG Airflow qui l'exécute, cron calé sur l'heure de Paris) et un pas : la
  * règle ne tourne qu'aux déclenchements où elle est due, et sa période va du déclenchement dû précédent à
- * celui-ci. Au test, c'est la dernière période complète de ce calendrier. Miroir de backend/app/periods.py
+ * celui-ci. Au test, c'est la dernière période complète de ce calendrier. Miroir de backend/app/query/periods.py
  * (qui fait foi : la période renvoyée par le test est celle du serveur).
  */
 export const TZ = 'Europe/Paris';

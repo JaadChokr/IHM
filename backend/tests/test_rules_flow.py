@@ -1,7 +1,8 @@
 from datetime import UTC, date, datetime, timedelta
 
 from app.bigquery import DryRunMeta, QueryError, RunStats
-from app.schemas import Column, DailyPerformance
+from app.performance.schemas import DailyPerformance
+from app.query.schemas import Column
 from tests.conftest import login
 
 SQL = """SELECT
@@ -419,7 +420,7 @@ def test_candidate_mise_en_production_seulement_apres_un_run(client, bq):
 
 
 def test_historique_des_executions(client, bq):
-    from app.schemas import RuleRun
+    from app.performance.schemas import RuleRun
 
     login(client)
     rid = _submit(client)

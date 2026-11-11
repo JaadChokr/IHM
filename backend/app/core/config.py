@@ -1,11 +1,8 @@
-"""Socle : configuration, erreurs métier, horloge."""
+"""Configuration de l'API (variables d'environnement RM_*)."""
 
-from datetime import UTC, datetime
 from functools import lru_cache
 from typing import Literal
 
-from fastapi import Request
-from fastapi.responses import JSONResponse
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -51,26 +48,3 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
-
-class ApiError(Exception):
-    """Erreur métier : sérialisée en {detail, code}, format lu par le front."""
-
-    def __init__(self, status: int, detail: str, code: str | None = None):
-        self.status = status
-        self.detail = detail
-        self.code = code
-
-
-async def api_error_handler(_: Request, exc: Exception) -> JSONResponse:
-    assert isinstance(exc, ApiError)
-    return JSONResponse({"detail": exc.detail, "code": exc.code}, status_code=exc.status)
-
-
-def now() -> datetime:
-    return datetime.now(UTC)
-
-
-def as_utc(dt: datetime) -> datetime:
-    """SQLite rend des datetimes naïfs ; PostgreSQL des datetimes aware."""
-    return dt if dt.tzinfo else dt.replace(tzinfo=UTC)

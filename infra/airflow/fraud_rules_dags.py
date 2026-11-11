@@ -14,7 +14,7 @@ Période du run : la requête de la règle reçoit `@period_start` / `@period_en
 [début, fin[ : du déclenchement dû précédent à celui-ci (pas de 1 : 1 h en horaire, de 3 h à 3 h en
 quotidien, du lundi 4 h au lundi 4 h en hebdomadaire). Un rattrapage (catchup) ou une relance d'un run
 passé repasse donc les bornes de la période d'origine, sans réécrire la requête. L'IHM teste la requête
-avec la dernière période complète du même calendrier (backend/app/periods.py : garder SCHEDULES, ANCHOR,
+avec la dernière période complète du même calendrier (backend/app/query/periods.py : garder SCHEDULES, ANCHOR,
 _due et _period_start alignés).
 
 rules_registry a une ligne par version à exécuter (au plus deux par règle : la version en production et

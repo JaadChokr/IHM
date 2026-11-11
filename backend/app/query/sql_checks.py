@@ -9,8 +9,8 @@ de dates (simples alertes). CURRENT_DATE() est libre.
 
 import re
 
-from app.periods import PARAMS
-from app.schemas import SqlIssue
+from app.query.periods import PARAMS
+from app.query.schemas import SqlIssue
 
 _PARAM_RE = re.compile(r"(^|[^@\w])@([A-Za-z_]\w*)")
 _CLOCK_RE = re.compile(r"\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b(?:\s*\(\s*\))?", re.IGNORECASE)

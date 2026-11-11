@@ -1,11 +1,4 @@
-"""Alertes remontées par les règles, et qualification par les analystes.
-
-Une alerte est une ligne de `rule_alerts` : une commande remontée par une version de règle. Son verdict vient
-du prestataire quand il l'a vérifiée (commandes transmises) ; pour une version EN TEST (commandes non
-transmises), l'analyste qualifie lui-même la commande : fraude ou non. La qualification porte sur la commande,
-toutes règles confondues, et est ajoutée à `alert_reviews` (BigQuery), d'où elle entre dans les chiffres des
-règles en test (v_rule_orders, v_rule_performance).
-"""
+"""Alertes remontées par les règles, et qualification par les analystes."""
 
 from datetime import date, timedelta
 from typing import Literal
@@ -14,12 +7,15 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth import get_current_user
+from app.alerts.schemas import AlertOut, AlertPage, AlertReviewIn, AlertReviewOut
+from app.audit.service import record_audit
+from app.auth.models import User
+from app.auth.service import get_current_user, users_by_matricule
 from app.bigquery import AlertFilter, BigQueryGateway, get_bigquery
-from app.core import ApiError, now
-from app.database import Rule, User, get_db, record_audit
-from app.rules import users_by_matricule
-from app.schemas import AlertOut, AlertPage, AlertReviewIn, AlertReviewOut
+from app.core.clock import now
+from app.core.db import get_db
+from app.core.errors import ApiError
+from app.rules.models import Rule
 
 router = APIRouter(tags=["alertes"])
 

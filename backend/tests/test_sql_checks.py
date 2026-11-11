@@ -1,8 +1,8 @@
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from app.periods import is_due, last_period, period_start
-from app.sql_checks import check_params, find_params, query_hash
+from app.query.periods import is_due, last_period, period_start
+from app.query.sql_checks import check_params, find_params, query_hash
 
 
 def test_params_ignores_dans_chaines_et_commentaires():
