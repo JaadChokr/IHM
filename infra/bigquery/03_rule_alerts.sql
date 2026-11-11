@@ -13,11 +13,9 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_alerts` (
   details      JSON,
   -- À transmettre au prestataire, décision figée au moment du run par le DAG : recopie de
   -- rules_registry.send_to_provider (vrai : version en production à ce run ; faux : en observation).
+  -- Ce qui est effectivement parti est noté par le script d'envoi dans rule_sends (09_rule_sends.sql),
+  -- jamais ici : le script ne modifie pas cette table.
   to_send      BOOL,
-  -- Date de transmission, renseignée par le script d'envoi ; vide tant que la commande n'est pas partie.
-  -- Le script lit les lignes « to_send AND sent_at IS NULL » et dédoublonne par commande, toutes règles
-  -- confondues.
-  sent_at      TIMESTAMP,
   -- Clé logique : une ligne par commande et par version de règle, garantie par le dédoublonnage du DAG.
   -- BigQuery ne l'applique pas (NOT ENFORCED).
   PRIMARY KEY (rule_id, rule_version, order_id) NOT ENFORCED

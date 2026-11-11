@@ -27,7 +27,8 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   └── tests/           pytest (SQLite en mémoire + BigQuery factice)
 ├── infra/
 │   ├── airflow/         DAG de référence : un DAG par fréquence, une tâche par règle
-│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), v_rule_performance, v_rule_orders
+│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), rule_sends, v_rule_performance, v_rule_orders
+│   ├── prestataire/     requêtes de référence du script d'envoi au prestataire (journal rule_sends)
 │   └── cloudbuild.yaml  build → Artifact Registry → Cloud Run (+ job de migration)
 ├── docker-compose.yml   environnement local complet (PostgreSQL + API + front)
 ├── .github/workflows/   CI : typecheck, tests, lint, migrations sur PostgreSQL, build des images
@@ -330,21 +331,31 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   comptent les commandes distinctes.
 
   **Envoi au prestataire** : le DAG n'envoie rien. Au moment du run, il marque chaque commande écrite dans
-  `rule_alerts` :
-  - `to_send` (« à transmettre ») recopie `send_to_provider` de la ligne de `rules_registry` : vrai si la
-    version est en production à ce run. La décision est figée au moment du run : passer en production n'envoie
-    pas le stock remonté en observation, et suspendre l'envoi ne bloque pas ce qui était déjà marqué. Une
-    commande remontée par la v1 puis par la v2 est marquée par les deux ; le script ne l'envoie qu'une fois ;
-  - `sent_at` (date de transmission) reste vide ; c'est le **script d'envoi externe** qui le renseigne.
+  `rule_alerts` avec `to_send` (« à transmettre »), recopie de `send_to_provider` de la ligne de
+  `rules_registry` : vrai si la version est en production à ce run. La décision est figée au moment du run :
+  passer en production n'envoie pas le stock remonté en observation, et suspendre l'envoi ne bloque pas ce qui
+  était déjà marqué. Une commande remontée par la v1 puis par la v2 est marquée par les deux ; elle ne part
+  qu'une fois.
 
-  Le script lit les lignes `to_send AND sent_at IS NULL`, les insère dans la base du prestataire en
-  dédoublonnant par commande, toutes règles et versions confondues (le prestataire ne reçoit jamais deux fois la
-  même commande), puis renseigne `sent_at` sur **toutes** les lignes en attente, y compris celles qu'il écarte
-  parce que la commande est déjà partie (sinon il les relirait à chaque passage). Une nouvelle tentative du DAG efface et réécrit les lignes de son run
-  pas encore transmises, et garde celles qui le sont. `rule_runs.rows_to_send` donne, par run, le nombre de
-  commandes marquées. Des tables existantes reçoivent `to_send`, `sent_at` et `rows_to_send` par
-  `infra/bigquery/03_rule_upgrade_suivi.sql` ; les anciennes colonnes `sent_to_provider` et `rows_sent` ne
-  sont plus écrites (le script indique comment les supprimer).
+  Le **script d'envoi externe** tient son propre **journal des envois**, `rule_sends` (une ligne par commande
+  transmise, `infra/bigquery/09_rule_sends.sql`). À chaque passage, il :
+  1. lit les commandes `to_send` absentes du journal, une ligne par commande, toutes règles et versions
+     confondues ;
+  2. les transmet au prestataire ;
+  3. les inscrit au journal (ajout seulement).
+
+  Requêtes de référence : `infra/prestataire/requetes_envoi.sql`. Le script ne modifie jamais `rule_alerts` et le
+  DAG n'écrit jamais dans `rule_sends` : les deux ne se gênent pas, même quand ils tournent en même temps (pas
+  de conflit d'écriture BigQuery). Une nouvelle tentative du DAG efface et réécrit les lignes de son run, sauf les
+  commandes inscrites au journal ; une commande réécrite ne repart pas, puisqu'elle est déjà au journal. Seul cas
+  de double envoi restant : envoi réussi puis échec de l'inscription au journal ; le prestataire doit donc ignorer
+  une commande déjà reçue (clé `order_id`). Le script ne doit pas tourner deux fois en parallèle.
+
+  `rule_runs.rows_to_send` donne, par run, le nombre de commandes marquées. Des tables existantes reçoivent
+  `to_send` et `rows_to_send` par `infra/bigquery/03_rule_upgrade_suivi.sql`. L'ancienne colonne
+  `rule_alerts.sent_at` n'est plus écrite : `09_rule_sends.sql` reprend son historique dans le journal (les
+  commandes déjà parties ne repartent pas), puis elle peut être supprimée. Les colonnes `sent_to_provider` et
+  `rows_sent`, plus anciennes, ne sont plus écrites non plus (le script indique comment les supprimer).
 
   **Deux vues d'indicateurs** :
   - `v_rule_performance` (une ligne par règle, version et jour) sert au **comparatif des versions** : chaque

@@ -25,9 +25,11 @@ une candidate). Le DAG lance une tâche par ligne, sans logique propre aux versi
      production à ce run : à transmettre) ; la décision est figée au moment du run ;
   3. trace l'exécution dans `rule_runs` (version, période, statut, volumes) : c'est ce que lit la plateforme.
 
-Envoi au prestataire : le DAG n'envoie rien. Un script externe lit dans `rule_alerts` les lignes
-`to_send AND sent_at IS NULL`, les transmet (dédoublonnées par commande, toutes règles confondues) et
-renseigne `sent_at`. Une nouvelle tentative du DAG ne touche pas aux commandes déjà transmises.
+Envoi au prestataire : le DAG n'envoie rien. Un script externe lit dans `rule_alerts` les commandes `to_send`
+absentes de son journal `rule_sends`, les transmet (dédoublonnées par commande, toutes règles confondues) et
+les inscrit au journal (infra/prestataire/requetes_envoi.sql). Le script ne modifie jamais `rule_alerts` et le
+DAG n'écrit jamais dans `rule_sends` : pas de conflit d'écriture entre eux. Une nouvelle tentative du DAG
+n'efface pas les commandes déjà transmises, et une commande réécrite ne repart pas.
 
 Relance et rattrapage : la requête est exécutée telle quelle, tables lues au présent, avec les versions
 actuelles de rules_registry. Avec une plage @period_start / @period_end, elle porte sur la période
@@ -204,9 +206,10 @@ def make_dag(frequency: str, cron: str):
             try:
                 _query(
                     client,
-                    f"""DELETE FROM `{ds}.rule_alerts`
+                    f"""DELETE FROM `{ds}.rule_alerts` a
                         WHERE rule_id = @rule_id AND run_id = @run_id
-                          AND sent_at IS NULL  -- déjà transmises au prestataire : on les garde""",
+                          -- Déjà transmises au prestataire (journal du script d'envoi) : on les garde.
+                          AND NOT EXISTS (SELECT 1 FROM `{ds}.rule_sends` s WHERE s.order_id = a.order_id)""",
                     rule_id=("STRING", rule["rule_id"]),
                     run_id=("STRING", run_id),
                 )

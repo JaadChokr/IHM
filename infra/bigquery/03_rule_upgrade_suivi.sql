@@ -6,12 +6,14 @@ ALTER TABLE `${PROJECT}.${DATASET}.rule_runs`
   ADD COLUMN IF NOT EXISTS period_end TIMESTAMP,
   ADD COLUMN IF NOT EXISTS rows_to_send INT64;
 ALTER TABLE `${PROJECT}.${DATASET}.rule_alerts`
-  ADD COLUMN IF NOT EXISTS to_send BOOL,
-  ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP;
+  ADD COLUMN IF NOT EXISTS to_send BOOL;
+-- rule_alerts.sent_at (suivi de l'envoi dans rule_alerts) n'est plus écrit : les envois sont notés dans
+-- rule_sends (09_rule_sends.sql, qui reprend l'historique). Une fois le script d'envoi passé au journal :
+--   ALTER TABLE `${PROJECT}.${DATASET}.rule_alerts` DROP COLUMN IF EXISTS sent_at;
 -- Version candidate en parallèle : rules_registry passe à une ligne par version exécutée (clé ci-dessous).
 -- Les colonnes sent_to_provider (rule_alerts) et rows_sent (rule_runs) des versions précédentes ne sont
 -- plus écrites. Elles ne sont pas supprimées ici, pour ne pas casser un script qui les lirait encore ;
--- une fois le script d'envoi passé à to_send / sent_at :
+-- une fois le script d'envoi passé à to_send / rule_sends :
 --   ALTER TABLE `${PROJECT}.${DATASET}.rule_alerts` DROP COLUMN IF EXISTS sent_to_provider;
 --   ALTER TABLE `${PROJECT}.${DATASET}.rule_runs` DROP COLUMN IF EXISTS rows_sent;
 
