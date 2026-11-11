@@ -2,7 +2,7 @@
 
 Les indicateurs sont lus dans BigQuery, table rule_runs et deux vues :
   - v_rule_orders pour une règle, en commandes distinctes, selon son état : en production, ses commandes
-    à transmettre (to_send) ; en observation, les autres. Courbes et indicateurs de la page règle, totaux
+    à transmettre (to_send) ; en test, les autres. Courbes et indicateurs de la page règle, totaux
     de la vue d'ensemble ;
   - v_rule_performance pour la comparaison des versions (chaque version mesurée en entier).
 """
@@ -35,7 +35,7 @@ def performance(
 ):
     if from_ > to:
         raise ApiError(422, "La date de début doit précéder la date de fin.")
-    # Une règle en production : ses commandes envoyées ; en observation : ses commandes observées.
+    # Une règle en production : ses commandes envoyées ; en test : ses commandes observées.
     sent = production_version(load_rule(db, rule_id)) is not None
     length = (to - from_).days + 1
     prev_to = from_ - timedelta(days=1)

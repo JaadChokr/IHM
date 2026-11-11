@@ -1,3 +1,4 @@
+import { AlertsPanel } from '../components/AlertsPanel';
 import { motion } from 'framer-motion';
 import { Pager, usePaged } from '../components/Pager';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -19,8 +20,8 @@ import { fmtRun, nextRun } from '../lib/period';
 import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
 
-type Tab = 'definition' | 'performance' | 'runs' | 'versions' | 'audit';
-const TABS: Tab[] = ['definition', 'performance', 'runs', 'versions', 'audit'];
+type Tab = 'definition' | 'performance' | 'alerts' | 'runs' | 'versions' | 'audit';
+const TABS: Tab[] = ['definition', 'performance', 'alerts', 'runs', 'versions', 'audit'];
 
 export function RuleDetailPage() {
   const { ruleId = '' } = useParams();
@@ -58,6 +59,7 @@ export function RuleDetailPage() {
   const tabs: [Tab, string, number?][] = [
     ['definition', 'Définition'],
     ['performance', 'Performance'],
+    ['alerts', 'Alertes'],
     ['runs', 'Exécutions'],
     ['versions', 'Versions', r.versions.length],
     ['audit', 'Audit'],
@@ -83,7 +85,7 @@ export function RuleDetailPage() {
         </div>
         <div className="row">
           <button type="button" className="btn" onClick={showTest}>
-            ▶ Tester
+            ▶ Tester la requête
           </button>
           {r.myDraftId ? (
             <Link to={`/drafts/${r.myDraftId}`} className="btn btn-primary">
@@ -104,7 +106,7 @@ export function RuleDetailPage() {
             kind="success"
             title={
               <>
-                v{r.version} publiée : première exécution le {fmtRun(nextRun(r.schedule, r.scheduleEvery))}, en observation.
+                v{r.version} publiée : première exécution le {fmtRun(nextRun(r.schedule, r.scheduleEvery))}, en test.
                 <InfoTip align="start">
                   Ses commandes ne seront envoyées au prestataire qu'après votre décision.
                   {r.candidate && r.productionVersion && ` La v${r.productionVersion} reste en production pendant ce temps.`} Tant qu'elle ne
@@ -141,7 +143,7 @@ export function RuleDetailPage() {
           />
         )}
         {r.productionVersion && !r.candidate && (
-          <Alert kind="info" title={`La v${r.version} remplacera la v${r.productionVersion} à sa première exécution, en observation.`} />
+          <Alert kind="info" title={`La v${r.version} remplacera la v${r.productionVersion} à sa première exécution, en test.`} />
         )}
         {r.candidate && r.productionVersion && r.status === 'SUBMITTED' && (
           <Alert
@@ -150,7 +152,7 @@ export function RuleDetailPage() {
               <>
                 La v{r.version} s'exécutera à côté de la v{r.productionVersion}, qui reste en production.
                 <InfoTip align="start">
-                  La v{r.productionVersion} continue d'être envoyée au prestataire ; la v{r.version} est observée sans envoi. Vous pourrez la
+                  La v{r.productionVersion} continue d'être envoyée au prestataire ; la v{r.version} est testée sans envoi. Vous pourrez la
                   mettre en production après sa première exécution.
                 </InfoTip>
               </>
@@ -174,6 +176,7 @@ export function RuleDetailPage() {
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'definition' && <DefinitionTab r={r} onTested={rule.reload} />}
         {tab === 'performance' && <PerformanceDashboard ruleId={r.ruleId} firstRunDate={firstRunDate} versionsRun={ran.length} observing={r.status === 'OBSERVATION' && !r.candidate} />}
+        {tab === 'alerts' && <AlertsPanel ruleId={r.ruleId} />}
         {tab === 'runs' && <RunsTab r={r} />}
         {tab === 'versions' && (
           <VersionsTab
@@ -390,7 +393,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
       <Card
         title="Versions"
         subtitle={`${versions.length} version${versions.length > 1 ? 's' : ''}, la plus récente en premier, et leurs performances sur toute leur durée d'exécution`}
-        info="Performances : chaque version mesurée sur toute la période où elle a tourné, y compris en observation. Une commande trouvée par deux versions compte pour chacune : les lignes ne s'additionnent pas. Toutes les versions restent conservées : « Restaurer » recopie une version antérieure dans votre brouillon, à tester puis publier."
+        info="Performances : chaque version mesurée sur toute la période où elle a tourné, y compris en test. Une commande trouvée par deux versions compte pour chacune : les lignes ne s'additionnent pas. Toutes les versions restent conservées : « Restaurer » recopie une version antérieure dans votre brouillon, à tester puis publier."
       >
         {perf.error && <Alert kind="error" title={`Performances indisponibles : ${perf.error.message}`} />}
         <div className="table-wrap">
@@ -555,7 +558,7 @@ function RuleAudit({ ruleId }: { ruleId: string }) {
 }
 
 /**
- * Décision de l'analyste après observation : envoyer la version au prestataire, suspendre l'envoi, ou
+ * Décision de l'analyste après le test : envoyer la version au prestataire, suspendre l'envoi, ou
  * l'écarter. La plateforme met à jour rules_registry ; le DAG en tient compte au run suivant.
  */
 function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) => void }) {
@@ -590,7 +593,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
     suspend: {
       title: `Suspendre l'envoi de la v${prod ?? r.version} ?`,
       text: prod
-        ? `Ses commandes ne seront plus transmises au prestataire. La v${r.version}, candidate, tournera alors seule, en observation, à la place de la v${prod}.`
+        ? `Ses commandes ne seront plus transmises au prestataire. La v${r.version}, candidate, tournera alors seule, en test, à la place de la v${prod}.`
         : "Elle continue de s'exécuter, mais ses commandes ne sont plus transmises au prestataire.",
       label: 'Suspendre',
       danger: true,
@@ -613,7 +616,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
       <div className="decision-card observing">
         <div>
           <strong>
-            Candidate en observation{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}
+            Candidate en test{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}
             <InfoTip align="start">
               La v{r.version} s'exécute à côté de la v{prod}, qui reste en production et continue d'être envoyée. Comparez-les sur la même
               période dans l'onglet Performance, puis décidez.
@@ -638,7 +641,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
       <div className="decision-card observing">
         <div>
           <strong>
-            En observation{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}
+            En test{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}
             <InfoTip align="start">
               La v{r.version} s'exécute, mais ses commandes ne sont pas envoyées au prestataire. Consultez l'onglet Performance, puis décidez.
             </InfoTip>
@@ -719,7 +722,7 @@ function DemoPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) =
       <div>
         <strong>Simulation des exécutions</strong> <span className="small muted">— mode démo uniquement</span>
         <InfoTip>
-          En réel, la plateforme constate les exécutions automatiques : une version qui s'exécute passe « En observation » (puis « En
+          En réel, la plateforme constate les exécutions automatiques : une version qui s'exécute passe « En test » (puis « En
           production » une fois envoyée), une version qui ne s'exécute plus depuis 3 échéances passe « Inactive ».
         </InfoTip>
       </div>

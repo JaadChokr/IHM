@@ -79,7 +79,7 @@ export function DraftsPage() {
                         ) : !d.lastTest ? (
                           <span className="muted">Jamais testé</span>
                         ) : !d.lastTest.success ? (
-                          <span className="text-bad">✕ Dernier test en échec</span>
+                          <span className="text-bad">✕ Dernier test de la requête en échec</span>
                         ) : (
                           <span className="muted">Test à refaire</span>
                         )}

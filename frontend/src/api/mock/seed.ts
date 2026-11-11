@@ -35,9 +35,19 @@ export interface MockDb {
   drafts: MockDraft[];
   tests: TestRecord[];
   audit: AuditEvent[];
+  /** Qualifications des analystes par commande (alert_reviews, dernière en date). Créées au premier chargement. */
+  reviews?: Record<string, MockReview>;
 }
 
-export const SCHEMA_VERSION = 18;
+export interface MockReview {
+  isFraud: boolean;
+  by: string;
+  at: string;
+  ruleId: string;
+  ruleVersion: number;
+}
+
+export const SCHEMA_VERSION = 19;
 
 /** Marqueur : la version a tourné ; v() le remplace par le DAG de sa fréquence. */
 const dag = 'dag';
@@ -282,7 +292,7 @@ WHERE o.order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)
   AND o.item_count >= 4`,
 };
 
-// Candidate en parallèle : la v1 est en production, la v2 (plus stricte) tourne à côté en observation,
+// Candidate en parallèle : la v1 est en production, la v2 (plus stricte) tourne à côté en test,
 // sur les mêmes jours, en attente de la décision de mise en production.
 const R9: Def = {
   id: '7f3c2a10-5b1e-4c8a-9d21-0a1b2c3d4e09',
@@ -386,7 +396,7 @@ export function buildSeed(): MockDb {
       profile: { dailyVolume: 3, processingRate: 0.85, precision: 0.52 },
     },
     {
-      // En observation depuis 9 jours : exécutée par Airflow, rien n'est envoyé au prestataire.
+      // En test depuis 9 jours : exécutée par Airflow, rien n'est envoyé au prestataire.
       ruleId: R6.id,
       versions: [r6v1],
       productionSince: { 1: daysAgo(9).slice(0, 10) },
@@ -405,7 +415,7 @@ export function buildSeed(): MockDb {
     },
   ];
 
-  // Les versions qui ont tourné ont été envoyées au prestataire, sauf celles en observation : R6, et la
+  // Les versions qui ont tourné ont été envoyées au prestataire, sauf celles en test : R6, et la
   // candidate v2 de R9.
   const observing = new Set([`${R6.id}:1`, `${R9.id}:2`]);
   for (const rule of rules) {

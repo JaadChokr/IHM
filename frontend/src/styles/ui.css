@@ -652,6 +652,45 @@ table.data a:not(.btn):hover {
   white-space: nowrap;
 }
 
+/* ---------- Verdict d'une alerte remontée (page et onglet Alertes) ---------- */
+.badge.verdict-FRAUD {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.badge.verdict-NOT_FRAUD {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.badge.verdict-TO_REVIEW {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.badge.verdict-PENDING {
+  background: var(--muted-soft);
+  color: var(--text-2);
+}
+.verdict-seg button:first-child[aria-pressed='true'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.verdict-seg button:last-child[aria-pressed='true'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.alerts-filters select {
+  flex: none;
+}
+/* Tableau des alertes : le nom de la règle sur une ou deux lignes, les détails tronqués */
+.alerts-table .alert-rule {
+  min-width: 200px;
+}
+.alerts-table .alert-rule .badge {
+  margin-top: var(--space-1);
+}
+.alerts-table .alert-details {
+  max-width: 220px;
+}
+
 /* ---------- Alertes ---------- */
 .alert {
   display: flex;

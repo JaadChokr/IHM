@@ -6,10 +6,10 @@ export interface VersionBars {
   version: number;
   /** Commandes remontées ; null : la version n'a pas tourné ce jour-là (pas de barre). */
   flagged: (number | null)[];
-  /** Commandes vérifiées par le prestataire, et parmi elles confirmées frauduleuses (en production seulement). */
+  /** Commandes vérifiées (par le prestataire en production, qualifiées par un analyste en test), et parmi elles confirmées frauduleuses. */
   processed: (number | null)[];
   confirmed: (number | null)[];
-  /** La version était en observation ce jour-là (barre hachurée, pas de fraudes confirmées mesurées). */
+  /** La version était en test ce jour-là (barre hachurée : rien n'est transmis au prestataire). */
   observed: boolean[];
 }
 
@@ -55,7 +55,7 @@ function barPath(x: number, w: number, y0: number, h: number): string {
 /**
  * Histogramme journalier, une barre par version et par jour (versions parallèles côte à côte), sur une seule
  * échelle en nombre de commandes. La barre entière : les commandes remontées (teinte claire ; hachurée en
- * observation). Superposée en bas, en couleur franche : celles confirmées frauduleuses par le prestataire
+ * test). Superposée en bas, en couleur franche : celles confirmées frauduleuses par le prestataire
  * (versions en production). On voit ainsi, barre par barre, combien de remontées sont de vraies fraudes.
  * Survol et clavier (flèches) : infobulle du jour, avec la précision.
  */
@@ -141,7 +141,7 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
         {showFlagged && anyObserved && (
           <li className="legend-style">
             <span className="legend-swatch legend-hatched" aria-hidden="true" />
-            en observation{anyProduction ? '' : " (rien n'est envoyé)"}
+            en test{anyProduction ? '' : " (rien n'est envoyé)"}
           </li>
         )}
       </ul>
@@ -210,7 +210,7 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
 
         {noConfirmed && (
           <text className="panel-empty" x={M.left + iw / 2} y={M.top + ih / 2} textAnchor="middle">
-            Aucune fraude confirmée mesurée sur la période (les versions en observation ne sont pas vérifiées).
+            Aucune fraude confirmée sur la période (en test : qualifiez les alertes pour en mesurer).
           </text>
         )}
 
@@ -252,10 +252,10 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
                   <span className="muted">{s.observed[hover] ? '(observation)' : '(production)'}</span>
                   {confirmed !== null && processed ? (
                     <div className="muted">
-                      Précision {fmtPct(confirmed / processed)} · {fmtInt(processed)} vérifiées sur {fmtInt(flagged)}
+                      Précision {fmtPct(confirmed / processed)} · {fmtInt(processed)} {s.observed[hover] ? 'qualifiées' : 'vérifiées'} sur {fmtInt(flagged)}
                     </div>
                   ) : (
-                    !s.observed[hover] && <div className="muted">Aucune commande encore vérifiée</div>
+                    <div className="muted">{s.observed[hover] ? 'Aucune commande encore qualifiée' : 'Aucune commande encore vérifiée'}</div>
                   )}
                 </div>
               );

@@ -1,4 +1,6 @@
 import type {
+  AlertFilters,
+  AlertPage,
   AuditEvent,
   Draft,
   ConsolidatedRow,
@@ -34,7 +36,7 @@ export interface Api {
   // F1 / F5
   listRules(filters: RuleFilters): Promise<RuleSummary[]>;
   getRule(ruleId: string): Promise<RuleDetail>;
-  /** Après observation : envoyer au prestataire, suspendre l'envoi, ou écarter la dernière version. */
+  /** Après le test : envoyer au prestataire, suspendre l'envoi, ou écarter la dernière version. */
   decide(ruleId: string, action: DecisionAction): Promise<RuleDetail>;
   checkNameAvailable(name: string, excludeRuleId?: string): Promise<boolean>;
 
@@ -65,6 +67,10 @@ export interface Api {
 
   // Audit
   listAudit(filters: { ruleId?: string; matricule?: string }): Promise<AuditEvent[]>;
+
+  // Alertes remontées ; qualification d'une commande en test (fraude, pas fraude, ou null : retirée).
+  listAlerts(filters: AlertFilters): Promise<AlertPage>;
+  reviewAlert(body: { orderId: string; ruleId: string; ruleVersion: number; isFraud: boolean | null }): Promise<void>;
 
   /** Présent uniquement en mode démo : simule les actions de l'équipe data en base. */
   demo?: {
@@ -129,6 +135,8 @@ export function createHttpApi(): Api {
     getRuns: (id, days = 90) => http('GET', `/rules/${id}/runs${qs({ days: String(days) })}`),
     getConsolidated: () => http('GET', '/performance/production'),
     listAudit: (f) => http('GET', `/audit${qs(f)}`),
+    listAlerts: (f) => http('GET', `/alerts${qs(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v === undefined ? undefined : String(v)])))}`),
+    reviewAlert: (body) => http('POST', '/alerts/review', body),
   };
 }
 

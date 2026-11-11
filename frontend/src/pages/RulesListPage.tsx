@@ -123,7 +123,7 @@ export function RulesListPage() {
                       Modifiée le <span aria-hidden="true">{filters.sort === 'updated_asc' ? '↑' : '↓'}</span>
                     </button>
                   </th>
-                  <th className="col-d">Dernier test</th>
+                  <th className="col-d">Requête</th>
                 </tr>
               </thead>
               <tbody>
@@ -153,7 +153,7 @@ export function RulesListPage() {
                       {!r.lastTest ? (
                         <span className="muted">Jamais testée</span>
                       ) : r.lastTest.success ? (
-                        <span className="text-good">✓ {r.lastTest.phase === 'EXECUTION' ? 'Testée' : 'Syntaxe'}</span>
+                        <span className="text-good">✓ {r.lastTest.phase === 'EXECUTION' ? 'Testée' : 'Syntaxe validée'}</span>
                       ) : (
                         <span className="text-bad">✕ Échec</span>
                       )}

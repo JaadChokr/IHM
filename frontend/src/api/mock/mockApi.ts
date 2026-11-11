@@ -5,6 +5,8 @@
 import type { Api } from '../client';
 import {
   ApiError,
+  type Alert,
+  type AlertVerdict,
   EVERY,
   type AuditEvent,
   type DailyPerformance,
@@ -96,6 +98,10 @@ export function createMockApi(): Api {
     return user;
   }
   const fullName = (u: User) => `${u.firstName} ${u.lastName}`;
+  const name = (matricule: string) => {
+    const u = db.users.find((x) => x.matricule === matricule);
+    return u ? fullName(u) : matricule;
+  };
 
   function audit(u: User, action: AuditEvent['action'], r?: RuleVersion, details?: string) {
     db.audit.unshift({
@@ -274,8 +280,12 @@ export function createMockApi(): Api {
   /** Version qui représente la règle ce jour-là : la plus ancienne qui tourne (une candidate est toujours plus récente). */
   const versionAt = (r: MockRule, date: string) => (versionsAt(r, date).length ? Math.min(...versionsAt(r, date)) : undefined);
 
-  /** Indicateurs simulés d'une version un jour donné. */
-  function dayPerf(r: MockRule, d: string, version: number): DailyPerformance {
+  /**
+   * Commandes simulées d'une version un jour donné, avant qualification : remontées, et celles vérifiées
+   * par le prestataire (dont confirmées frauduleuses). Les commandes 0 … flagged-1 du jour ; les vérifiées
+   * sont les premières (k < processed).
+   */
+  function dayBase(r: MockRule, d: string, version: number) {
     const today = isoDate(new Date());
     const p = { ...r.profile!, ...r.versionProfiles?.[version] };
     const age = Math.round((new Date(today).getTime() - new Date(d).getTime()) / 86400000);
@@ -284,16 +294,124 @@ export function createMockApi(): Api {
     const dow = new Date(d + 'T00:00:00').getDay();
     const weekly = dow === 0 || dow === 6 ? 1.3 : 1;
     const flagged = broken ? 0 : Math.round(p.dailyVolume * weekly * (0.55 + rnd(s + 'f') * 0.9));
-    // En observation, rien n'est envoyé au prestataire : seules les commandes aussi remontées par une
-    // règle envoyée sont traitées (environ un tiers).
-    const sent = sentVersion(r, version);
-    // Le prestataire traite toutes les commandes qu'il reçoit ; certaines n'apparaissent dans sa table de
-    // retour qu'un peu plus tard (jours les plus récents). En observation, seules y figurent les commandes
-    // aussi remontées par une règle envoyée (environ un tiers).
+    const v = r.versions.find((x) => x.version === version);
+    // Commandes transmises ce jour-là (version en production) ou non (en test).
+    const sent = !!v && sentAt(r, v, d);
+    // Le prestataire vérifie toutes les commandes qu'il reçoit ; certaines n'apparaissent dans sa table de
+    // retour qu'un peu plus tard (jours les plus récents). En test, seules y figurent les commandes aussi
+    // remontées par une règle transmise (environ un tiers).
     const arrived = age >= 2 ? 1 : age === 1 ? 0.85 : 0.5;
     const processed = Math.round(flagged * (sent ? arrived : 0.3 * (0.85 + rnd(s + 'p') * 0.3)));
     const confirmed = Math.min(processed, Math.round(processed * p.precision * (0.6 + rnd(s + 'c') * 0.8)));
-    return { date: d, ruleVersion: version, ordersFlagged: flagged, ordersToSend: sent ? flagged : 0, ordersProcessed: processed, ordersConfirmedFraud: confirmed };
+    return { flagged, processed, confirmed, sent };
+  }
+
+  /** Numéro de la k-ième commande remontée par une version un jour donné (stable d'un chargement à l'autre). */
+  const orderId = (r: MockRule, version: number, d: string, k: number) =>
+    `CMD-${r.ruleId.slice(-2)}${version}-${d.slice(2).replace(/-/g, '')}-${String(k).padStart(3, '0')}`;
+  /** Parmi les `processed` commandes vérifiées, les `confirmed` fraudes, réparties régulièrement. */
+  const isProviderFraud = (k: number, processed: number, confirmed: number) =>
+    processed > 0 && Math.floor(((k + 1) * confirmed) / processed) > Math.floor((k * confirmed) / processed);
+
+  /**
+   * Indicateurs simulés d'une version un jour donné. En test, une commande qualifiée par un analyste compte
+   * comme vérifiée (le verdict du prestataire, s'il existe, reste prioritaire).
+   */
+  function dayPerf(r: MockRule, d: string, version: number): DailyPerformance {
+    const b = dayBase(r, d, version);
+    let processed = b.processed;
+    let confirmed = b.confirmed;
+    if (!b.sent && db.reviews) {
+      for (let k = b.processed; k < b.flagged; k++) {
+        const review = db.reviews[orderId(r, version, d, k)];
+        if (review) {
+          processed++;
+          if (review.isFraud) confirmed++;
+        }
+      }
+    }
+    return { date: d, ruleVersion: version, ordersFlagged: b.flagged, ordersToSend: b.sent ? b.flagged : 0, ordersProcessed: processed, ordersConfirmedFraud: confirmed };
+  }
+
+  // ---------- alertes remontées (rule_alerts, une ligne par commande) ----------
+  const schemaCache = new Map<string, { name: string; type: string }[]>();
+  /** Autres colonnes renvoyées par la règle pour une commande (rule_alerts.details), simulées. */
+  function alertDetails(v: RuleVersion, id: string): Record<string, unknown> {
+    const key = `${v.ruleId}:${v.version}`;
+    if (!schemaCache.has(key)) schemaCache.set(key, (simulateDryRun(v.sqlQuery, GUARDRAILS, 'alert').outputSchema ?? []).filter((c) => c.name !== 'order_id'));
+    const out: Record<string, unknown> = {};
+    for (const c of schemaCache.get(key)!) {
+      const x = rnd(id + c.name);
+      out[c.name] =
+        c.type === 'INT64' ? 3 + Math.floor(x * 5)
+        : c.type === 'FLOAT64' || /amount|montant/.test(c.name) ? Math.round(150 + x * 2400)
+        : c.type === 'BOOL' ? x > 0.5
+        : c.name.includes('country') ? ['US', 'NG', 'BR', 'RO', 'CN', 'GB'][Math.floor(x * 6)]
+        : /_at$|date/.test(c.name) ? new Date(Date.now() - x * 864e5).toISOString()
+        : `${c.name.slice(0, 3)}-${Math.floor(x * 1e5)}`;
+    }
+    return out;
+  }
+
+  /** Toutes les alertes d'une période (avant filtres de phase / verdict). */
+  function alertsBetween(from: string, to: string, ruleId?: string): Alert[] {
+    const out: Alert[] = [];
+    const today = isoDate(new Date());
+    for (const r of db.rules) {
+      if (!r.profile || (ruleId && r.ruleId !== ruleId)) continue;
+      for (let d = from; d <= to && d <= today; d = addDays(d, 1)) {
+        for (const version of versionsAt(r, d)) {
+          const v = r.versions.find((x) => x.version === version);
+          if (!v) continue;
+          const b = dayBase(r, d, version);
+          for (let k = 0; k < b.flagged; k++) {
+            const id = orderId(r, version, d, k);
+            const provider = k < b.processed ? isProviderFraud(k, b.processed, b.confirmed) : null;
+            const review = !b.sent ? db.reviews?.[id] : undefined;
+            const verdict: AlertVerdict =
+              provider !== null ? (provider ? 'FRAUD' : 'NOT_FRAUD') : b.sent ? 'PENDING' : !review ? 'TO_REVIEW' : review.isFraud ? 'FRAUD' : 'NOT_FRAUD';
+            out.push({
+              orderId: id,
+              ruleId: r.ruleId,
+              ruleName: v.name,
+              ruleVersion: version,
+              runDate: d,
+              // Run quotidien : peu après 3 h (heure de Paris), une commande toutes les quelques secondes.
+              detectedAt: new Date(new Date(`${d}T02:00:00.000Z`).getTime() + 60_000 + k * 7_000).toISOString(),
+              phase: b.sent ? 'PRODUCTION' : 'TEST',
+              verdict,
+              providerIsFraud: provider,
+              review: review ? { isFraud: review.isFraud, byMatricule: review.by, byName: name(review.by), at: review.at } : null,
+              details: alertDetails(v, id),
+            });
+          }
+        }
+      }
+    }
+    return out;
+  }
+
+  /** Quelques commandes déjà qualifiées au premier chargement (règles en test), pour une démo parlante. */
+  function seedReviews() {
+    db.reviews = {};
+    const today = isoDate(new Date());
+    for (const r of db.rules) {
+      if (!r.profile) continue;
+      for (const v of r.versions) {
+        const since = r.productionSince[v.version];
+        if (!since) continue;
+        for (let d = since; d <= addDays(today, -2); d = addDays(d, 1)) {
+          if (!versionsAt(r, d).includes(v.version)) continue;
+          const b = dayBase(r, d, v.version);
+          if (b.sent) continue;
+          const p = { ...r.profile, ...r.versionProfiles?.[v.version] };
+          for (let k = b.processed; k < b.flagged; k++) {
+            const id = orderId(r, v.version, d, k);
+            if (rnd(id + 'q') < 0.7) db.reviews[id] = { isFraud: rnd(id + 'v') < p.precision, by: v.submittedBy, at: `${d}T14:00:00.000Z`, ruleId: r.ruleId, ruleVersion: v.version };
+          }
+        }
+      }
+    }
   }
 
   /** Comparatif : chaque version sur toute sa période d'exécution, candidate comprise (v_rule_performance). */
@@ -334,7 +452,7 @@ export function createMockApi(): Api {
 
   /**
    * Chiffres de la règle selon son état (v_rule_orders) : en production, ses commandes envoyées ; en
-   * observation, ses commandes observées. Une version précise se lit dans le comparatif (versionTotals).
+   * test, ses commandes en test. Une version précise se lit dans le comparatif (versionTotals).
    */
   function daily(r: MockRule, from: string, to: string): DailyPerformance[] {
     const out: DailyPerformance[] = [];
@@ -350,7 +468,7 @@ export function createMockApi(): Api {
   /** La version était en production ce jour-là : envoyée, et depuis la date de la décision. */
   const sentAt = (r: MockRule, v: RuleVersion, date: string) => sentVersion(r, v.version) && (!v.decidedAt || date >= v.decidedAt.slice(0, 10));
 
-  /** Courbe par version (v_rule_orders) : chaque version sur ses jours, en production ou en observation. */
+  /** Courbe par version (v_rule_orders) : chaque version sur ses jours, en production ou en test. */
   function versionDaily(r: MockRule, from: string, to: string): VersionDaily[] {
     if (!r.profile) return [];
     const today = isoDate(new Date());
@@ -539,7 +657,7 @@ export function createMockApi(): Api {
       }
       const label = {
         send: 'Mise en production : envoi au prestataire décidé',
-        suspend: 'Envoi au prestataire suspendu : retour en observation',
+        suspend: 'Envoi au prestataire suspendu : retour en test',
         discard: "Version écartée : Airflow ne l'exécute plus",
       }[action];
       audit(u, action === 'send' ? 'RULE_SEND_TO_PROVIDER' : action === 'discard' ? 'RULE_DISCARD' : 'RULE_SUSPEND_SENDING', cur, label);
@@ -781,6 +899,44 @@ export function createMockApi(): Api {
       return db.audit.filter((e) => (!f.ruleId || e.ruleId === f.ruleId) && (!f.matricule || e.matricule === f.matricule));
     },
 
+    async listAlerts(f) {
+      await delay();
+      currentUser();
+      const to = f.to ?? isoDate(new Date());
+      const from = f.from ?? addDays(to, -6);
+      if (from > to) throw new ApiError(422, 'La date de début doit précéder la date de fin.');
+      if (addDays(from, 92) <= to) throw new ApiError(422, 'Période trop longue : 92 jours au plus.');
+      const q = f.q?.trim();
+      const all = alertsBetween(from, to, f.ruleId).filter((a) => (!f.phase || a.phase === f.phase) && (!q || a.orderId.includes(q)));
+      const toReview = all.filter((a) => a.verdict === 'TO_REVIEW').length;
+      const shown = all.filter((a) => !f.verdict || a.verdict === f.verdict).sort((a, b) => b.detectedAt.localeCompare(a.detectedAt) || b.orderId.localeCompare(a.orderId));
+      const offset = f.offset ?? 0;
+      return { items: shown.slice(offset, offset + (f.limit ?? 25)), total: shown.length, toReview };
+    },
+
+    async reviewAlert({ orderId: id, ruleId, ruleVersion, isFraud }) {
+      await delay();
+      const u = currentUser();
+      const r = findRule(ruleId);
+      const v = r.versions.find((x) => x.version === ruleVersion);
+      if (!v) throw new ApiError(404, 'Règle introuvable.');
+      // Numéro de commande simulé : règle, version, jour, rang (voir orderId).
+      const m = /^CMD-\w{2}(\d+)-(\d{2})(\d{2})(\d{2})-(\d{3})$/.exec(id);
+      const d = m ? `20${m[2]}-${m[3]}-${m[4]}` : '';
+      const ok = !!m && Number(m[1]) === ruleVersion && versionsAt(r, d).includes(ruleVersion) && (() => {
+        const b = dayBase(r, d, ruleVersion);
+        return !b.sent && Number(m[5]) < b.flagged && orderId(r, ruleVersion, d, Number(m[5])) === id;
+      })();
+      if (!ok) {
+        throw new ApiError(409, "Seules les commandes d'une version en test se qualifient : les commandes transmises au prestataire sont vérifiées par lui.", 'NOT_IN_TEST');
+      }
+      db.reviews ??= {};
+      if (isFraud === null) delete db.reviews[id];
+      else db.reviews[id] = { isFraud, by: u.matricule, at: now(), ruleId, ruleVersion };
+      audit(u, 'ALERT_REVIEW', v, `Commande ${id} : ${isFraud === null ? 'qualification retirée' : isFraud ? 'fraude' : 'pas une fraude'}`);
+      save();
+    },
+
     demo: {
       async simulateRuns(id) {
         await delay();
@@ -815,9 +971,15 @@ export function createMockApi(): Api {
       },
       async reset() {
         db = buildSeed();
+        seedReviews();
         save();
       },
     },
   };
+  // Qualifications de départ de la démo (une fois, au premier chargement des données).
+  if (!db.reviews) {
+    seedReviews();
+    save();
+  }
   return api;
 }

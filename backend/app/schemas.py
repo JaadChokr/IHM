@@ -9,7 +9,7 @@ from pydantic.alias_generators import to_camel
 from .periods import EVERY, valid_every
 
 # Statut d'une version de règle (toujours soumise : les brouillons sont à part, voir DraftOut).
-# Soumise → en observation (Airflow l'exécute, rien n'est envoyé au prestataire) → en production
+# Soumise → en test (Airflow l'exécute, rien n'est envoyé au prestataire) → en production
 # (envoyée au prestataire) ; inactive, remplacée ou écartée sinon.
 RuleStatus = Literal["SUBMITTED", "OBSERVATION", "IN_PRODUCTION", "INACTIVE", "REPLACED", "DISCARDED"]
 Decision = Literal["SENT", "DISCARDED"]
@@ -98,7 +98,7 @@ class RuleVersionOut(RuleInput):
     airflow_dag_id: str | None = None
     first_run_at: datetime | None = None
     last_run_at: datetime | None = None
-    # Tourne en parallèle de la version en production, en observation, jusqu'à la décision.
+    # Tourne en parallèle de la version en production, en test, jusqu'à la décision.
     candidate: bool = False
 
 
@@ -250,8 +250,8 @@ class RuleRun(Model):
 
 
 class VersionDaily(Model):
-    """Commandes d'une version un jour donné, en production (to_send) ou en observation : une courbe par
-    version, pleine en production, pointillée en observation."""
+    """Commandes d'une version un jour donné, en production (to_send) ou en test : une courbe par
+    version, pleine en production, hachurée en test."""
 
     date: date
     rule_version: int
@@ -269,7 +269,7 @@ class PeriodTotals(Model):
     orders_to_send: int
     orders_processed: int
     orders_confirmed_fraud: int
-    orders_observed: int = 0  # commandes remontées en observation (candidate comprise)
+    orders_observed: int = 0  # commandes remontées en test (candidate comprise)
 
 
 class PerformanceResponse(Model):
@@ -280,7 +280,7 @@ class PerformanceResponse(Model):
     previous: list[DailyPerformance]
     totals: PeriodTotals | None = None
     previous_totals: PeriodTotals | None = None
-    # Une ligne par jour, version et état (production / observation) : la courbe par version.
+    # Une ligne par jour, version et état (production / test) : la courbe par version.
     by_version: list[VersionDaily] = []
     runs: list[RuleRun]
     versions: list[VersionPerformance]
@@ -311,3 +311,50 @@ class AuditEventOut(Model):
     rule_name: str | None = None
     version: int | None = None
     details: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Alertes remontées et qualification par les analystes
+# ---------------------------------------------------------------------------
+AlertPhase = Literal["TEST", "PRODUCTION"]
+# Verdict effectif d'une alerte : celui du prestataire s'il l'a vérifiée ; sinon, en test, la qualification
+# de l'analyste (TO_REVIEW tant qu'il n'y en a pas) ; en production, en attente du prestataire (PENDING).
+AlertVerdict = Literal["FRAUD", "NOT_FRAUD", "TO_REVIEW", "PENDING"]
+
+
+class AlertReviewOut(Model):
+    is_fraud: bool
+    by_matricule: str
+    by_name: str
+    at: datetime
+
+
+class AlertOut(Model):
+    order_id: str
+    rule_id: str
+    rule_name: str
+    rule_version: int
+    run_date: date
+    detected_at: datetime
+    phase: AlertPhase
+    verdict: AlertVerdict
+    # Verdict du prestataire (commande vérifiée), à défaut None.
+    provider_is_fraud: bool | None = None
+    review: AlertReviewOut | None = None
+    # Autres colonnes renvoyées par la règle pour cette commande (rule_alerts.details).
+    details: dict | None = None
+
+
+class AlertPage(Model):
+    items: list[AlertOut]
+    total: int
+    # Alertes en test pas encore qualifiées, avec les mêmes filtres (hors filtre de verdict).
+    to_review: int
+
+
+class AlertReviewIn(Model):
+    order_id: str
+    rule_id: str
+    rule_version: int
+    # Vrai : fraude ; faux : pas une fraude ; None : retirer la qualification.
+    is_fraud: bool | None

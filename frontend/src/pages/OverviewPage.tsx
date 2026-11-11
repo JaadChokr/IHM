@@ -76,7 +76,7 @@ export function OverviewPage() {
             </span>
           </button>
           <button type="button" className="card kpi kpi-link" onClick={() => openList({ status: 'OBSERVATION' })}>
-            <span className="kpi-label">En observation</span>
+            <span className="kpi-label">En test</span>
             <span className="kpi-value">{fmtInt(count('OBSERVATION'))}</span>
             <span className="kpi-sub">
               Décision d'envoi attendue

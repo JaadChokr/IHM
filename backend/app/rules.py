@@ -81,7 +81,7 @@ def registry_versions(rule: Rule) -> list[tuple[RuleVersion, bool]]:
     - Pas de version en production : la dernière version non écartée, seule (une nouvelle version
       remplace la précédente, rien n'est envoyé de toute façon).
     - Une version en production : elle continue de tourner ; une version plus récente non écartée tourne
-      à côté comme candidate, en observation, jusqu'à la décision (mise en production ou écart).
+      à côté comme candidate, en test, jusqu'à la décision (mise en production ou écart).
     """
     prod = production_version(rule)
     latest = next((v for v in reversed(rule.versions) if v.decision != "DISCARDED"), None)
@@ -112,7 +112,7 @@ def _run_status(v: RuleVersion, at: datetime | None) -> str | None:
 def derive_status(rule: Rule, v: RuleVersion, at: datetime | None = None) -> str:
     """Statut affiché d'une version (toutes les versions stockées ont été publiées).
 
-    Cycle : publiée → en observation (Airflow l'exécute, rien n'est envoyé au prestataire) → en
+    Cycle : publiée → en test (Airflow l'exécute, rien n'est envoyé au prestataire) → en
     production (l'analyste a décidé de l'envoyer) ou écartée. Une nouvelle version d'une règle en
     production tourne en parallèle comme candidate, sans remplacer la version en production. L'exécution
     se constate dans `rule_runs` (first_run_at / last_run_at) ; la décision est un geste de l'analyste.
@@ -130,7 +130,7 @@ def derive_status(rule: Rule, v: RuleVersion, at: datetime | None = None) -> str
 
 
 def running_version(rule: Rule) -> RuleVersion | None:
-    """Version qui représente la règle à l'exécution (en observation, en production ou inactive) : la
+    """Version qui représente la règle à l'exécution (en test, en production ou inactive) : la
     version en production si elle tourne, sinon la plus récente qui tourne. Jamais la candidate."""
     for v, candidate in registry_versions(rule):
         if not candidate and derive_status(rule, v) in RUNNING:
@@ -372,7 +372,7 @@ DECISIONS = {
 }
 DECISION_LABEL = {
     "send": "Mise en production : envoi au prestataire décidé",
-    "suspend": "Envoi au prestataire suspendu : retour en observation",
+    "suspend": "Envoi au prestataire suspendu : retour en test",
     "discard": "Version écartée : Airflow ne l'exécute plus",
 }
 

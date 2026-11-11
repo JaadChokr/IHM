@@ -4,7 +4,7 @@
 
 /** Statuts d'une version de règle : toutes ont été soumises (les brouillons sont personnels, voir Draft). */
 /**
- * Soumise → en observation (Airflow l'exécute, ses commandes ne partent pas chez le prestataire) →
+ * Soumise → en test (Airflow l'exécute, ses commandes ne partent pas chez le prestataire) →
  * en production (l'analyste a décidé de l'envoyer au prestataire). Inactive, remplacée ou écartée sinon.
  */
 export const RULE_STATUSES = ['SUBMITTED', 'OBSERVATION', 'IN_PRODUCTION', 'INACTIVE', 'REPLACED', 'DISCARDED'] as const;
@@ -57,9 +57,9 @@ export interface RuleVersion extends RuleInput {
   airflowDagId?: string;
   firstRunAt?: string;
   lastRunAt?: string;
-  /** Tourne en parallèle de la version en production, en observation, jusqu'à la décision. */
+  /** Tourne en parallèle de la version en production, en test, jusqu'à la décision. */
   candidate?: boolean;
-  /** Décision de l'analyste après observation : envoyée au prestataire, ou écartée. */
+  /** Décision de l'analyste après le test : envoyée au prestataire, ou écartée. */
   decision?: 'SENT' | 'DISCARDED';
   decidedAt?: string;
   decidedByName?: string;
@@ -209,11 +209,11 @@ export interface PeriodTotals {
   ordersToSend: number;
   ordersProcessed: number;
   ordersConfirmedFraud: number;
-  /** Commandes remontées en observation (candidate comprise). */
+  /** Commandes remontées en test (candidate comprise). */
   ordersObserved?: number;
 }
 
-/** Commandes d'une version un jour donné, en production (toSend) ou en observation. */
+/** Commandes d'une version un jour donné, en production (toSend) ou en test. */
 export interface VersionDaily {
   date: string;
   ruleVersion: number;
@@ -296,7 +296,8 @@ export type AuditAction =
   | 'RULE_WITHDRAW'
   | 'RULE_SEND_TO_PROVIDER'
   | 'RULE_SUSPEND_SENDING'
-  | 'RULE_DISCARD';
+  | 'RULE_DISCARD'
+  | 'ALERT_REVIEW';
 
 export interface AuditEvent {
   id: string;
@@ -327,4 +328,56 @@ export class ApiError extends Error {
   ) {
     super(message);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Alertes remontées et qualification par les analystes
+// ---------------------------------------------------------------------------
+/** Phase de la version qui a remonté la commande : en test (non transmise) ou en production (transmise). */
+export type AlertPhase = 'TEST' | 'PRODUCTION';
+/**
+ * Verdict effectif d'une alerte : celui du prestataire s'il l'a vérifiée ; sinon, en test, la qualification
+ * de l'analyste (TO_REVIEW tant qu'il n'y en a pas) ; en production, en attente du prestataire (PENDING).
+ */
+export type AlertVerdict = 'FRAUD' | 'NOT_FRAUD' | 'TO_REVIEW' | 'PENDING';
+
+export interface AlertReview {
+  isFraud: boolean;
+  byMatricule: string;
+  byName: string;
+  at: string;
+}
+
+export interface Alert {
+  orderId: string;
+  ruleId: string;
+  ruleName: string;
+  ruleVersion: number;
+  runDate: string;
+  detectedAt: string;
+  phase: AlertPhase;
+  verdict: AlertVerdict;
+  /** Verdict du prestataire, si la commande figure dans son retour. */
+  providerIsFraud?: boolean | null;
+  review?: AlertReview | null;
+  /** Autres colonnes renvoyées par la règle pour cette commande. */
+  details?: Record<string, unknown> | null;
+}
+
+export interface AlertFilters {
+  from?: string;
+  to?: string;
+  ruleId?: string;
+  phase?: AlertPhase;
+  verdict?: AlertVerdict;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AlertPage {
+  items: Alert[];
+  total: number;
+  /** Alertes en test pas encore qualifiées, avec les mêmes filtres (hors verdict). */
+  toReview: number;
 }

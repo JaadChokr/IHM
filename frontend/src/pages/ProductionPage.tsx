@@ -49,7 +49,7 @@ export function ProductionPage() {
         <div>
           <h1>Règles en production</h1>
           <p>
-            Règles exécutées sur les 30 derniers jours : envoyées au prestataire, en observation ou devenues inactives.
+            Règles exécutées sur les 30 derniers jours : envoyées au prestataire, en test ou devenues inactives.
             <InfoTip>Une commande remontée par plusieurs règles compte pour chacune : les volumes de ce tableau ne s'additionnent pas.</InfoTip>
           </p>
         </div>

@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext';
 import { API_MODE } from '../api/client';
 import { usePref } from '../prefs/prefs';
 import { Initials } from './ui';
-import { IconAudit, IconChart, IconDraft, IconHome, IconPlus, IconRules, IconSearch } from './icons';
+import { IconAlert, IconAudit, IconChart, IconDraft, IconHome, IconPlus, IconRules, IconSearch } from './icons';
 
 function NavItem({ to, end, icon, label }: { to: string; end?: boolean; icon: ReactNode; label: string }) {
   return (
@@ -76,6 +76,7 @@ export function Layout() {
         <nav className="nav" aria-label="Navigation principale">
           <span className="nav-section">Pilotage</span>
           <NavItem to="/" end icon={<IconHome />} label="Vue d'ensemble" />
+          <NavItem to="/alerts" icon={<IconAlert />} label="Alertes" />
           <NavItem to="/production" icon={<IconChart />} label="Production" />
           <span className="nav-section">Règles</span>
           {/* Sans `end` : reste active sur la fiche, la modification et la création d'une règle. */}

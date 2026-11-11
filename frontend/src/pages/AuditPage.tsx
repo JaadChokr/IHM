@@ -14,12 +14,13 @@ export const ACTION_LABEL: Record<AuditAction, string> = {
   RULE_CREATE: 'Création',
   RULE_UPDATE: 'Modification',
   RULE_NEW_VERSION: 'Nouvelle version',
-  RULE_TEST: 'Test',
+  RULE_TEST: 'Test de la requête',
   RULE_SUBMIT: 'Publication',
   RULE_WITHDRAW: 'Publication retirée',
   RULE_SEND_TO_PROVIDER: 'Envoi au prestataire',
   RULE_SUSPEND_SENDING: 'Envoi suspendu',
   RULE_DISCARD: 'Version écartée',
+  ALERT_REVIEW: 'Qualification',
 };
 
 export function AuditTable({ events, showRule = true }: { events: AuditEvent[]; showRule?: boolean }) {

@@ -7,11 +7,12 @@ Les garde-fous F3 sont posés ici, côté serveur, donc non contournables depuis
 `maximum_bytes_billed`, `job_timeout_ms`, `max_results`.
 """
 
+import json
 import logging
 import re
 import time
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from functools import lru_cache
 from typing import Any, Protocol
 
@@ -88,6 +89,48 @@ class ProductionTotals:
     observed: int = 0
 
 
+@dataclass
+class AlertFilter:
+    start: date
+    end: date
+    rule_id: str | None = None
+    phase: str | None = None  # TEST | PRODUCTION
+    verdict: str | None = None  # FRAUD | NOT_FRAUD | TO_REVIEW | PENDING
+    q: str | None = None  # recherche dans le numéro de commande
+    limit: int = 25
+    offset: int = 0
+
+
+@dataclass
+class AlertRow:
+    """Une alerte (ligne de rule_alerts) avec le retour du prestataire et la dernière qualification."""
+
+    order_id: str
+    rule_id: str
+    rule_version: int
+    run_date: date
+    detected_at: datetime
+    to_send: bool
+    verdict: str
+    provider_is_fraud: bool | None = None
+    review_is_fraud: bool | None = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    details: dict | None = None
+
+
+def verdict_of(to_send: bool, provider_is_fraud: bool | None, has_feedback: bool, review: bool | None) -> str:
+    """Verdict effectif d'une alerte : le prestataire s'il l'a vérifiée ; sinon, en production, en attente du
+    prestataire ; en test, la qualification de l'analyste (à qualifier tant qu'il n'y en a pas)."""
+    if has_feedback:
+        return "FRAUD" if provider_is_fraud else "NOT_FRAUD"
+    if to_send:
+        return "PENDING"
+    if review is None:
+        return "TO_REVIEW"
+    return "FRAUD" if review else "NOT_FRAUD"
+
+
 class BigQueryGateway(Protocol):
     def dry_run(self, sql: str, period: Period) -> DryRunMeta:
         """`period` : valeurs de @period_start / @period_end (toujours fournies, utilisées ou non)."""
@@ -104,7 +147,7 @@ class BigQueryGateway(Protocol):
         self, rule_id: str, start: date, end: date, sent: bool = False
     ) -> list[DailyPerformance]:
         """Chiffres quotidiens d'une règle : ses commandes à transmettre (`sent`, règle en production) ou
-        ses commandes en observation (règle en observation)."""
+        ses commandes en test (règle en test)."""
         ...
 
     def runs(self, rule_id: str, start: date, end: date, limit: int = 20) -> list[RuleRun]: ...
@@ -112,7 +155,7 @@ class BigQueryGateway(Protocol):
     def version_totals(self, rule_id: str) -> list[VersionPerformance]: ...
 
     def version_daily(self, rule_id: str, start: date, end: date) -> list[VersionDaily]:
-        """Commandes de chaque version, par jour et par état (production / observation)."""
+        """Commandes de chaque version, par jour et par état (production / test)."""
         ...
 
     def production_totals(self, rules: dict[str, bool], start: date, end: date) -> list[ProductionTotals]:
@@ -120,6 +163,14 @@ class BigQueryGateway(Protocol):
         ...
 
     def run_stats(self) -> list[RunStats]: ...
+
+    def alerts(self, f: AlertFilter) -> tuple[list[AlertRow], int, int]:
+        """Alertes de la période (les plus récentes d'abord) : (page, total, à qualifier)."""
+        ...
+
+    def add_review(self, order_id: str, rule_id: str, version: int, is_fraud: bool | None, by: str) -> bool:
+        """Qualifie une commande (alert_reviews). Faux si ce n'est pas une alerte en test de cette version."""
+        ...
 
     def set_registry(self, rule: Rule, rows: list[tuple[RuleVersion, str, bool]]) -> None:
         """Aligne les lignes de la règle dans `rules_registry` : une par version qu'Airflow exécute, donnée
@@ -226,14 +277,14 @@ class RealBigQueryGateway:
         return [dict(r.items()) for r in self.client.query(sql, job_config=cfg).result()]
 
     def daily_performance(self, rule_id, start, end, sent=False):
-        # Une règle en production : ses commandes à transmettre (to_send) ; en observation : les autres.
+        # Une règle en production : ses commandes à transmettre (to_send) ; en test : les autres.
         # Une version précise, candidate comprise, se lit dans le comparatif (version_totals).
         P = self._bq.ScalarQueryParameter
         rows = self._rows(
             f"""SELECT run_date, MAX(rule_version) AS rule_version,
                        COUNT(DISTINCT order_id) AS orders_flagged,
-                       COUNT(DISTINCT IF(has_feedback, order_id, NULL)) AS orders_processed,
-                       COUNT(DISTINCT IF(is_fraud, order_id, NULL)) AS orders_confirmed_fraud
+                       COUNT(DISTINCT IF(is_verified, order_id, NULL)) AS orders_processed,
+                       COUNT(DISTINCT IF(is_confirmed, order_id, NULL)) AS orders_confirmed_fraud
                 FROM {self.ds}.v_rule_orders
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end AND to_send = @sent
                 GROUP BY run_date
@@ -262,8 +313,8 @@ class RealBigQueryGateway:
         rows = self._rows(
             f"""SELECT run_date, rule_version, to_send,
                        COUNT(DISTINCT order_id) AS orders_flagged,
-                       COUNT(DISTINCT IF(has_feedback, order_id, NULL)) AS orders_processed,
-                       COUNT(DISTINCT IF(is_fraud, order_id, NULL)) AS orders_confirmed_fraud
+                       COUNT(DISTINCT IF(is_verified, order_id, NULL)) AS orders_processed,
+                       COUNT(DISTINCT IF(is_confirmed, order_id, NULL)) AS orders_confirmed_fraud
                 FROM {self.ds}.v_rule_orders
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end
                 GROUP BY run_date, rule_version, to_send
@@ -314,8 +365,8 @@ class RealBigQueryGateway:
             # Les commandes envoyées et celles observées sont aussi comptées à part, quel que soit l'état.
             f"""SELECT rule_id,
                        COUNT(DISTINCT IF(kept, order_id, NULL)) AS flagged,
-                       COUNT(DISTINCT IF(kept AND has_feedback, order_id, NULL)) AS processed,
-                       COUNT(DISTINCT IF(kept AND is_fraud, order_id, NULL)) AS confirmed,
+                       COUNT(DISTINCT IF(kept AND is_verified, order_id, NULL)) AS processed,
+                       COUNT(DISTINCT IF(kept AND is_confirmed, order_id, NULL)) AS confirmed,
                        COUNT(DISTINCT IF(to_send, order_id, NULL)) AS to_send,
                        COUNT(DISTINCT IF(NOT to_send, order_id, NULL)) AS observed
                 FROM (
@@ -356,6 +407,108 @@ class RealBigQueryGateway:
             [],
         )
         return [RunStats(**r) for r in rows]
+
+    def alerts(self, f):
+        P = self._bq.ScalarQueryParameter
+        table = self.settings.bq_feedback_table
+        fb = (
+            f"SELECT order_id, LOGICAL_OR(is_fraud) AS is_fraud FROM `{table}` GROUP BY order_id"
+            if table
+            else "SELECT CAST(NULL AS STRING) AS order_id, CAST(NULL AS BOOL) AS is_fraud LIMIT 0"
+        )
+        sql = f"""
+            WITH reviews AS (
+              SELECT order_id, is_fraud, reviewed_by, reviewed_at FROM {self.ds}.alert_reviews
+              QUALIFY ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY reviewed_at DESC) = 1
+            ),
+            fb AS ({fb}),
+            base AS (
+              SELECT a.order_id, a.rule_id, a.rule_version, a.run_date, a.detected_at,
+                     IFNULL(a.to_send, FALSE) AS to_send, TO_JSON_STRING(a.details) AS details,
+                     fb.order_id IS NOT NULL AS has_feedback, fb.is_fraud AS provider_is_fraud,
+                     r.is_fraud AS review_is_fraud, r.reviewed_by, r.reviewed_at
+              FROM {self.ds}.rule_alerts a
+              LEFT JOIN fb USING (order_id)
+              LEFT JOIN reviews r USING (order_id)
+              WHERE a.run_date BETWEEN @start AND @end
+                AND (@rule_id IS NULL OR a.rule_id = @rule_id)
+                AND (@phase IS NULL OR IFNULL(a.to_send, FALSE) = (@phase = 'PRODUCTION'))
+                AND (@q IS NULL OR STRPOS(a.order_id, @q) > 0)
+            ),
+            judged AS (
+              SELECT *,
+                     CASE WHEN has_feedback THEN IF(provider_is_fraud, 'FRAUD', 'NOT_FRAUD')
+                          WHEN to_send THEN 'PENDING'
+                          WHEN review_is_fraud IS NULL THEN 'TO_REVIEW'
+                          WHEN review_is_fraud THEN 'FRAUD' ELSE 'NOT_FRAUD' END AS verdict
+              FROM base
+            ),
+            counted AS (SELECT *, COUNTIF(verdict = 'TO_REVIEW') OVER () AS to_review FROM judged)
+            SELECT *, COUNT(*) OVER () AS total
+            FROM counted
+            WHERE @verdict IS NULL OR verdict = @verdict
+            ORDER BY detected_at DESC, order_id
+            LIMIT @limit OFFSET @offset"""
+        rows = self._rows(
+            sql,
+            [
+                P("start", "DATE", f.start),
+                P("end", "DATE", f.end),
+                P("rule_id", "STRING", f.rule_id),
+                P("phase", "STRING", f.phase),
+                P("verdict", "STRING", f.verdict),
+                P("q", "STRING", f.q),
+                P("limit", "INT64", f.limit),
+                P("offset", "INT64", f.offset),
+            ],
+        )
+        if not rows and f.offset:
+            # Au-delà de la dernière page : totaux recomptés sur la première.
+            _, total, to_review = self.alerts(AlertFilter(**{**f.__dict__, "limit": 1, "offset": 0}))
+            return [], total, to_review
+        items = [
+            AlertRow(
+                order_id=r["order_id"],
+                rule_id=r["rule_id"],
+                rule_version=r["rule_version"],
+                run_date=r["run_date"],
+                detected_at=r["detected_at"],
+                to_send=r["to_send"],
+                verdict=r["verdict"],
+                provider_is_fraud=r["provider_is_fraud"] if r["has_feedback"] else None,
+                review_is_fraud=r["review_is_fraud"],
+                reviewed_by=r["reviewed_by"],
+                reviewed_at=r["reviewed_at"],
+                details=json.loads(r["details"]) if r["details"] else None,
+            )
+            for r in rows
+        ]
+        return items, (rows[0]["total"] if rows else 0), (rows[0]["to_review"] if rows else 0)
+
+    def add_review(self, order_id, rule_id, version, is_fraud, by):
+        P = self._bq.ScalarQueryParameter
+        # Ajout seulement, et seulement pour une alerte en test de cette version (non transmise au
+        # prestataire) : une commande transmise est vérifiée par le prestataire.
+        sql = f"""
+            INSERT INTO {self.ds}.alert_reviews
+              (order_id, is_fraud, reviewed_by, reviewed_at, rule_id, rule_version)
+            SELECT @order_id, @is_fraud, @by, CURRENT_TIMESTAMP(), @rule_id, @version
+            FROM UNNEST([1])
+            WHERE EXISTS (
+              SELECT 1 FROM {self.ds}.rule_alerts
+              WHERE order_id = @order_id AND rule_id = @rule_id AND rule_version = @version
+                AND NOT IFNULL(to_send, FALSE)
+            )"""
+        params = [
+            P("order_id", "STRING", order_id),
+            P("is_fraud", "BOOL", is_fraud),
+            P("by", "STRING", by),
+            P("rule_id", "STRING", rule_id),
+            P("version", "INT64", version),
+        ]
+        job = self.client.query(sql, job_config=self._bq.QueryJobConfig(query_parameters=params))
+        job.result()
+        return bool(job.num_dml_affected_rows)
 
     def set_registry(self, rule, rows):
         P = self._bq.ScalarQueryParameter
@@ -566,6 +719,54 @@ class FakeBigQueryGateway:
 
     def run_stats(self):
         return list(self.stats)
+
+    # Alertes simulées (rule_alerts + retour prestataire), préremplies par les tests :
+    # (AlertRow sans verdict ni qualification, la commande est-elle vérifiée par le prestataire ?).
+    alert_rows: list[tuple[AlertRow, bool]] = field(default_factory=list)
+    # Qualifications (alert_reviews), dans l'ordre : (order_id, is_fraud, matricule, horodatage).
+    reviews: list[tuple[str, bool | None, str, datetime]] = field(default_factory=list)
+
+    def alerts(self, f):
+        last = {o: (v, by, at) for o, v, by, at in self.reviews}
+        out = []
+        for a, has_feedback in self.alert_rows:
+            if not (f.start <= a.run_date <= f.end) or (f.rule_id and a.rule_id != f.rule_id):
+                continue
+            if f.phase and a.to_send != (f.phase == "PRODUCTION"):
+                continue
+            if f.q and f.q not in a.order_id:
+                continue
+            review, by, at = last.get(a.order_id, (None, None, None))
+            verdict = verdict_of(a.to_send, a.provider_is_fraud, has_feedback, review)
+            out.append(
+                AlertRow(
+                    a.order_id,
+                    a.rule_id,
+                    a.rule_version,
+                    a.run_date,
+                    a.detected_at,
+                    a.to_send,
+                    verdict,
+                    a.provider_is_fraud if has_feedback else None,
+                    review,
+                    by if review is not None else None,
+                    at if review is not None else None,
+                    a.details,
+                )
+            )
+        to_review = sum(x.verdict == "TO_REVIEW" for x in out)
+        out = [x for x in out if not f.verdict or x.verdict == f.verdict]
+        out.sort(key=lambda x: (x.detected_at, x.order_id), reverse=True)
+        return out[f.offset : f.offset + f.limit], len(out), to_review
+
+    def add_review(self, order_id, rule_id, version, is_fraud, by):
+        ok = any(
+            a.order_id == order_id and a.rule_id == rule_id and a.rule_version == version and not a.to_send
+            for a, _ in self.alert_rows
+        )
+        if ok:
+            self.reviews.append((order_id, is_fraud, by, datetime.now(UTC)))
+        return ok
 
     def set_registry(self, rule, rows):
         log.info("rules_registry ← %s %s", rule.rule_id, [(v.version, st, s) for v, st, s in rows])

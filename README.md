@@ -27,7 +27,7 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   └── tests/           pytest (SQLite en mémoire + BigQuery factice)
 ├── infra/
 │   ├── airflow/         DAG de référence : un DAG par fréquence, une tâche par règle
-│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), rule_sends, v_rule_performance, v_rule_orders
+│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), rule_sends, alert_reviews, v_rule_performance, v_rule_orders
 │   ├── prestataire/     requêtes de référence du script d'envoi au prestataire (journal rule_sends)
 │   └── cloudbuild.yaml  build → Artifact Registry → Cloud Run (+ job de migration)
 ├── docker-compose.yml   environnement local complet (PostgreSQL + API + front)
@@ -162,7 +162,7 @@ cd ../backend
   performance sont vides. Pour le vrai BigQuery : accès GCP et `RM_BIGQUERY_MODE=real`.
 - Le panneau « Simulation Airflow » (premiers runs d'une version publiée, arrêt du DAG) n'existe qu'en mode démo (3a).
 - Le mode démo couvre les principaux cas de figure : règles en production (dont une à trois versions successives),
-  une règle inactive, une en observation, une publiée pas encore exécutée, et « Cartes multiples sur un même
+  une règle inactive, une en test, une publiée pas encore exécutée, et « Cartes multiples sur un même
   appareil » : sa v1 est en production et sa v2 **candidate** tourne en parallèle depuis 16 jours, en attente
   de décision (barres côte à côte dans l'onglet Performance, décision « Mettre en production » dans la fiche).
 
@@ -264,17 +264,17 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `rule_versions`, côté plateforme, qui porte toute la logique des versions ; le DAG ne fait qu'exécuter les lignes. Si vous choisissez
   une vue fédérée `EXTERNAL_QUERY`, cette synchronisation devient inutile.
 - **Cycle de vie (écart au PRD F5 et §4.2)** : **pas d'étape de validation**. L'analyste publie lui-même sa
-  règle, qui part en observation ; l'équipe data n'agit pas sur la plateforme et n'exploite que les DAG. Les gestes
+  règle, qui part en test ; l'équipe data n'agit pas sur la plateforme et n'exploite que les DAG. Les gestes
   de l'analyste sont stockés (brouillon, publication, décision d'envoi) ; l'exécution se **déduit des runs Airflow**
   dans `rule_runs` :
   - *Publiée* : écrite dans `rules_registry`, pas encore exécutée (elle le sera au prochain run du DAG de sa
     fréquence) ;
-  - *En observation* : Airflow l'exécute et écrit ses commandes dans `rule_alerts`, **sans les envoyer au
-    prestataire** (`send_to_provider = false`). On mesure son volume et son recoupement avec les autres règles ;
-    la précision n'est pas représentative, le prestataire ne traitant que les commandes aussi remontées par une
-    règle envoyée. L'observation n'a pas d'échéance ;
+  - *En test* (code `OBSERVATION`) : Airflow l'exécute et écrit ses commandes dans `rule_alerts`, **sans les
+    envoyer au prestataire** (`send_to_provider = false`). L'analyste **qualifie lui-même ses alertes** (fraude
+    ou pas, voir « Alertes et qualification ») : sa précision se mesure sur ces qualifications. Le test n'a pas
+    d'échéance ;
   - *En production* : l'analyste a cliqué « Envoyer au prestataire » ; `send_to_provider` passe à vrai, et dès
-    le run suivant le DAG marque ses commandes à transmettre (`to_send`) pour le script d'envoi. « Suspendre l'envoi » la ramène en observation ;
+    le run suivant le DAG marque ses commandes à transmettre (`to_send`) pour le script d'envoi. « Suspendre l'envoi » la ramène en test ;
   - *Écartée* : l'analyste a décidé de ne pas l'envoyer ; elle sort de `rules_registry` et la version
     précédente reprend sa place (avec son envoi, si elle était envoyée) ;
   - *Inactive depuis X* : plus de run réussi depuis 3 périodes (3 h, 3 jours ou 3 semaines pour une règle à chaque unité ;
@@ -282,15 +282,15 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   - *Remplacée* : une version plus récente a été publiée ou tourne à sa place.
 
   **Version candidate** : une nouvelle version d'une règle **en production ne la remplace pas**. Elle tourne
-  à côté comme *candidate*, en observation, sans envoi, pendant que la version en production continue de
+  à côté comme *candidate*, en test, sans envoi, pendant que la version en production continue de
   tourner et d'être envoyée. Les deux sont ainsi comparées sur les mêmes périodes et les mêmes commandes. Après
   au moins un run de la candidate, l'analyste choisit :
   - « **Mettre en production** » : en un geste, la candidate prend la place de la version en production, qui
     s'arrête au run suivant (pas de doublon chez le prestataire, pas de trou) ;
   - « **Écarter** » : la candidate s'arrête, la version en production continue ;
-  - « Suspendre l'envoi » de la version en production : la candidate tourne alors seule, en observation.
+  - « Suspendre l'envoi » de la version en production : la candidate tourne alors seule, en test.
 
-  Une règle sans version en production (encore en observation) n'a pas de candidate : une nouvelle version
+  Une règle sans version en production (encore en test) n'a pas de candidate : une nouvelle version
   remplace simplement la précédente, puisque rien n'est envoyé. Les décisions sont tracées dans le journal d'audit
   (`RULE_SEND_TO_PROVIDER`, `RULE_SUSPEND_SENDING`, `RULE_DISCARD`) et peuvent être notifiées à l'équipe data pour information. Une table
   `rules_registry` existante reçoit la colonne par `infra/bigquery/07_rules_registry_send.sql`.
@@ -337,7 +337,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   **Envoi au prestataire** : le DAG n'envoie rien. Au moment du run, il marque chaque commande écrite dans
   `rule_alerts` avec `to_send` (« à transmettre »), recopie de `send_to_provider` de la ligne de
   `rules_registry` : vrai si la version est en production à ce run. La décision est figée au moment du run :
-  passer en production n'envoie pas le stock remonté en observation, et suspendre l'envoi ne bloque pas ce qui
+  passer en production n'envoie pas le stock remonté en test, et suspendre l'envoi ne bloque pas ce qui
   était déjà marqué. Une commande remontée par la v1 puis par la v2 est marquée par les deux ; elle ne part
   qu'une fois.
 
@@ -361,6 +361,19 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   commandes déjà parties ne repartent pas), puis elle peut être supprimée. Les colonnes `sent_to_provider` et
   `rows_sent`, plus anciennes, ne sont plus écrites non plus (le script indique comment les supprimer).
 
+  **Alertes et qualification** : la page **Alertes** (et l'onglet Alertes de la fiche d'une règle) liste les
+  commandes remontées, une ligne par commande et par version (`rule_alerts`), avec leurs détails, leur phase (en
+  test ou en production) et leur verdict. Une commande **transmise** est vérifiée par le prestataire (fraude,
+  pas une fraude, ou en attente). Une commande d'une version **en test** n'est pas transmise : l'analyste la
+  **qualifie** lui-même, fraude ou pas (un second clic retire la qualification). Il teste ainsi une règle,
+  qualifie ses remontées, et la met en production s'il la juge assez pertinente ; le prestataire traite alors
+  directement ses commandes. La qualification porte sur la **commande**, toutes règles confondues, et s'ajoute à
+  la table BigQuery `alert_reviews` (une ligne par qualification, ajouts seulement, la dernière fait foi ;
+  `infra/bigquery/03_alert_reviews.sql`), écrite par la plateforme seule ; chaque qualification est aussi tracée
+  dans le journal d'audit. Dans les chiffres d'une règle en test, une commande qualifiée compte comme vérifiée ;
+  si le prestataire l'a déjà vérifiée (transmise par une autre règle), son verdict reste prioritaire
+  (`is_verified` / `is_confirmed` de `v_rule_orders`, même calcul dans `v_rule_performance`).
+
   **Deux vues d'indicateurs** :
   - `v_rule_performance` (une ligne par règle, version et jour) sert au **comparatif des versions** : chaque
     version y garde toutes ses commandes, candidate comprise, y compris celles déjà remontées par une autre
@@ -368,7 +381,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   - `v_rule_orders` (une ligne par commande et par version, avec le retour du prestataire) sert aux **chiffres
     de la règle** : graphique et indicateurs de la page règle, totaux sur 30 jours. Ils dépendent de l'état de la
     règle : **en production**, ses commandes à transmettre (`to_send`), c'est-à-dire celles de la version en
-    production ; **en observation**, ses autres commandes. La plateforme compte les commandes **distinctes** :
+    production ; **en test**, ses autres commandes. La plateforme compte les commandes **distinctes** :
     une commande remontée par deux versions n'est comptée qu'une fois. Une candidate n'entre donc jamais dans
     les chiffres d'une règle en production ; pour une version précise, candidate comprise, on lit le
     comparatif des versions.
@@ -382,14 +395,14 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 
   **Graphique de la page règle** : un histogramme journalier sur une seule échelle, en nombre de commandes.
   Une barre **par version** et par jour : la barre entière donne les commandes **remontées** (teinte claire,
-  **hachurée** quand la version est en observation : avant sa mise en production, ou candidate à côté de la
+  **hachurée** quand la version est en test : avant sa mise en production, ou candidate à côté de la
   version en production) ; superposée en bas, en couleur franche, la part **confirmée frauduleuse** par le
   prestataire. On voit ainsi, barre par barre, combien de remontées sont de vraies fraudes ; la précision du jour
   (confirmées ÷ vérifiées) s'affiche au survol. L'analyste affiche les remontées, les fraudes confirmées ou les
   deux. Une candidate et la version en production se comparent côte à côte sur les mêmes jours. Les fraudes
-  confirmées ne sont comptées qu'en production : en observation, le prestataire ne traite que les commandes aussi remontées
-  par une règle envoyée. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :
-  envoyées au prestataire, et remontées en observation (ils ne s'additionnent pas, une commande pouvant être
+  confirmées viennent du prestataire pour une version en production, des qualifications des analystes pour une
+  version en test. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :
+  envoyées au prestataire, et remontées en test (ils ne s'additionnent pas, une commande pouvant être
   remontée par la version en production et par la candidate).
 
   Les chiffres du comparatif ne s'additionnent donc pas pour donner ceux de la règle ; une ligne
@@ -440,7 +453,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   **Premier run d'une version** : le dédoublonnage ne joue qu'à partir du deuxième run. Une requête sans
   plage de dates remonte donc, à son premier run, toutes les commandes qu'elle lit ;
   le comparatif des versions montre un pic ce jour-là. Rien n'est envoyé pour autant : toute version commence
-  en observation, et seules les commandes des runs faits après la décision sont marquées à transmettre. L'éditeur
+  en test, et seules les commandes des runs faits après la décision sont marquées à transmettre. L'éditeur
   l'annonce par une alerte (`NO_DATE_WINDOW`) quand la requête n'a aucune fenêtre de dates (ni
   `CURRENT_DATE()` et consorts, ni `@period_start` / `@period_end`).
 

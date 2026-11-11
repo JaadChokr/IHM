@@ -16,9 +16,9 @@ const fallback = (daily: DailyPerformance[]): VersionDaily[] =>
   daily.map((d) => ({ date: d.date, ruleVersion: d.ruleVersion ?? 1, toSend: (d.ordersToSend ?? 0) > 0, ordersFlagged: d.ordersFlagged, ordersProcessed: d.ordersProcessed, ordersConfirmedFraud: d.ordersConfirmedFraud }));
 
 /**
- * Les barres de chaque version sur toute la période : remontées par jour, et pour les jours où la version est
- * en production, commandes vérifiées et confirmées frauduleuses. En observation, pas de fraudes confirmées : le
- * prestataire ne vérifie que les commandes aussi remontées par une règle envoyée, le chiffre serait trompeur.
+ * Les barres de chaque version sur toute la période : remontées par jour, commandes vérifiées et confirmées
+ * frauduleuses. En production, vérifiées par le prestataire ; en test, qualifiées par les analystes (onglet
+ * Alertes), le verdict du prestataire restant prioritaire quand il existe.
  */
 function byVersion(dates: string[], rows: VersionDaily[]) {
   const versions = [...new Set(rows.map((r) => r.ruleVersion))].sort((a, b) => a - b);
@@ -33,11 +33,10 @@ function byVersion(dates: string[], rows: VersionDaily[]) {
       if (i === undefined) continue;
       // Un jour à cheval sur une décision (règle horaire) : les deux états s'additionnent, barre pleine.
       s.flagged[i] = (s.flagged[i] ?? 0) + r.ordersFlagged;
-      if (r.toSend) {
-        s.observed[i] = false;
-        s.processed[i] = (s.processed[i] ?? 0) + r.ordersProcessed;
-        s.confirmed[i] = (s.confirmed[i] ?? 0) + r.ordersConfirmedFraud;
-      }
+      if (r.toSend) s.observed[i] = false;
+      // Vérifiées : par le prestataire (version en production), ou qualifiées par un analyste (en test).
+      s.processed[i] = (s.processed[i] ?? 0) + r.ordersProcessed;
+      s.confirmed[i] = (s.confirmed[i] ?? 0) + r.ordersConfirmedFraud;
     }
     series.push(s);
     // Repère au premier jour de chaque version dans la période (sauf la première version affichée).
@@ -61,7 +60,7 @@ interface Props {
   firstRunDate?: string;
   /** Nombre de versions qui ont tourné : à partir de 2, l'historique complet est affiché d'emblée pour les comparer. */
   versionsRun: number;
-  /** Règle en observation (aucune version en production) : ses chiffres sont ses commandes observées. */
+  /** Règle en test (aucune version en production) : ses chiffres sont ses commandes en test. */
   observing?: boolean;
 }
 
@@ -122,10 +121,10 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
     <div className="stack">
       {observing && (
         <p className="small muted m-0">
-          En observation : rien n'est envoyé au prestataire.
+          En test : rien n'est envoyé au prestataire. Qualifiez ses alertes pour mesurer sa précision.
           <InfoTip align="start">
-            Le volume remonté est réel. La précision, elle, ne porte que sur les commandes qu'une autre règle a envoyées au prestataire :
-            elle n'est pas représentative tant que cette règle n'est pas envoyée.
+            La précision d'une règle en test porte sur les commandes que vous avez qualifiées (fraude ou pas) dans l'onglet Alertes, et
+            sur celles que le prestataire a déjà vérifiées parce qu'une autre règle les lui a transmises.
           </InfoTip>
         </p>
       )}
@@ -175,32 +174,36 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               label="Volume remonté"
               value={fmtInt(view.cur.flagged)}
               delta={fmtDelta(delta(view.cur.flagged, view.prev.flagged, 'relative'), 'relative')}
-              sub={`${fmtInt(view.toSend)} envoyées au prestataire · ${fmtInt(view.observed)} en observation`}
+              sub={`${fmtInt(view.toSend)} envoyées au prestataire · ${fmtInt(view.observed)} en test`}
               info={
                 <>
-                  Commandes remontées sur la période. « Envoyées » : par la version en production. « En observation » : par une version
+                  Commandes remontées sur la période. « Envoyées » : par la version en production. « En test » : par une version
                   pas encore envoyée. Une commande trouvée par plusieurs règles compte pour chacune : n'additionnez pas les règles.
                 </>
               }
             />
             <KpiTile
-              label="En attente de vérification"
+              label={observing ? 'À qualifier' : 'En attente de vérification'}
               value={fmtInt(view.cur.pending)}
-              sub={`${fmtInt(view.cur.processed)} déjà vérifiées`}
-              info="Commandes remontées que le prestataire n'a pas encore vérifiées : elles n'apparaissent pas encore dans son retour."
+              sub={`${fmtInt(view.cur.processed)} déjà ${observing ? 'qualifiées' : 'vérifiées'}`}
+              info={
+                observing
+                  ? "Commandes remontées que personne n'a encore qualifiées (fraude ou pas) dans l'onglet Alertes."
+                  : "Commandes remontées que le prestataire n'a pas encore vérifiées : elles n'apparaissent pas encore dans son retour."
+              }
             />
             <KpiTile
               label="Taux de précision"
               value={fmtPct(view.cur.precision)}
               delta={fmtDelta(delta(view.cur.precision, view.prev.precision, 'points'), 'points')}
-              sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} vérifiées`}
+              sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} ${observing ? 'qualifiées' : 'vérifiées'}`}
               info="Part des commandes vérifiées par le prestataire qui sont confirmées frauduleuses. Les fraudes que la règle n'a pas trouvées ne sont pas mesurables."
             />
           </div>
 
           <Card
             title="Remontées et fraudes confirmées par jour"
-            info="Une barre par version et par jour. La barre entière : les commandes remontées (hachurée quand la version est en observation). En couleur franche, en bas : celles que le prestataire a confirmées frauduleuses, pour les versions en production. Le survol donne la précision du jour (confirmées ÷ vérifiées)."
+            info="Une barre par version et par jour. La barre entière : les commandes remontées (hachurée quand la version est en test). En couleur franche, en bas : celles confirmées frauduleuses, par le prestataire pour une version en production, par vos qualifications (onglet Alertes) pour une version en test. Le survol donne la précision du jour."
             actions={
               <div className="seg" role="group" aria-label="Mesures affichées">
                 {MEASURES.map(([key, name]) => (

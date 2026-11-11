@@ -10,6 +10,7 @@ import { RuleEditorPage } from './pages/RuleEditorPage';
 import { RuleDetailPage } from './pages/RuleDetailPage';
 import { ProductionPage } from './pages/ProductionPage';
 import { AuditPage } from './pages/AuditPage';
+import { AlertsPage } from './pages/AlertsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { OverviewPage } from './pages/OverviewPage';
 import { DraftsPage } from './pages/DraftsPage';
@@ -57,6 +58,7 @@ export function App() {
               <Route path="/drafts" element={<DraftsPage />} />
               <Route path="/drafts/:draftId" element={<RuleEditorPage />} />
               <Route path="/production" element={<ProductionPage />} />
+              <Route path="/alerts" element={<AlertsPage />} />
               <Route path="/audit" element={<AuditPage />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="*" element={<div className="empty">Page introuvable.</div>} />

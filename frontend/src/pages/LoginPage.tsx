@@ -69,7 +69,7 @@ export function LoginPage() {
           <p className="login-title">Les règles de détection de fraude, de l'idée à la production.</p>
           <ul>
             <li>Écrivez la règle en SQL et testez-la sur les vraies données.</li>
-            <li>Observez ce qu'elle remonte avant de l'envoyer au prestataire.</li>
+            <li>Testez-la : qualifiez ses alertes avant de l'envoyer au prestataire.</li>
             <li>Suivez sa précision et ses exécutions, version par version.</li>
           </ul>
         </div>

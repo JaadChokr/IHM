@@ -49,3 +49,38 @@ def test_une_ligne_par_execution_avec_ses_tentatives():
     g.runs("r", date(2026, 11, 1), date(2026, 11, 2), 50)
     assert "COUNT(*) OVER (PARTITION BY run_id) AS attempts" in seen[0]
     assert "QUALIFY ROW_NUMBER() OVER (PARTITION BY run_id ORDER BY started_at DESC) = 1" in seen[0]
+
+
+def test_alertes_et_qualifications_sql_valide():
+    # Liste des alertes (verdict du prestataire, sinon qualification de l'analyste) et ajout d'une
+    # qualification, seulement pour une alerte en test : SQL BigQuery valide, paramètres nommés.
+    import re
+    from datetime import date
+    from types import SimpleNamespace
+
+    import sqlglot
+
+    from app.bigquery import AlertFilter
+
+    g = RealBigQueryGateway.__new__(RealBigQueryGateway)
+    g.ds = "`p.d`"
+    g.settings = SimpleNamespace(bq_feedback_table="p.f.retours")
+    param = staticmethod(lambda *a: a)
+    seen: list[str] = []
+
+    class Job:
+        num_dml_affected_rows = 1
+
+        def result(self):
+            return []
+
+    g._bq = type("bq", (), {"ScalarQueryParameter": param, "QueryJobConfig": lambda **k: k})
+    g._rows = lambda sql, params: seen.append(sql) or []
+    g.client = SimpleNamespace(query=lambda sql, job_config=None: seen.append(sql) or Job())
+    g.alerts(AlertFilter(date(2026, 11, 1), date(2026, 11, 7), verdict="TO_REVIEW"))
+    assert g.add_review("O1", "r", 2, True, "104233") is True
+    listing, insert = seen
+    assert "COUNTIF(verdict = 'TO_REVIEW') OVER () AS to_review" in listing and "`p.f.retours`" in listing
+    assert "INSERT INTO `p.d`.alert_reviews" in insert and "NOT IFNULL(to_send, FALSE)" in insert
+    for sql in seen:
+        sqlglot.parse_one(re.sub(r"@\w+", "NULL", sql), read="bigquery")
