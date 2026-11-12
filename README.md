@@ -67,11 +67,11 @@ Vérification : `node -v` (22.x ou plus) et `python --version` / `python3 --vers
 ### 2. Récupérer le code
 
 ```bash
-git clone -b claude/rules-manager-prd-oldfut https://github.com/jxc18/ihm.git
-cd ihm
+git clone <adresse-du-dépôt>
+cd <dossier-du-dépôt>
 ```
-Sans Git : télécharger https://github.com/JxC18/IHM/archive/refs/heads/claude/rules-manager-prd-oldfut.zip,
-le décompresser et ouvrir un terminal dans le dossier `IHM-claude-rules-manager-prd-oldfut`.
+Sans Git : télécharger l'archive ZIP du dépôt depuis l'hébergeur Git, la décompresser et ouvrir un terminal
+dans le dossier obtenu.
 
 ### Windows : tout lancer en une commande
 
