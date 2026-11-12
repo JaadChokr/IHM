@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_alerts` (
   details      JSON,
   -- À transmettre au prestataire, décision figée au moment du run par le DAG : recopie de
   -- rules_registry.send_to_provider (vrai : version en production à ce run ; faux : en observation).
-  -- Ce qui est effectivement parti est noté par le script d'envoi dans rule_sends (09_rule_sends.sql),
+  -- Ce qui est effectivement parti est noté par le script d'envoi dans rule_sends (tables/005_rule_sends.sql),
   -- jamais ici : le script ne modifie pas cette table.
   to_send      BOOL,
   -- Clé logique : une ligne par commande et par version de règle, garantie par le dédoublonnage du DAG.

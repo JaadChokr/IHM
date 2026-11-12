@@ -1,9 +1,9 @@
 ﻿<#
 .SYNOPSIS
-  Crée les tables du contrat de données dans BigQuery (équivalent Windows de apply.sh).
+  Crée ou met à niveau les tables et les vues du contrat de données dans BigQuery (équivalent Windows de apply.sh).
 
 .DESCRIPTION
-  Crée le dataset s'il n'existe pas, puis exécute dans l'ordre les fichiers 0*.sql de ce dossier
+  Crée le dataset s'il n'existe pas, puis exécute dans l'ordre les fichiers de tables/ puis de views/
   après y avoir remplacé ${PROJECT}, ${DATASET} et ${FEEDBACK_TABLE}. Peut être rejoué sans risque.
   Ordre de priorité de chaque valeur : paramètre, variable d'environnement, puis backend/.env
   (RM_GCP_PROJECT, RM_BQ_DATASET, RM_BQ_FEEDBACK_TABLE, RM_BQ_LOCATION), puis défaut (europe-west9).
@@ -64,8 +64,11 @@ bq --project_id=$Project mk --dataset --force --location=$Location "${Project}:$
 if ($LASTEXITCODE -ne 0) { throw "Création du dataset ${Project}:${Dataset} impossible." }
 
 $vars = @{ PROJECT = $Project; DATASET = $Dataset; FEEDBACK_TABLE = $FeedbackTable }
-foreach ($file in Get-ChildItem -Path $PSScriptRoot -Filter '0*.sql' | Sort-Object Name) {
-  Write-Host "→ $($file.Name)"
+# Tables d'abord (création, puis mises à niveau), puis les vues, qui en dépendent : chaque dossier dans
+# l'ordre de ses numéros. Tout est rejouable.
+$files = @('tables', 'views') | ForEach-Object { Get-ChildItem -Path (Join-Path $PSScriptRoot $_) -Filter '*.sql' | Sort-Object Name }
+foreach ($file in $files) {
+  Write-Host "→ $($file.Directory.Name)/$($file.Name)"
   $sql = Get-Content -Raw -Encoding UTF8 $file.FullName
   foreach ($var in $vars.GetEnumerator()) { $sql = $sql.Replace('${' + $var.Key + '}', $var.Value) }
   $sql | bq --project_id=$Project --location=$Location query --use_legacy_sql=false --quiet

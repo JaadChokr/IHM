@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Crée les tables du contrat de données (Lot 3). Peut être rejoué. Usage :
+# Crée ou met à niveau les tables et les vues du contrat de données. Peut être rejoué. Usage :
 #   ./apply.sh                                   # valeurs lues dans backend/.env
 #   PROJECT=mon-projet DATASET=fraud_rules FEEDBACK_TABLE=dataset.table ./apply.sh   # ou projet.dataset.table
 # Ordre de priorité : variable d'environnement, puis backend/.env (RM_GCP_PROJECT, RM_BQ_DATASET,
@@ -38,7 +38,9 @@ fi
 
 echo "Projet $PROJECT · dataset $DATASET · région $LOCATION · retour prestataire $FEEDBACK_TABLE"
 bq --project_id="$PROJECT" mk --dataset --force --location="$LOCATION" "$PROJECT:$DATASET" >/dev/null
-for f in 0*.sql; do
+# Tables d'abord (création, puis mises à niveau des tables existantes), puis les vues, qui en dépendent :
+# chaque dossier dans l'ordre de ses numéros. Tout est rejouable.
+for f in tables/*.sql views/*.sql; do
   echo "→ $f"
   envsubst '${PROJECT} ${DATASET} ${FEEDBACK_TABLE}' < "$f" |
     bq --project_id="$PROJECT" --location="$LOCATION" query --use_legacy_sql=false --quiet

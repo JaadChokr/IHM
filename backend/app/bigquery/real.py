@@ -250,40 +250,20 @@ class RealBigQueryGateway:
 
     def alerts(self, f):
         P = self._bq.ScalarQueryParameter
-        table = self.settings.bq_feedback_table
-        fb = (
-            f"SELECT order_id, LOGICAL_OR(is_fraud) AS is_fraud FROM `{table}` GROUP BY order_id"
-            if table
-            else "SELECT CAST(NULL AS STRING) AS order_id, CAST(NULL AS BOOL) AS is_fraud LIMIT 0"
-        )
+        # Verdict, retour du prestataire et qualification : calculés par la vue v_rule_orders, seule
+        # définition de la règle de verdict.
         sql = f"""
-            WITH reviews AS (
-              SELECT order_id, is_fraud, reviewed_by, reviewed_at FROM {self.ds}.alert_reviews
-              QUALIFY ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY reviewed_at DESC) = 1
+            WITH filtered AS (
+              SELECT order_id, rule_id, rule_version, run_date, detected_at, to_send,
+                     TO_JSON_STRING(details) AS details, has_feedback, is_fraud AS provider_is_fraud,
+                     review_is_fraud, reviewed_by, reviewed_at, verdict
+              FROM {self.ds}.v_rule_orders
+              WHERE run_date BETWEEN @start AND @end
+                AND (@rule_id IS NULL OR rule_id = @rule_id)
+                AND (@phase IS NULL OR to_send = (@phase = 'PRODUCTION'))
+                AND (@q IS NULL OR STRPOS(order_id, @q) > 0)
             ),
-            fb AS ({fb}),
-            base AS (
-              SELECT a.order_id, a.rule_id, a.rule_version, a.run_date, a.detected_at,
-                     IFNULL(a.to_send, FALSE) AS to_send, TO_JSON_STRING(a.details) AS details,
-                     fb.order_id IS NOT NULL AS has_feedback, fb.is_fraud AS provider_is_fraud,
-                     r.is_fraud AS review_is_fraud, r.reviewed_by, r.reviewed_at
-              FROM {self.ds}.rule_alerts a
-              LEFT JOIN fb USING (order_id)
-              LEFT JOIN reviews r USING (order_id)
-              WHERE a.run_date BETWEEN @start AND @end
-                AND (@rule_id IS NULL OR a.rule_id = @rule_id)
-                AND (@phase IS NULL OR IFNULL(a.to_send, FALSE) = (@phase = 'PRODUCTION'))
-                AND (@q IS NULL OR STRPOS(a.order_id, @q) > 0)
-            ),
-            judged AS (
-              SELECT *,
-                     CASE WHEN has_feedback THEN IF(provider_is_fraud, 'FRAUD', 'NOT_FRAUD')
-                          WHEN to_send THEN 'PENDING'
-                          WHEN review_is_fraud IS NULL THEN 'TO_REVIEW'
-                          WHEN review_is_fraud THEN 'FRAUD' ELSE 'NOT_FRAUD' END AS verdict
-              FROM base
-            ),
-            counted AS (SELECT *, COUNTIF(verdict = 'TO_REVIEW') OVER () AS to_review FROM judged)
+            counted AS (SELECT *, COUNTIF(verdict = 'TO_REVIEW') OVER () AS to_review FROM filtered)
             SELECT *, COUNT(*) OVER () AS total
             FROM counted
             WHERE @verdict IS NULL OR verdict = @verdict

@@ -80,7 +80,10 @@ def test_alertes_et_qualifications_sql_valide():
     g.alerts(AlertFilter(date(2026, 11, 1), date(2026, 11, 7), verdict="TO_REVIEW"))
     assert g.add_review("O1", "r", 2, True, "104233") is True
     listing, insert = seen
-    assert "COUNTIF(verdict = 'TO_REVIEW') OVER () AS to_review" in listing and "`p.f.retours`" in listing
+    # Le verdict vient de la vue v_rule_orders : la requête ne le recalcule pas.
+    assert "COUNTIF(verdict = 'TO_REVIEW') OVER () AS to_review" in listing
+    assert "`p.d`.v_rule_orders" in listing
+    assert "CASE" not in listing and "alert_reviews" not in listing
     assert "INSERT INTO `p.d`.alert_reviews" in insert and "NOT IFNULL(to_send, FALSE)" in insert
     for sql in seen:
         sqlglot.parse_one(re.sub(r"@\w+", "NULL", sql), read="bigquery")

@@ -8,7 +8,7 @@ ALTER TABLE `${PROJECT}.${DATASET}.rule_runs`
 ALTER TABLE `${PROJECT}.${DATASET}.rule_alerts`
   ADD COLUMN IF NOT EXISTS to_send BOOL;
 -- rule_alerts.sent_at (suivi de l'envoi dans rule_alerts) n'est plus écrit : les envois sont notés dans
--- rule_sends (09_rule_sends.sql, qui reprend l'historique). Une fois le script d'envoi passé au journal :
+-- rule_sends (tables/005_rule_sends.sql, qui reprend l'historique). Une fois le script d'envoi passé au journal :
 --   ALTER TABLE `${PROJECT}.${DATASET}.rule_alerts` DROP COLUMN IF EXISTS sent_at;
 -- Version candidate en parallèle : rules_registry passe à une ligne par version exécutée (clé ci-dessous).
 -- Les colonnes sent_to_provider (rule_alerts) et rows_sent (rule_runs) des versions précédentes ne sont

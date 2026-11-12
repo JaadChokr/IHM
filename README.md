@@ -28,7 +28,8 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   └── tests/           pytest (SQLite en mémoire + BigQuery factice)
 ├── infra/
 │   ├── airflow/         DAG de référence : un DAG par fréquence, une tâche par règle
-│   ├── bigquery/        contrat de données §7 : rules_registry, rule_runs, rule_alerts (+ details), rule_sends, alert_reviews, v_rule_performance, v_rule_orders
+│   ├── bigquery/        contrat de données §7 : tables/ (rules_registry, rule_runs, rule_alerts, alert_reviews,
+│   │                    rule_sends, puis mises à niveau) et views/ (v_rule_orders, v_rule_performance)
 │   ├── prestataire/     requêtes de référence du script d'envoi au prestataire (journal rule_sends)
 │   └── cloudbuild.yaml  build → Artifact Registry → Cloud Run (+ job de migration)
 ├── docker-compose.yml   environnement local complet (PostgreSQL + API + front)
@@ -197,13 +198,17 @@ en attendant, l'API se teste seule via http://localhost:8000/docs.
 
 ### Créer les tables BigQuery (mode `real`, une seule fois)
 
+Le script exécute `infra/bigquery/tables/` (création des tables, puis mises à niveau des tables existantes)
+puis `infra/bigquery/views/`, chaque dossier dans l'ordre de ses numéros. Il peut être rejoué : il crée ce qui
+manque, met à niveau, et recrée les vues.
+
 Prérequis : Google Cloud SDK (`bq`) et `gcloud auth login`. Le script lit le projet, le dataset, la région et la
 table du prestataire dans `backend/.env` ; un paramètre ou une variable d'environnement les remplace.
 ```ini
 RM_GCP_PROJECT=mon-projet
 RM_BQ_DATASET=fraud_rules
 RM_BQ_LOCATION=europe-west9                    # valeur par défaut
-RM_BQ_FEEDBACK_TABLE=prestataire.feedback      # dataset.table, ou projet.dataset.table (vue v_rule_performance)
+RM_BQ_FEEDBACK_TABLE=prestataire.feedback      # dataset.table, ou projet.dataset.table (vue v_rule_orders)
 ```
 
 macOS / Linux / WSL (nécessite aussi `envsubst` : `sudo apt install -y gettext-base`) :
@@ -294,7 +299,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   Une règle sans version en production (encore en test) n'a pas de candidate : une nouvelle version
   remplace simplement la précédente, puisque rien n'est envoyé. Les décisions sont tracées dans le journal d'audit
   (`RULE_SEND_TO_PROVIDER`, `RULE_SUSPEND_SENDING`, `RULE_DISCARD`) et peuvent être notifiées à l'équipe data pour information. Une table
-  `rules_registry` existante reçoit la colonne par `infra/bigquery/07_rules_registry_send.sql`.
+  `rules_registry` existante reçoit la colonne par `infra/bigquery/tables/012_maj_rules_registry_send.sql`.
 
   **Brouillons personnels** : un brouillon est la sauvegarde de travail d'un analyste, stocké comme son profil
   dans la base de la plateforme (table `drafts`, rattachée à son matricule) et **visible de lui seul** : ni les
@@ -343,7 +348,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   qu'une fois.
 
   Le **script d'envoi externe** tient son propre **journal des envois**, `rule_sends` (une ligne par commande
-  transmise, `infra/bigquery/09_rule_sends.sql`). À chaque passage, il :
+  transmise, `infra/bigquery/tables/005_rule_sends.sql`). À chaque passage, il :
   1. lit les commandes `to_send` absentes du journal, une ligne par commande, toutes règles et versions
      confondues ;
   2. les transmet au prestataire ;
@@ -357,8 +362,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   une commande déjà reçue (clé `order_id`). Le script ne doit pas tourner deux fois en parallèle.
 
   `rule_runs.rows_to_send` donne, par run, le nombre de commandes marquées. Des tables existantes reçoivent
-  `to_send` et `rows_to_send` par `infra/bigquery/03_rule_upgrade_suivi.sql`. L'ancienne colonne
-  `rule_alerts.sent_at` n'est plus écrite : `09_rule_sends.sql` reprend son historique dans le journal (les
+  `to_send` et `rows_to_send` par `infra/bigquery/tables/010_maj_suivi_envoi_candidate.sql`. L'ancienne colonne
+  `rule_alerts.sent_at` n'est plus écrite : `tables/005_rule_sends.sql` reprend son historique dans le journal (les
   commandes déjà parties ne repartent pas), puis elle peut être supprimée. Les colonnes `sent_to_provider` et
   `rows_sent`, plus anciennes, ne sont plus écrites non plus (le script indique comment les supprimer).
 
@@ -370,10 +375,12 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   qualifie ses remontées, et la met en production s'il la juge assez pertinente ; le prestataire traite alors
   directement ses commandes. La qualification porte sur la **commande**, toutes règles confondues, et s'ajoute à
   la table BigQuery `alert_reviews` (une ligne par qualification, ajouts seulement, la dernière fait foi ;
-  `infra/bigquery/03_alert_reviews.sql`), écrite par la plateforme seule ; chaque qualification est aussi tracée
+  `infra/bigquery/tables/004_alert_reviews.sql`), écrite par la plateforme seule ; chaque qualification est aussi tracée
   dans le journal d'audit. Dans les chiffres d'une règle en test, une commande qualifiée compte comme vérifiée ;
   si le prestataire l'a déjà vérifiée (transmise par une autre règle), son verdict reste prioritaire
-  (`is_verified` / `is_confirmed` de `v_rule_orders`, même calcul dans `v_rule_performance`).
+  (colonnes `verdict`, `is_verified`, `is_confirmed` de `v_rule_orders`, seule définition de la règle de verdict :
+  `v_rule_performance` et la liste des alertes la lisent ; `tests/test_verdict.py` vérifie que la passerelle
+  simulée de l'API la reproduit à l'identique).
 
   **Deux vues d'indicateurs** :
   - `v_rule_performance` (une ligne par règle, version et jour) sert au **comparatif des versions** : chaque
@@ -408,7 +415,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 
   Les chiffres du comparatif ne s'additionnent donc pas pour donner ceux de la règle ; une ligne
   d'explication l'indique sous le tableau. Les deux vues sont créées par `apply.sh` / `apply.ps1`
-  (`04_v_rule_performance.sql`, `05_v_rule_orders.sql`, qui supprime l'ancienne `v_rule_orders_daily`).
+  (`views/02_v_rule_performance.sql`, `views/01_v_rule_orders.sql`, qui supprime l'ancienne `v_rule_orders_daily`).
 
   **Fréquence : une unité et un pas.** L'analyste choisit « toutes les heures », « toutes les 2 heures », « tous
   les 3 jours », « toutes les 2 semaines »… : une unité (`rules_registry.schedule`, le DAG qui l'exécute) et un
@@ -418,7 +425,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   (toutes les 6 h = 0 h 05, 6 h 05, 12 h 05, 18 h 05), les jours et les semaines depuis le lundi 5 janvier 2026
   (tous les 2 jours = un jour sur deux à 3 h). L'éditeur affiche les heures d'exécution et la prochaine ; la
   fiche d'une règle publiée qui n'a pas encore tourné aussi. Des tables existantes reçoivent la colonne par
-  `infra/bigquery/08_rules_registry_every.sql` (pas de 1 pour les règles existantes).
+  `infra/bigquery/tables/013_maj_rules_registry_every.sql` (pas de 1 pour les règles existantes).
 
   **Période du run (`@period_start` / `@period_end`)** : le DAG passe à la requête les bornes `[début, fin[`
   (TIMESTAMP) qui vont du déclenchement dû précédent de la règle à celui-ci, en heure de Paris : 1 h pour une
@@ -448,7 +455,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 
   `rule_runs` garde la période de chaque run (`period_start`, `period_end`) ; des tables existantes
   reçoivent les nouvelles colonnes par
-  `infra/bigquery/03_rule_upgrade_suivi.sql`. Les crons sont à garder alignés entre le DAG et
+  `infra/bigquery/tables/010_maj_suivi_envoi_candidate.sql`. Les crons sont à garder alignés entre le DAG et
   `backend/app/query/periods.py`, qui calcule la période testée dans l'IHM.
 
   **Premier run d'une version** : le dédoublonnage ne joue qu'à partir du deuxième run. Une requête sans
@@ -473,7 +480,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   ) AS t
   ```
   Une table `rule_alerts` créée avant l'ajout de `details` est mise à jour par
-  `infra/bigquery/06_rule_alerts_details.sql` (rejoué sans risque par `apply.sh` / `apply.ps1`).
+  `infra/bigquery/tables/011_maj_rule_alerts_details.sql` (rejoué sans risque par `apply.sh` / `apply.ps1`).
 
   Les statuts « Validée » et « Refusée » disparaissent : un refus passe hors plateforme et l'analyste soumet
   une nouvelle version (risque R3 : le motif n'est pas tracé). L'état des runs est recopié par
@@ -485,7 +492,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   (`PRIMARY KEY … NOT ENFORCED`), qui documente l'unicité attendue et aide l'optimiseur : `rules_registry`
   (`rule_id`), `rule_alerts` (`rule_id, rule_version, order_id`, garantie par le dédoublonnage du DAG) et
   `rule_runs` (`run_id, started_at` : **une ligne par tentative**, la dernière donnant l'état du run). Des
-  tables existantes les reçoivent par `infra/bigquery/03_rule_upgrade_suivi.sql`.
+  tables existantes les reçoivent par `infra/bigquery/tables/010_maj_suivi_envoi_candidate.sql`.
 - **Contraintes SQL** : seul le DML/DDL bloque l'enregistrement d'un brouillon. Pour tester, il faut une requête
   valide pour BigQuery exposant `order_id` ; publier exige un test réussi. Les dates en
   dur ne sont qu'une alerte : légitimes comme seuil fixe (`created_at >= '2024-01-01'`), à éviter comme jour
@@ -515,5 +522,5 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - **Déploiement** : API en ingress interne sans IAM entre front et API (le contrôle d'accès est réseau, PRD F8).
   La topologie exacte (load balancer interne, routage `/api`) reste à arbitrer.
 - **Valeurs provisoires** : typologies de fraude (Q4, `frontend/src/lib/format.ts`),
-  colonnes de la table de feedback (Q2, `infra/bigquery/04_v_rule_performance.sql` et
-  `05_v_rule_orders.sql`).
+  colonnes de la table de feedback (Q2, `infra/bigquery/views/02_v_rule_performance.sql` et
+  `views/01_v_rule_orders.sql`).

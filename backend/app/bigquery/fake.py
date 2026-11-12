@@ -79,7 +79,7 @@ class FakeBigQueryGateway:
     next_error: QueryError | None = None
     # Contenu simulé de v_rule_performance (une ligne par version et par jour)…
     performance: dict[str, list[DailyPerformance]] = field(default_factory=dict)
-    # … et de v_rule_orders_daily (règle toutes versions confondues) ; à défaut, le même contenu.
+    # … et de v_rule_orders (chiffres de la règle selon son état) ; à défaut, le même contenu.
     rule_daily: dict[str, list[DailyPerformance]] = field(default_factory=dict)
     # Contenu simulé de rules_registry : rule_id → [(version, statut, envoi au prestataire)].
     registry: dict[str, list[tuple[int, str, bool]]] = field(default_factory=dict)
