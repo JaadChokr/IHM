@@ -396,14 +396,18 @@ export interface components {
              * Verdict
              * @enum {string}
              */
-            verdict: "FRAUD" | "NOT_FRAUD" | "TO_REVIEW" | "PENDING";
+            verdict: "FRAUD" | "RISKY" | "NOT_FRAUD" | "TO_REVIEW" | "PENDING";
             /** Providerisfraud */
             providerIsFraud?: boolean | null;
             review?: components["schemas"]["AlertReviewOut"] | null;
             /** Details */
             details?: Record<string, unknown> | null;
         };
-        /** AlertPage */
+        /**
+         * AlertPage
+         * @description Une page d'alertes, et les nombres qui guident les filtres (sur la période et la recherche) : on ne
+         *     propose que des choix qui renvoient des alertes.
+         */
         AlertPage: {
             /** Items */
             items: components["schemas"]["AlertOut"][];
@@ -411,6 +415,21 @@ export interface components {
             total: number;
             /** Toreview */
             toReview: number;
+            /**
+             * Phases
+             * @default []
+             */
+            phases: components["schemas"]["PhaseCount"][];
+            /**
+             * Rules
+             * @default []
+             */
+            rules: components["schemas"]["RuleCount"][];
+            /**
+             * Verdicts
+             * @default []
+             */
+            verdicts: components["schemas"]["VerdictCount"][];
         };
         /** AlertReviewIn */
         AlertReviewIn: {
@@ -420,13 +439,16 @@ export interface components {
             ruleId: string;
             /** Ruleversion */
             ruleVersion: number;
-            /** Isfraud */
-            isFraud: boolean | null;
+            /** Verdict */
+            verdict: ("FRAUD" | "RISKY" | "NOT_FRAUD") | null;
         };
         /** AlertReviewOut */
         AlertReviewOut: {
-            /** Isfraud */
-            isFraud: boolean;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "FRAUD" | "RISKY" | "NOT_FRAUD";
             /** Bymatricule */
             byMatricule: string;
             /** Byname */
@@ -502,6 +524,11 @@ export interface components {
             /** Ordersconfirmed30D */
             ordersConfirmed30d: number;
             /**
+             * Ordersrelevant30D
+             * @default 0
+             */
+            ordersRelevant30d: number;
+            /**
              * Orderstosend30D
              * @default 0
              */
@@ -527,6 +554,11 @@ export interface components {
             ordersProcessed: number;
             /** Ordersconfirmedfraud */
             ordersConfirmedFraud: number;
+            /**
+             * Ordersrelevant
+             * @default 0
+             */
+            ordersRelevant: number;
         };
         /** DecisionIn */
         DecisionIn: {
@@ -743,10 +775,25 @@ export interface components {
             /** Ordersconfirmedfraud */
             ordersConfirmedFraud: number;
             /**
+             * Ordersrelevant
+             * @default 0
+             */
+            ordersRelevant: number;
+            /**
              * Ordersobserved
              * @default 0
              */
             ordersObserved: number;
+        };
+        /** PhaseCount */
+        PhaseCount: {
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "TEST" | "PRODUCTION";
+            /** Count */
+            count: number;
         };
         /** ProfileIn */
         ProfileIn: {
@@ -769,6 +816,15 @@ export interface components {
             schedule?: ("DAILY" | "HOURLY" | "WEEKLY") | null;
             /** Scheduleevery */
             scheduleEvery?: number | null;
+        };
+        /** RuleCount */
+        RuleCount: {
+            /** Ruleid */
+            ruleId: string;
+            /** Rulename */
+            ruleName: string;
+            /** Count */
+            count: number;
         };
         /** RuleDetail */
         RuleDetail: {
@@ -1177,6 +1233,16 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** VerdictCount */
+        VerdictCount: {
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "FRAUD" | "RISKY" | "NOT_FRAUD" | "TO_REVIEW" | "PENDING";
+            /** Count */
+            count: number;
+        };
         /**
          * VersionDaily
          * @description Commandes d'une version un jour donné, en production (to_send) ou en test : une courbe par
@@ -1198,6 +1264,11 @@ export interface components {
             ordersProcessed: number;
             /** Ordersconfirmedfraud */
             ordersConfirmedFraud: number;
+            /**
+             * Ordersrelevant
+             * @default 0
+             */
+            ordersRelevant: number;
         };
         /**
          * VersionPerformance
@@ -1224,6 +1295,11 @@ export interface components {
             ordersProcessed: number;
             /** Ordersconfirmedfraud */
             ordersConfirmedFraud: number;
+            /**
+             * Ordersrelevant
+             * @default 0
+             */
+            ordersRelevant: number;
         };
     };
     responses: never;
@@ -1885,7 +1961,7 @@ export interface operations {
                 to?: string | null;
                 ruleId?: string | null;
                 phase?: ("TEST" | "PRODUCTION") | null;
-                verdict?: ("FRAUD" | "NOT_FRAUD" | "TO_REVIEW" | "PENDING") | null;
+                verdict?: ("FRAUD" | "RISKY" | "NOT_FRAUD" | "TO_REVIEW" | "PENDING") | null;
                 q?: string | null;
                 limit?: number;
                 offset?: number;

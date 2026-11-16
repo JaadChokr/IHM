@@ -13,6 +13,7 @@ import {
   type Draft,
   type Guardrails,
   type PeriodTotals,
+  type ReviewVerdict,
   type VersionDaily,
   type RuleDetail,
   type RuleInput,
@@ -302,7 +303,7 @@ export function createMockApi(): Api {
     // remontées par une règle transmise (environ un tiers).
     const arrived = age >= 2 ? 1 : age === 1 ? 0.85 : 0.5;
     const processed = Math.round(flagged * (sent ? arrived : 0.3 * (0.85 + rnd(s + 'p') * 0.3)));
-    const confirmed = Math.min(processed, Math.round(processed * p.precision * (0.6 + rnd(s + 'c') * 0.8)));
+    const confirmed = Math.min(processed, Math.round(processed * p.fraudRate * (0.6 + rnd(s + 'c') * 0.8)));
     return { flagged, processed, confirmed, sent };
   }
 
@@ -321,16 +322,27 @@ export function createMockApi(): Api {
     const b = dayBase(r, d, version);
     let processed = b.processed;
     let confirmed = b.confirmed;
+    // Le prestataire ne connaît que fraude ou non : ses fraudes sont les commandes pertinentes.
+    let relevant = b.confirmed;
     if (!b.sent && db.reviews) {
       for (let k = b.processed; k < b.flagged; k++) {
         const review = db.reviews[orderId(r, version, d, k)];
         if (review) {
           processed++;
-          if (review.isFraud) confirmed++;
+          if (review.verdict === 'FRAUD') confirmed++;
+          if (review.verdict !== 'NOT_FRAUD') relevant++;
         }
       }
     }
-    return { date: d, ruleVersion: version, ordersFlagged: b.flagged, ordersToSend: b.sent ? b.flagged : 0, ordersProcessed: processed, ordersConfirmedFraud: confirmed };
+    return {
+      date: d,
+      ruleVersion: version,
+      ordersFlagged: b.flagged,
+      ordersToSend: b.sent ? b.flagged : 0,
+      ordersProcessed: processed,
+      ordersConfirmedFraud: confirmed,
+      ordersRelevant: relevant,
+    };
   }
 
   // ---------- alertes remontées (rule_alerts, une ligne par commande) ----------
@@ -369,7 +381,7 @@ export function createMockApi(): Api {
             const provider = k < b.processed ? isProviderFraud(k, b.processed, b.confirmed) : null;
             const review = !b.sent ? db.reviews?.[id] : undefined;
             const verdict: AlertVerdict =
-              provider !== null ? (provider ? 'FRAUD' : 'NOT_FRAUD') : b.sent ? 'PENDING' : !review ? 'TO_REVIEW' : review.isFraud ? 'FRAUD' : 'NOT_FRAUD';
+              provider !== null ? (provider ? 'FRAUD' : 'NOT_FRAUD') : b.sent ? 'PENDING' : (review?.verdict ?? 'TO_REVIEW');
             out.push({
               orderId: id,
               ruleId: r.ruleId,
@@ -381,7 +393,7 @@ export function createMockApi(): Api {
               phase: b.sent ? 'PRODUCTION' : 'TEST',
               verdict,
               providerIsFraud: provider,
-              review: review ? { isFraud: review.isFraud, byMatricule: review.by, byName: name(review.by), at: review.at } : null,
+              review: review ? { verdict: review.verdict, byMatricule: review.by, byName: name(review.by), at: review.at } : null,
               details: alertDetails(v, id),
             });
           }
@@ -407,7 +419,11 @@ export function createMockApi(): Api {
           const p = { ...r.profile, ...r.versionProfiles?.[v.version] };
           for (let k = b.processed; k < b.flagged; k++) {
             const id = orderId(r, v.version, d, k);
-            if (rnd(id + 'q') < 0.7) db.reviews[id] = { isFraud: rnd(id + 'v') < p.precision, by: v.submittedBy, at: `${d}T14:00:00.000Z`, ruleId: r.ruleId, ruleVersion: v.version };
+            if (rnd(id + 'q') >= 0.7) continue;
+            // Fraude avérée selon le taux de la règle, puis environ une sur cinq des autres jugée risquée.
+            const x = rnd(id + 'v');
+            const verdict: ReviewVerdict = x < p.fraudRate ? 'FRAUD' : x < p.fraudRate + (1 - p.fraudRate) * 0.2 ? 'RISKY' : 'NOT_FRAUD';
+            db.reviews[id] = { verdict, by: v.submittedBy, at: `${d}T14:00:00.000Z`, ruleId: r.ruleId, ruleVersion: v.version };
           }
         }
       }
@@ -427,7 +443,7 @@ export function createMockApi(): Api {
       })
       .filter(([, ds]) => ds.length)
       .sort((a, b) => a[0] - b[0]);
-    const sum = (ds: DailyPerformance[], k: 'ordersFlagged' | 'ordersProcessed' | 'ordersConfirmedFraud') => ds.reduce((s, x) => s + x[k], 0);
+    const sum = (ds: DailyPerformance[], k: 'ordersFlagged' | 'ordersProcessed' | 'ordersConfirmedFraud' | 'ordersRelevant') => ds.reduce((s, x) => s + x[k], 0);
     return byVersion.map(([version, ds], i) => {
       // Une version à fenêtre glissante relit, à ses premiers runs, des commandes déjà remontées par la
       // précédente : elles comptent dans sa propre mesure, pas dans les chiffres de la règle.
@@ -442,6 +458,7 @@ export function createMockApi(): Api {
         ordersFlagged: sum(ds, 'ordersFlagged') + reread('ordersFlagged'),
         ordersProcessed: sum(ds, 'ordersProcessed') + reread('ordersProcessed'),
         ordersConfirmedFraud: sum(ds, 'ordersConfirmedFraud') + reread('ordersConfirmedFraud'),
+        ordersRelevant: sum(ds, 'ordersRelevant') + reread('ordersRelevant'),
       };
     });
   }
@@ -479,7 +496,7 @@ export function createMockApi(): Api {
       const until = r.productionUntil[v.version] ?? today;
       for (let d = since > from ? since : from; d <= until && d <= to && d <= today; d = addDays(d, 1)) {
         const p = dayPerf(r, d, v.version);
-        out.push({ date: d, ruleVersion: v.version, toSend: sentAt(r, v, d), ordersFlagged: p.ordersFlagged, ordersProcessed: p.ordersProcessed, ordersConfirmedFraud: p.ordersConfirmedFraud });
+        out.push({ date: d, ruleVersion: v.version, toSend: sentAt(r, v, d), ordersFlagged: p.ordersFlagged, ordersProcessed: p.ordersProcessed, ordersConfirmedFraud: p.ordersConfirmedFraud, ordersRelevant: p.ordersRelevant });
       }
     }
     return out.sort((a, b) => a.date.localeCompare(b.date) || a.ruleVersion - b.ruleVersion);
@@ -487,8 +504,15 @@ export function createMockApi(): Api {
 
   /** Totaux d'une période (côté serveur : commandes distinctes ; ici, la somme des jours simulés). */
   function periodTotals(rows: DailyPerformance[]): PeriodTotals {
-    const sum = (k: 'ordersFlagged' | 'ordersToSend' | 'ordersProcessed' | 'ordersConfirmedFraud') => rows.reduce((s, x) => s + (x[k] ?? 0), 0);
-    return { ordersFlagged: sum('ordersFlagged'), ordersToSend: sum('ordersToSend'), ordersProcessed: sum('ordersProcessed'), ordersConfirmedFraud: sum('ordersConfirmedFraud'), ordersObserved: 0 };
+    const sum = (k: 'ordersFlagged' | 'ordersToSend' | 'ordersProcessed' | 'ordersConfirmedFraud' | 'ordersRelevant') => rows.reduce((s, x) => s + (x[k] ?? 0), 0);
+    return {
+      ordersFlagged: sum('ordersFlagged'),
+      ordersToSend: sum('ordersToSend'),
+      ordersProcessed: sum('ordersProcessed'),
+      ordersConfirmedFraud: sum('ordersConfirmedFraud'),
+      ordersRelevant: sum('ordersRelevant'),
+      ordersObserved: 0,
+    };
   }
   const withObserved = (t: PeriodTotals, byVersion: VersionDaily[]): PeriodTotals => ({
     ...t,
@@ -890,6 +914,7 @@ export function createMockApi(): Api {
             ordersProcessed30d: d.reduce((s, x) => s + x.ordersProcessed, 0),
             ordersConfirmed30d: d.reduce((s, x) => s + x.ordersConfirmedFraud, 0),
             ordersToSend30d: d.reduce((s, x) => s + (x.ordersToSend ?? 0), 0),
+            ordersRelevant30d: d.reduce((s, x) => s + x.ordersRelevant, 0),
           };
         });
     },
@@ -908,14 +933,33 @@ export function createMockApi(): Api {
       if (from > to) throw new ApiError(422, 'La date de début doit précéder la date de fin.');
       if (addDays(from, 92) <= to) throw new ApiError(422, 'Période trop longue : 92 jours au plus.');
       const q = f.q?.trim();
-      const all = alertsBetween(from, to, f.ruleId).filter((a) => (!f.phase || a.phase === f.phase) && (!q || a.orderId.includes(q)));
-      const toReview = all.filter((a) => a.verdict === 'TO_REVIEW').length;
-      const shown = all.filter((a) => !f.verdict || a.verdict === f.verdict).sort((a, b) => b.detectedAt.localeCompare(a.detectedAt) || b.orderId.localeCompare(a.orderId));
+      // Nombres qui guident les filtres (comme l'API) : par phase pour la règle choisie, par règle dans la
+      // phase choisie, par verdict pour les deux.
+      const base = alertsBetween(from, to).filter((a) => !q || a.orderId.includes(q));
+      const ruleOk = (a: Alert) => !f.ruleId || a.ruleId === f.ruleId;
+      const phaseOk = (a: Alert) => !f.phase || a.phase === f.phase;
+      const count = <K extends string>(rows: Alert[], key: (a: Alert) => K) => {
+        const m = new Map<K, number>();
+        for (const a of rows) m.set(key(a), (m.get(key(a)) ?? 0) + 1);
+        return m;
+      };
+      const chosen = base.filter((a) => ruleOk(a) && phaseOk(a));
+      const shown = chosen.filter((a) => !f.verdict || a.verdict === f.verdict).sort((a, b) => b.detectedAt.localeCompare(a.detectedAt) || b.orderId.localeCompare(a.orderId));
+      const ruleName = (id: string) => (r => r.versions[r.versions.length - 1].name)(findRule(id));
       const offset = f.offset ?? 0;
-      return { items: shown.slice(offset, offset + (f.limit ?? 25)), total: shown.length, toReview };
+      return {
+        items: shown.slice(offset, offset + (f.limit ?? 25)),
+        total: shown.length,
+        toReview: base.filter((a) => ruleOk(a) && a.verdict === 'TO_REVIEW').length,
+        phases: [...count(base.filter(ruleOk), (a) => a.phase)].sort().map(([phase, n]) => ({ phase, count: n })),
+        rules: [...count(base.filter(phaseOk), (a) => a.ruleId)]
+          .map(([ruleId, n]) => ({ ruleId, ruleName: ruleName(ruleId), count: n }))
+          .sort((a, b) => b.count - a.count || a.ruleName.localeCompare(b.ruleName)),
+        verdicts: [...count(chosen, (a) => a.verdict)].map(([verdict, n]) => ({ verdict, count: n })),
+      };
     },
 
-    async reviewAlert({ orderId: id, ruleId, ruleVersion, isFraud }) {
+    async reviewAlert({ orderId: id, ruleId, ruleVersion, verdict }) {
       await delay();
       const u = currentUser();
       const r = findRule(ruleId);
@@ -932,9 +976,10 @@ export function createMockApi(): Api {
         throw new ApiError(409, "Seules les commandes d'une version en test se qualifient : les commandes transmises au prestataire sont vérifiées par lui.", 'NOT_IN_TEST');
       }
       db.reviews ??= {};
-      if (isFraud === null) delete db.reviews[id];
-      else db.reviews[id] = { isFraud, by: u.matricule, at: now(), ruleId, ruleVersion };
-      audit(u, 'ALERT_REVIEW', v, `Commande ${id} : ${isFraud === null ? 'qualification retirée' : isFraud ? 'fraude' : 'pas une fraude'}`);
+      if (!verdict) delete db.reviews[id];
+      else db.reviews[id] = { verdict, by: u.matricule, at: now(), ruleId, ruleVersion };
+      const label = { FRAUD: 'fraude avérée', RISKY: 'commande risquée', NOT_FRAUD: 'RAS' };
+      audit(u, 'ALERT_REVIEW', v, `Commande ${id} : ${verdict ? label[verdict] : 'qualification retirée'}`);
       save();
     },
 
@@ -952,7 +997,7 @@ export function createMockApi(): Api {
         if (prev && prev.version !== target.version && !isCandidate(r, target)) r.productionUntil[prev.version] = addDays(today, -1);
         r.productionSince[target.version] = today;
         target.airflowDagId = `FRAUD_RULES_${target.schedule}`; // un DAG par fréquence
-        r.profile ??= { dailyVolume: 10 + Math.round(rnd(id) * 40), processingRate: 0.75, precision: 0.2 + rnd(id + 'p') * 0.4 };
+        r.profile ??= { dailyVolume: 10 + Math.round(rnd(id) * 40), processingRate: 0.75, fraudRate: 0.2 + rnd(id + 'p') * 0.4 };
         save();
         return detail(r, u);
       },

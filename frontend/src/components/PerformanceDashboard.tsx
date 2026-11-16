@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { DailyPerformance, PeriodTotals, VersionDaily, VersionPerformance } from '../api/types';
 import { addDays, daysBetween, fmtDate, fmtInt, fmtPct, isoDate } from '../lib/format';
-import { delta, totals } from '../lib/metrics';
+import { delta, relevanceOf, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
 import { DailyBars, type BarMeasure, type VersionBars } from './DailyBars';
@@ -13,11 +13,19 @@ type Preset = 7 | 30 | 90 | 'all' | 'custom';
 
 /** Sans série par version (ancienne API) : une série par version, d'après les chiffres de la règle. */
 const fallback = (daily: DailyPerformance[]): VersionDaily[] =>
-  daily.map((d) => ({ date: d.date, ruleVersion: d.ruleVersion ?? 1, toSend: (d.ordersToSend ?? 0) > 0, ordersFlagged: d.ordersFlagged, ordersProcessed: d.ordersProcessed, ordersConfirmedFraud: d.ordersConfirmedFraud }));
+  daily.map((d) => ({
+    date: d.date,
+    ruleVersion: d.ruleVersion ?? 1,
+    toSend: (d.ordersToSend ?? 0) > 0,
+    ordersFlagged: d.ordersFlagged,
+    ordersProcessed: d.ordersProcessed,
+    ordersConfirmedFraud: d.ordersConfirmedFraud,
+    ordersRelevant: d.ordersRelevant,
+  }));
 
 /**
- * Les barres de chaque version sur toute la période : remontées par jour, commandes vérifiées et confirmées
- * frauduleuses. En production, vérifiées par le prestataire ; en test, qualifiées par les analystes (onglet
+ * Les barres de chaque version sur toute la période : remontées par jour, commandes vérifiées, fraudes avérées
+ * et pertinentes. En production, vérifiées par le prestataire ; en test, qualifiées par les analystes (onglet
  * Alertes), le verdict du prestataire restant prioritaire quand il existe.
  */
 function byVersion(dates: string[], rows: VersionDaily[]) {
@@ -27,7 +35,7 @@ function byVersion(dates: string[], rows: VersionDaily[]) {
   const markers: { date: string; label: string }[] = [];
   for (const v of versions) {
     const none = () => dates.map(() => null as number | null);
-    const s: VersionBars = { version: v, flagged: none(), processed: none(), confirmed: none(), observed: dates.map(() => true) };
+    const s: VersionBars = { version: v, flagged: none(), processed: none(), confirmed: none(), relevant: none(), observed: dates.map(() => true) };
     for (const r of rows.filter((x) => x.ruleVersion === v)) {
       const i = at.get(r.date);
       if (i === undefined) continue;
@@ -37,6 +45,7 @@ function byVersion(dates: string[], rows: VersionDaily[]) {
       // Vérifiées : par le prestataire (version en production), ou qualifiées par un analyste (en test).
       s.processed[i] = (s.processed[i] ?? 0) + r.ordersProcessed;
       s.confirmed[i] = (s.confirmed[i] ?? 0) + r.ordersConfirmedFraud;
+      s.relevant[i] = (s.relevant[i] ?? 0) + r.ordersRelevant;
     }
     series.push(s);
     // Repère au premier jour de chaque version dans la période (sauf la première version affichée).
@@ -66,13 +75,17 @@ interface Props {
 
 const MEASURES: [BarMeasure, string][] = [
   ['flagged', 'Remontées'],
-  ['confirmed', 'Fraudes confirmées'],
+  ['confirmed', 'Fraudes avérées'],
+  ['relevance', 'Pertinence'],
 ];
-const MEASURE_ORDER: Record<BarMeasure, number> = { flagged: 0, confirmed: 1 };
+const MEASURE_ORDER: Record<BarMeasure, number> = { flagged: 0, confirmed: 1, relevance: 2 };
 
 export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observing }: Props) {
   const today = isoDate(new Date());
-  const [measures, setMeasures] = usePref<BarMeasure[]>('perfBars', ['flagged', 'confirmed']);
+  const [stored, setMeasures] = usePref<BarMeasure[]>('perfBars', ['flagged', 'confirmed']);
+  // Préférence enregistrée par une version antérieure : mesures inconnues ignorées.
+  const kept = stored.filter((m) => m in MEASURE_ORDER);
+  const measures: BarMeasure[] = kept.length ? kept : ['flagged', 'confirmed'];
   const [preset, setPreset] = useState<Preset>(versionsRun > 1 ? 'all' : 30);
   const [custom, setCustom] = useState({ from: addDays(today, -59), to: today });
   const from =
@@ -90,7 +103,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
     // fois) ; à défaut, la somme des jours.
     const exact = (t: PeriodTotals | null | undefined, rows: DailyPerformance[]) =>
       t
-        ? totals([{ ordersFlagged: t.ordersFlagged, ordersProcessed: t.ordersProcessed, ordersConfirmedFraud: t.ordersConfirmedFraud }])
+        ? totals([t])
         : totals(rows);
     const cur = exact(data.totals, data.daily);
     const prev = exact(data.previousTotals, data.previous);
@@ -121,10 +134,10 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
     <div className="stack">
       {observing && (
         <p className="small muted m-0">
-          En test : rien n'est envoyé au prestataire. Qualifiez ses alertes pour mesurer sa précision.
+          En test : rien n'est envoyé au prestataire. Qualifiez ses alertes pour mesurer sa pertinence.
           <InfoTip align="start">
-            La précision d'une règle en test porte sur les commandes que vous avez qualifiées (fraude ou pas) dans l'onglet Alertes, et
-            sur celles que le prestataire a déjà vérifiées parce qu'une autre règle les lui a transmises.
+            La pertinence d'une règle en test porte sur les commandes que vous avez qualifiées (fraude avérée, commande risquée ou RAS)
+            dans l'onglet Alertes, et sur celles que le prestataire a déjà vérifiées parce qu'une autre règle les lui a transmises.
           </InfoTip>
         </p>
       )}
@@ -188,22 +201,26 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
               sub={`${fmtInt(view.cur.processed)} déjà ${observing ? 'qualifiées' : 'vérifiées'}`}
               info={
                 observing
-                  ? "Commandes remontées que personne n'a encore qualifiées (fraude ou pas) dans l'onglet Alertes."
+                  ? "Commandes remontées que personne n'a encore qualifiées (fraude avérée, commande risquée ou RAS) dans l'onglet Alertes."
                   : "Commandes remontées que le prestataire n'a pas encore vérifiées : elles n'apparaissent pas encore dans son retour."
               }
             />
             <KpiTile
-              label="Taux de précision"
-              value={fmtPct(view.cur.precision)}
-              delta={fmtDelta(delta(view.cur.precision, view.prev.precision, 'points'), 'points')}
-              sub={`${fmtInt(view.cur.confirmed)} confirmées frauduleuses / ${fmtInt(view.cur.processed)} ${observing ? 'qualifiées' : 'vérifiées'}`}
-              info="Part des commandes vérifiées par le prestataire qui sont confirmées frauduleuses. Les fraudes que la règle n'a pas trouvées ne sont pas mesurables."
+              label="Pertinence"
+              value={fmtPct(view.cur.relevance)}
+              delta={fmtDelta(delta(view.cur.relevance, view.prev.relevance, 'points'), 'points')}
+              sub={`${
+                view.cur.relevant === view.cur.confirmed
+                  ? `${fmtInt(view.cur.confirmed)} fraudes avérées`
+                  : `${fmtInt(view.cur.relevant)} pertinentes, dont ${fmtInt(view.cur.confirmed)} fraudes avérées`
+              } / ${fmtInt(view.cur.processed)} ${observing ? 'qualifiées' : 'vérifiées'}`}
+              info="Part des commandes vérifiées qui sont pertinentes : fraudes avérées et commandes risquées. En production, le prestataire ne distingue que fraude ou non : la pertinence y est la part de fraudes. Les fraudes que la règle n'a pas trouvées ne sont pas mesurables."
             />
           </div>
 
           <Card
-            title="Remontées et fraudes confirmées par jour"
-            info="Une barre par version et par jour. La barre entière : les commandes remontées (hachurée quand la version est en test). En couleur franche, en bas : celles confirmées frauduleuses, par le prestataire pour une version en production, par vos qualifications (onglet Alertes) pour une version en test. Le survol donne la précision du jour."
+            title="Remontées, fraudes avérées et pertinence par jour"
+            info="Une barre par version et par jour. La barre entière : les commandes remontées (hachurée quand la version est en test). En couleur franche, en bas : les fraudes avérées, selon le prestataire pour une version en production, selon vos qualifications (onglet Alertes) pour une version en test. La ligne : la pertinence du jour (fraudes avérées et commandes risquées, sur les commandes vérifiées), lue sur l'axe de droite. Chaque mesure s'affiche ou se masque."
             actions={
               <div className="seg" role="group" aria-label="Mesures affichées">
                 {MEASURES.map(([key, name]) => (
@@ -229,7 +246,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
             }
             padded
           >
-            <DailyBars label="Commandes remontées et fraudes confirmées par jour" dates={view.dates} series={view.series} show={measures} markers={view.markers} />
+            <DailyBars label="Commandes remontées, fraudes avérées et pertinence par jour" dates={view.dates} series={view.series} show={measures} markers={view.markers} />
           </Card>
 
           <details className="card card-pad">
@@ -240,9 +257,10 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
                   <tr>
                     <th>Date</th>
                     <th className="num">Remontées</th>
-                    <th className="num">Traitées</th>
-                    <th className="num">Confirmées</th>
-                    <th className="num">Précision</th>
+                    <th className="num">Vérifiées</th>
+                    <th className="num">Fraudes avérées</th>
+                    <th className="num">Pertinentes</th>
+                    <th className="num">Pertinence</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -252,7 +270,8 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
                       <td className="num">{fmtInt(d.ordersFlagged)}</td>
                       <td className="num">{fmtInt(d.ordersProcessed)}</td>
                       <td className="num">{fmtInt(d.ordersConfirmedFraud)}</td>
-                      <td className="num">{fmtPct(d.ordersProcessed ? d.ordersConfirmedFraud / d.ordersProcessed : null)}</td>
+                      <td className="num">{fmtInt(d.ordersRelevant)}</td>
+                      <td className="num">{fmtPct(relevanceOf(d.ordersRelevant, d.ordersProcessed))}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -274,8 +293,8 @@ export interface VersionStats {
   ordersFlagged: number;
   perDay: number;
   pending: number;
-  precision: number | null;
-  /** Écart de précision avec la version précédente, en points (null : pas de précédente ou non calculable). */
+  relevance: number | null;
+  /** Écart de pertinence avec la version précédente, en points (null : pas de précédente ou non calculable). */
   deltaPts: number | null;
   /** Version de référence de cet écart (la précédente qui a tourné). */
   prevVersion: number | null;
@@ -286,7 +305,7 @@ export function versionStats(versions: VersionPerformance[]): Map<number, Versio
   const sorted = [...versions].sort((a, b) => a.version - b.version);
   const out = new Map<number, VersionStats>();
   sorted.forEach((v, i) => {
-    const t = totals([{ ordersFlagged: v.ordersFlagged, ordersProcessed: v.ordersProcessed, ordersConfirmedFraud: v.ordersConfirmedFraud }]);
+    const t = totals([v]);
     const before = i > 0 ? out.get(sorted[i - 1].version) : undefined;
     out.set(v.version, {
       firstDate: v.firstDate,
@@ -295,8 +314,8 @@ export function versionStats(versions: VersionPerformance[]): Map<number, Versio
       ordersFlagged: v.ordersFlagged,
       perDay: v.days ? v.ordersFlagged / v.days : 0,
       pending: t.pending,
-      precision: t.precision,
-      deltaPts: before ? delta(t.precision, before.precision, 'points') : null,
+      relevance: t.relevance,
+      deltaPts: before ? delta(t.relevance, before.relevance, 'points') : null,
       prevVersion: i > 0 ? sorted[i - 1].version : null,
     });
   });

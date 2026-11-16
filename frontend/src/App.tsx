@@ -8,8 +8,8 @@ import { LoginPage } from './pages/LoginPage';
 import { RulesListPage } from './pages/RulesListPage';
 import { RuleEditorPage } from './pages/RuleEditorPage';
 import { RuleDetailPage } from './pages/RuleDetailPage';
-import { ProductionPage } from './pages/ProductionPage';
-import { AuditPage } from './pages/AuditPage';
+import { SurveillancePage } from './pages/SurveillancePage';
+import { ActivityPage } from './pages/ActivityPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { OverviewPage } from './pages/OverviewPage';
@@ -57,9 +57,11 @@ export function App() {
               <Route path="/rules/:ruleId/edit" element={<RuleEditorPage />} />
               <Route path="/drafts" element={<DraftsPage />} />
               <Route path="/drafts/:draftId" element={<RuleEditorPage />} />
-              <Route path="/production" element={<ProductionPage />} />
+              <Route path="/surveillance" element={<SurveillancePage />} />
+              <Route path="/production" element={<Navigate to="/surveillance" replace />} />
               <Route path="/alerts" element={<AlertsPage />} />
-              <Route path="/audit" element={<AuditPage />} />
+              <Route path="/journal" element={<ActivityPage />} />
+              <Route path="/audit" element={<Navigate to="/journal" replace />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="*" element={<div className="empty">Page introuvable.</div>} />
             </Route>

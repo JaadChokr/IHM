@@ -8,22 +8,26 @@ import { useAsync } from '../lib/useAsync';
 import { usePref } from '../prefs/prefs';
 import { usePageTitle } from '../nav/history';
 
-type SortKey = 'precision' | 'volume' | 'pending' | 'name';
+type SortKey = 'relevance' | 'volume' | 'pending' | 'name';
 
 type Row = ProductionHealth;
 
-export function ProductionPage() {
-  usePageTitle('Production');
+/**
+ * Surveillance des règles qui tournent (en production, en test ou devenues inactives) : volume, attente de
+ * vérification, pertinence sur 30 jours, et points d'attention (PRD F7).
+ */
+export function SurveillancePage() {
+  usePageTitle('Surveillance');
   const data = useAsync(() => api.getConsolidated(), []);
-  const [threshold, setThreshold] = usePref<number>('watchPrecisionThreshold', DEFAULT_WATCH_THRESHOLD);
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'precision', dir: 1 });
+  const [threshold, setThreshold] = usePref<number>('watchRelevanceThreshold', DEFAULT_WATCH_THRESHOLD);
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'relevance', dir: 1 });
   const [onlyWatch, setOnlyWatch] = useState(false);
 
   const rows = useMemo<Row[]>(() => (data.data ?? []).map((r) => productionHealth(r, threshold)), [data.data, threshold]);
 
   const sorted = useMemo(() => {
     const val = (r: Row): number | string =>
-      sort.key === 'name' ? r.name : sort.key === 'volume' ? r.ordersFlagged30d : sort.key === 'pending' ? r.pending : r.precision ?? -1;
+      sort.key === 'name' ? r.name : sort.key === 'volume' ? r.ordersFlagged30d : sort.key === 'pending' ? r.pending : r.relevance ?? -1;
     return rows
       .filter((r) => !onlyWatch || r.reasons.length)
       .sort((a, b) => {
@@ -47,9 +51,9 @@ export function ProductionPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Règles en production</h1>
+          <h1>Surveillance des règles</h1>
           <p>
-            Règles exécutées sur les 30 derniers jours : envoyées au prestataire, en test ou devenues inactives.
+            Règles exécutées sur les 30 derniers jours, envoyées au prestataire, en test ou devenues inactives, et ce qui demande votre attention.
             <InfoTip>Une commande remontée par plusieurs règles compte pour chacune : les volumes de ce tableau ne s'additionnent pas.</InfoTip>
           </p>
         </div>
@@ -58,7 +62,7 @@ export function ProductionPage() {
         <div className="card prod-card">
           <div className="card-pad row divider-bottom">
             <label htmlFor="thr" className="small">
-              Seuil d'alerte de précision
+              Seuil de pertinence
             </label>
             <input
               id="thr"
@@ -72,7 +76,7 @@ export function ProductionPage() {
             <span className="spacer" />
             <label className="row small gap-2">
               <input type="checkbox" checked={onlyWatch} onChange={(e) => setOnlyWatch(e.target.checked)} />
-              Seulement les règles avec alerte ({watchCount})
+              Seulement les règles à surveiller ({watchCount})
             </label>
           </div>
           {data.error && <Alert kind="error" title={data.error.message} />}
@@ -81,7 +85,7 @@ export function ProductionPage() {
               <Spinner />
             </div>
           ) : sorted.length === 0 ? (
-            <div className="empty">{onlyWatch ? 'Aucune règle avec alerte.' : 'Aucune règle en production.'}</div>
+            <div className="empty">{onlyWatch ? 'Aucune règle à surveiller.' : 'Aucune règle exécutée sur 30 jours.'}</div>
           ) : (
             <div className="table-wrap">
               <table className="data">
@@ -91,8 +95,8 @@ export function ProductionPage() {
                     <th className="col-crit">Criticité</th>
                     {th('volume', 'Volume remonté')}
                     {th('pending', 'En attente de vérification')}
-                    {th('precision', 'Taux de précision')}
-                    <th>Alertes</th>
+                    {th('relevance', 'Pertinence')}
+                    <th>Points d'attention</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -115,7 +119,7 @@ export function ProductionPage() {
                       <td className="num">{fmtInt(r.ordersFlagged30d)}</td>
                       <td className="num">{fmtInt(r.pending)}</td>
                       <td className="num">
-                        <strong>{fmtPct(r.precision)}</strong>
+                        <strong>{fmtPct(r.relevance)}</strong>
                       </td>
                       <td className="small">
                         {r.reasons.length ? (

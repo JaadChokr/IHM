@@ -5,9 +5,10 @@
 -- Règle de verdict d'une commande :
 --   - le prestataire l'a vérifiée (elle figure dans sa table de retour) : son verdict, FRAUD ou NOT_FRAUD ;
 --   - sinon, commande transmise (version en production, to_send) : PENDING, en attente du prestataire ;
---   - sinon (version en test) : la dernière qualification d'un analyste (alert_reviews), FRAUD ou
---     NOT_FRAUD, ou TO_REVIEW tant qu'il n'y en a pas.
--- is_verified : verdict connu ; is_confirmed : fraude. La précision porte sur les commandes vérifiées.
+--   - sinon (version en test) : la dernière qualification d'un analyste (alert_reviews) : FRAUD (fraude
+--     avérée), RISKY (commande risquée) ou NOT_FRAUD (RAS), ou TO_REVIEW tant qu'il n'y en a pas.
+-- is_verified : verdict connu ; is_confirmed : fraude avérée ; is_relevant : fraude avérée ou commande risquée.
+-- La pertinence d'une règle = commandes pertinentes / commandes vérifiées.
 --
 -- Chiffres d'une règle, selon son état : en production, ses commandes à transmettre (to_send) ; en test,
 -- les autres. La plateforme compte les commandes distinctes sur la période : une commande remontée par
@@ -21,7 +22,7 @@ WITH feedback AS (
   GROUP BY order_id
 ),
 reviews AS (
-  SELECT order_id, is_fraud, reviewed_by, reviewed_at
+  SELECT order_id, verdict, reviewed_by, reviewed_at
   FROM `${PROJECT}.${DATASET}.alert_reviews`
   QUALIFY ROW_NUMBER() OVER (PARTITION BY order_id ORDER BY reviewed_at DESC) = 1
 ),
@@ -36,7 +37,7 @@ orders AS (
     IFNULL(a.to_send, FALSE) AS to_send,
     f.order_id IS NOT NULL   AS has_feedback,
     f.is_fraud,                         -- verdict du prestataire (NULL : pas vérifiée)
-    r.is_fraud               AS review_is_fraud,  -- dernière qualification (NULL : aucune ou retirée)
+    r.verdict                AS review_verdict,  -- dernière qualification (NULL : aucune ou retirée)
     r.reviewed_by,
     r.reviewed_at
   FROM `${PROJECT}.${DATASET}.rule_alerts` a
@@ -49,14 +50,13 @@ judged AS (
     CASE
       WHEN has_feedback THEN IF(is_fraud, 'FRAUD', 'NOT_FRAUD')
       WHEN to_send THEN 'PENDING'
-      WHEN review_is_fraud IS NULL THEN 'TO_REVIEW'
-      WHEN review_is_fraud THEN 'FRAUD'
-      ELSE 'NOT_FRAUD'
+      ELSE IFNULL(review_verdict, 'TO_REVIEW')
     END AS verdict
   FROM orders
 )
 SELECT
   *,
-  verdict IN ('FRAUD', 'NOT_FRAUD') AS is_verified,
-  verdict = 'FRAUD'                 AS is_confirmed
+  verdict IN ('FRAUD', 'RISKY', 'NOT_FRAUD') AS is_verified,
+  verdict = 'FRAUD'                          AS is_confirmed,
+  verdict IN ('FRAUD', 'RISKY')              AS is_relevant
 FROM judged;

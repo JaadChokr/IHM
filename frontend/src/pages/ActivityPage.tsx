@@ -68,8 +68,9 @@ export function AuditTable({ events, showRule = true }: { events: AuditEvent[]; 
   );
 }
 
-export function AuditPage() {
-  usePageTitle("Journal d'audit");
+/** Journal d'activité : qui a fait quoi sur la plateforme, et quand (table audit_events côté API). */
+export function ActivityPage() {
+  usePageTitle("Journal d'activité");
   const [matricule, setMatricule] = useState('');
   const [action, setAction] = useState<AuditAction | ''>('');
   const users = useAsync(() => api.listUsers(), []);
@@ -80,7 +81,7 @@ export function AuditPage() {
     <>
       <div className="page-head">
         <div>
-          <h1>Journal d'audit</h1>
+          <h1>Journal d'activité</h1>
           <p>
             Qui a créé, modifié, testé ou publié quoi, et quand. Immuable, conservé 24 mois.
             <InfoTip>

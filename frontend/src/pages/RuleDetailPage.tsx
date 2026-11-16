@@ -14,7 +14,7 @@ import { PerformanceDashboard, versionStats } from '../components/PerformanceDas
 import { versionColor } from '../components/DailyBars';
 import { KpiTile } from '../components/KpiTile';
 import { Alert, Card, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
-import { AuditTable } from './AuditPage';
+import { AuditTable } from './ActivityPage';
 import { fmtDate, fmtDateTime, fmtDuration, fmtInt, fmtPct, isoDate, scheduleLabel, scheduleWhen } from '../lib/format';
 import { fmtRun, nextRun } from '../lib/period';
 import { useAsync } from '../lib/useAsync';
@@ -62,7 +62,7 @@ export function RuleDetailPage() {
     ['alerts', 'Alertes'],
     ['runs', 'Exécutions'],
     ['versions', 'Versions', r.versions.length],
-    ['audit', 'Audit'],
+    ['audit', 'Activité'],
   ];
 
   return (
@@ -407,9 +407,12 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                 <th className="num">Remontées / jour</th>
                 <th className="num">
                   En attente
-                  <InfoTip align="end">Commandes remontées pas encore vérifiées par le prestataire.</InfoTip>
+                  <InfoTip align="end">Commandes remontées pas encore vérifiées par le prestataire, ni qualifiées en test.</InfoTip>
                 </th>
-                <th className="num">Taux de précision</th>
+                <th className="num">
+                  Pertinence
+                  <InfoTip align="end">Fraudes avérées et commandes risquées, sur les commandes vérifiées (par le prestataire, ou qualifiées en test).</InfoTip>
+                </th>
                 <th>
                   <span className="sr-only">Actions</span>
                 </th>
@@ -445,7 +448,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                       <td className="num">{fmtInt(Math.round(st.perDay))}</td>
                       <td className="num">{fmtInt(st.pending)}</td>
                       <td className="num">
-                        <strong>{fmtPct(st.precision)}</strong>
+                        <strong>{fmtPct(st.relevance)}</strong>
                         {st.deltaPts !== null && (
                           <div className="small muted">
                             {st.deltaPts >= 0 ? '+' : '−'}

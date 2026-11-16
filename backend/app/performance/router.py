@@ -73,6 +73,7 @@ def _totals(bq: BigQueryGateway, rule_id: str, sent: bool, start: date, end: dat
         orders_processed=t.processed if t else 0,
         orders_confirmed_fraud=t.confirmed if t else 0,
         orders_observed=t.observed if t else 0,
+        orders_relevant=t.relevant if t else 0,
     )
 
 
@@ -107,6 +108,7 @@ def production(
                 ordersProcessed30d=t.processed if t else 0,
                 ordersConfirmed30d=t.confirmed if t else 0,
                 ordersToSend30d=t.to_send if t else 0,
+                ordersRelevant30d=t.relevant if t else 0,
             )
         )
     return out

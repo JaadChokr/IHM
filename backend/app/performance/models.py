@@ -16,6 +16,8 @@ class DailyPerformance(Model):
     orders_to_send: int = 0  # dont marquées à transmettre au prestataire (version en production)
     orders_processed: int
     orders_confirmed_fraud: int
+    # Commandes pertinentes (fraudes avérées et commandes risquées) : pertinence = relevant / processed.
+    orders_relevant: int = 0
 
 
 class VersionPerformance(Model):
@@ -28,6 +30,8 @@ class VersionPerformance(Model):
     orders_flagged: int
     orders_processed: int
     orders_confirmed_fraud: int
+    # Commandes pertinentes (fraudes avérées et commandes risquées) : pertinence = relevant / processed.
+    orders_relevant: int = 0
 
 
 class RuleRun(Model):
@@ -58,6 +62,8 @@ class VersionDaily(Model):
     orders_flagged: int
     orders_processed: int
     orders_confirmed_fraud: int
+    # Commandes pertinentes (fraudes avérées et commandes risquées) : pertinence = relevant / processed.
+    orders_relevant: int = 0
 
 
 class PeriodTotals(Model):
@@ -68,6 +74,8 @@ class PeriodTotals(Model):
     orders_to_send: int
     orders_processed: int
     orders_confirmed_fraud: int
+    # Commandes pertinentes (fraudes avérées et commandes risquées) : pertinence = relevant / processed.
+    orders_relevant: int = 0
     orders_observed: int = 0  # commandes remontées en test (candidate comprise)
 
 
@@ -97,4 +105,5 @@ class ConsolidatedRow(Model):
     orders_flagged30d: int = Field(alias="ordersFlagged30d")
     orders_processed30d: int = Field(alias="ordersProcessed30d")
     orders_confirmed30d: int = Field(alias="ordersConfirmed30d")
+    orders_relevant30d: int = Field(0, alias="ordersRelevant30d")
     orders_to_send30d: int = Field(0, alias="ordersToSend30d")

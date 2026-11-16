@@ -64,7 +64,7 @@ export function ProfilePage() {
           <div className="card-head">
             <div>
               <h2>Identité</h2>
-              <p>Stockée côté serveur ; affichée comme propriétaire de vos règles et dans l'audit.</p>
+              <p>Stockée côté serveur ; affichée comme propriétaire de vos règles et dans le journal d'activité.</p>
             </div>
           </div>
           <div className="card-pad stack">

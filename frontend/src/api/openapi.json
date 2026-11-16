@@ -1028,6 +1028,7 @@
                 {
                   "enum": [
                     "FRAUD",
+                    "RISKY",
                     "NOT_FRAUD",
                     "TO_REVIEW",
                     "PENDING"
@@ -1261,6 +1262,7 @@
             "type": "string",
             "enum": [
               "FRAUD",
+              "RISKY",
               "NOT_FRAUD",
               "TO_REVIEW",
               "PENDING"
@@ -1329,6 +1331,30 @@
           "toReview": {
             "type": "integer",
             "title": "Toreview"
+          },
+          "phases": {
+            "items": {
+              "$ref": "#/components/schemas/PhaseCount"
+            },
+            "type": "array",
+            "title": "Phases",
+            "default": []
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/RuleCount"
+            },
+            "type": "array",
+            "title": "Rules",
+            "default": []
+          },
+          "verdicts": {
+            "items": {
+              "$ref": "#/components/schemas/VerdictCount"
+            },
+            "type": "array",
+            "title": "Verdicts",
+            "default": []
           }
         },
         "type": "object",
@@ -1337,7 +1363,8 @@
           "total",
           "toReview"
         ],
-        "title": "AlertPage"
+        "title": "AlertPage",
+        "description": "Une page d'alertes, et les nombres qui guident les filtres (sur la période et la recherche) : on ne\npropose que des choix qui renvoient des alertes."
       },
       "AlertReviewIn": {
         "properties": {
@@ -1353,16 +1380,21 @@
             "type": "integer",
             "title": "Ruleversion"
           },
-          "isFraud": {
+          "verdict": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "string",
+                "enum": [
+                  "FRAUD",
+                  "RISKY",
+                  "NOT_FRAUD"
+                ]
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Isfraud"
+            "title": "Verdict"
           }
         },
         "type": "object",
@@ -1370,15 +1402,20 @@
           "orderId",
           "ruleId",
           "ruleVersion",
-          "isFraud"
+          "verdict"
         ],
         "title": "AlertReviewIn"
       },
       "AlertReviewOut": {
         "properties": {
-          "isFraud": {
-            "type": "boolean",
-            "title": "Isfraud"
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "FRAUD",
+              "RISKY",
+              "NOT_FRAUD"
+            ],
+            "title": "Verdict"
           },
           "byMatricule": {
             "type": "string",
@@ -1396,7 +1433,7 @@
         },
         "type": "object",
         "required": [
-          "isFraud",
+          "verdict",
           "byMatricule",
           "byName",
           "at"
@@ -1585,6 +1622,11 @@
             "type": "integer",
             "title": "Ordersconfirmed30D"
           },
+          "ordersRelevant30d": {
+            "type": "integer",
+            "title": "Ordersrelevant30D",
+            "default": 0
+          },
           "ordersToSend30d": {
             "type": "integer",
             "title": "Orderstosend30D",
@@ -1640,6 +1682,11 @@
           "ordersConfirmedFraud": {
             "type": "integer",
             "title": "Ordersconfirmedfraud"
+          },
+          "ordersRelevant": {
+            "type": "integer",
+            "title": "Ordersrelevant",
+            "default": 0
           }
         },
         "type": "object",
@@ -2210,6 +2257,11 @@
             "type": "integer",
             "title": "Ordersconfirmedfraud"
           },
+          "ordersRelevant": {
+            "type": "integer",
+            "title": "Ordersrelevant",
+            "default": 0
+          },
           "ordersObserved": {
             "type": "integer",
             "title": "Ordersobserved",
@@ -2225,6 +2277,28 @@
         ],
         "title": "PeriodTotals",
         "description": "Chiffres d'une règle sur une période, en commandes distinctes : exacts même si deux versions ont\nremonté la même commande (la somme des jours peut la compter deux fois)."
+      },
+      "PhaseCount": {
+        "properties": {
+          "phase": {
+            "type": "string",
+            "enum": [
+              "TEST",
+              "PRODUCTION"
+            ],
+            "title": "Phase"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "phase",
+          "count"
+        ],
+        "title": "PhaseCount"
       },
       "ProfileIn": {
         "properties": {
@@ -2320,6 +2394,29 @@
           "sql"
         ],
         "title": "QueryIn"
+      },
+      "RuleCount": {
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "ruleName": {
+            "type": "string",
+            "title": "Rulename"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ruleId",
+          "ruleName",
+          "count"
+        ],
+        "title": "RuleCount"
       },
       "RuleDetail": {
         "properties": {
@@ -3436,6 +3533,31 @@
         ],
         "title": "ValidationError"
       },
+      "VerdictCount": {
+        "properties": {
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "FRAUD",
+              "RISKY",
+              "NOT_FRAUD",
+              "TO_REVIEW",
+              "PENDING"
+            ],
+            "title": "Verdict"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "verdict",
+          "count"
+        ],
+        "title": "VerdictCount"
+      },
       "VersionDaily": {
         "properties": {
           "date": {
@@ -3462,6 +3584,11 @@
           "ordersConfirmedFraud": {
             "type": "integer",
             "title": "Ordersconfirmedfraud"
+          },
+          "ordersRelevant": {
+            "type": "integer",
+            "title": "Ordersrelevant",
+            "default": 0
           }
         },
         "type": "object",
@@ -3507,6 +3634,11 @@
           "ordersConfirmedFraud": {
             "type": "integer",
             "title": "Ordersconfirmedfraud"
+          },
+          "ordersRelevant": {
+            "type": "integer",
+            "title": "Ordersrelevant",
+            "default": 0
           }
         },
         "type": "object",

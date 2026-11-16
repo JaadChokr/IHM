@@ -8,6 +8,7 @@ from functools import lru_cache
 
 from app.bigquery.contract import (
     AlertFilter,
+    AlertResult,
     AlertRow,
     BigQueryGateway,
     BytesLimitExceeded,
@@ -25,6 +26,7 @@ from app.core.config import get_settings
 
 __all__ = [
     "AlertFilter",
+    "AlertResult",
     "AlertRow",
     "BigQueryGateway",
     "BytesLimitExceeded",

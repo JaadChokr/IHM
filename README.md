@@ -10,7 +10,7 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 ├── frontend/            React + TypeScript + Vite — l'IHM (Nginx non-root en production)
 │   ├── src/api/         contrat d'API : openapi.json et schema.gen.ts (générés depuis le back), types.ts (noms
 │   │                    côté front), client.ts (appels) + implémentation mock pour la démo
-│   ├── src/pages/       écrans (liste, éditeur, détail, vue production, audit, profil)
+│   ├── src/pages/       écrans (liste, éditeur, détail, alertes, surveillance, journal d'activité, profil)
 │   ├── src/styles/      style centralisé : tokens.css (valeurs) + ui.css (classes communes), voir frontend/STYLE.md
 │   └── nginx/           conf Nginx : sert la SPA et relaie /api vers l'API
 ├── backend/             Python 3.12 + FastAPI + SQLModel — l'API, un dossier par fonctionnalité, chacun avec
@@ -24,7 +24,7 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   ├── app/query/       test d'une requête (F3) : contrôles SQL, période testée, garde-fous
 │   ├── app/performance/ indicateurs de performance, historique des exécutions (F6, F7)
 │   ├── app/alerts/      alertes remontées et qualification par les analystes
-│   ├── app/audit/       journal d'audit, écriture et consultation (F8)
+│   ├── app/audit/       journal d'activité, écriture et consultation (F8)
 │   ├── app/bigquery/    tout l'accès BigQuery : contract.py (interface), real.py, fake.py (développement, tests)
 │   ├── app/models.py    réunit les tables de toutes les fonctionnalités (Alembic, tests)
 │   ├── migrations/      Alembic (PostgreSQL / Cloud SQL)
@@ -311,8 +311,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
     fréquence) ;
   - *En test* (code `OBSERVATION`) : Airflow l'exécute et écrit ses commandes dans `rule_alerts`, **sans les
     envoyer au prestataire** (`send_to_provider = false`). L'analyste **qualifie lui-même ses alertes** (fraude
-    ou pas, voir « Alertes et qualification ») : sa précision se mesure sur ces qualifications. Le test n'a pas
-    d'échéance ;
+    avérée, commande risquée ou RAS, voir « Alertes et qualification ») : sa pertinence se mesure sur ces
+    qualifications. Le test n'a pas d'échéance ;
   - *En production* : l'analyste a cliqué « Envoyer au prestataire » ; `send_to_provider` passe à vrai, et dès
     le run suivant le DAG marque ses commandes à transmettre (`to_send`) pour le script d'envoi. « Suspendre l'envoi » la ramène en test ;
   - *Écartée* : l'analyste a décidé de ne pas l'envoyer ; elle sort de `rules_registry` et la version
@@ -331,13 +331,13 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   - « Suspendre l'envoi » de la version en production : la candidate tourne alors seule, en test.
 
   Une règle sans version en production (encore en test) n'a pas de candidate : une nouvelle version
-  remplace simplement la précédente, puisque rien n'est envoyé. Les décisions sont tracées dans le journal d'audit
+  remplace simplement la précédente, puisque rien n'est envoyé. Les décisions sont tracées dans le journal d'activité
   (`RULE_SEND_TO_PROVIDER`, `RULE_SUSPEND_SENDING`, `RULE_DISCARD`) et peuvent être notifiées à l'équipe data pour information. Une table
   `rules_registry` existante reçoit la colonne par `infra/bigquery/tables/012_maj_rules_registry_send.sql`.
 
   **Brouillons personnels** : un brouillon est la sauvegarde de travail d'un analyste, stocké comme son profil
   dans la base de la plateforme (table `drafts`, rattachée à son matricule) et **visible de lui seul** : ni les
-  collègues, ni le journal d'audit (un test de brouillon y est tracé sans nommer la règle), ni BigQuery ne le
+  collègues, ni le journal d'activité (un test de brouillon y est tracé sans nommer la règle), ni BigQuery ne le
   voient. La table `rule_versions` ne contient que des versions publiées, et une règle n'entre dans le
   référentiel partagé qu'à sa première publication. Chacun peut préparer sa propre nouvelle version d'une règle
   (un brouillon par règle et par personne) ; la première publiée prend le numéro suivant, l'éditeur des autres
@@ -402,17 +402,24 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `rows_sent`, plus anciennes, ne sont plus écrites non plus (le script indique comment les supprimer).
 
   **Alertes et qualification** : la page **Alertes** (et l'onglet Alertes de la fiche d'une règle) liste les
-  commandes remontées, une ligne par commande et par version (`rule_alerts`), avec leurs détails, leur phase (en
-  test ou en production) et leur verdict. Une commande **transmise** est vérifiée par le prestataire (fraude,
-  pas une fraude, ou en attente). Une commande d'une version **en test** n'est pas transmise : l'analyste la
-  **qualifie** lui-même, fraude ou pas (un second clic retire la qualification). Il teste ainsi une règle,
+  commandes remontées, une ligne par commande et par version (`rule_alerts`), avec leurs détails et leur verdict.
+  On choisit d'abord la **phase** : règles en test ou règles en production. Les filtres suivants (règle, verdict)
+  ne proposent que des choix qui renvoient des alertes, avec leur nombre : l'API renvoie, avec la page, le
+  nombre d'alertes par phase (pour la règle choisie), par règle (dans la phase choisie) et par verdict (pour
+  les deux). Une commande **transmise** est vérifiée par le prestataire (fraude avérée, RAS, ou en attente) :
+  rien à qualifier. Seules les commandes d'une version **en test**, non transmises, se qualifient : l'analyste
+  choisit **fraude avérée**, **commande risquée** ou **RAS** (rien à signaler ; un second clic retire la
+  qualification). Il teste ainsi une règle,
   qualifie ses remontées, et la met en production s'il la juge assez pertinente ; le prestataire traite alors
   directement ses commandes. La qualification porte sur la **commande**, toutes règles confondues, et s'ajoute à
   la table BigQuery `alert_reviews` (une ligne par qualification, ajouts seulement, la dernière fait foi ;
-  `infra/bigquery/tables/004_alert_reviews.sql`), écrite par la plateforme seule ; chaque qualification est aussi tracée
-  dans le journal d'audit. Dans les chiffres d'une règle en test, une commande qualifiée compte comme vérifiée ;
-  si le prestataire l'a déjà vérifiée (transmise par une autre règle), son verdict reste prioritaire
-  (colonnes `verdict`, `is_verified`, `is_confirmed` de `v_rule_orders`, seule définition de la règle de verdict :
+  `infra/bigquery/tables/004_alert_reviews.sql`, colonne `verdict` : FRAUD, RISKY ou NOT_FRAUD), écrite par la
+  plateforme seule ; chaque qualification est aussi tracée dans le journal d'activité. Une table créée avec
+  l'ancienne qualification à deux niveaux (`is_fraud`) reçoit la colonne et y reprend son historique par
+  `tables/014_maj_alert_reviews_verdict.sql`. Dans les chiffres d'une règle en test, une commande qualifiée
+  compte comme vérifiée ; si le prestataire l'a déjà vérifiée (transmise par une autre règle), son verdict reste
+  prioritaire (colonnes `verdict`, `is_verified`, `is_confirmed`, `is_relevant` de `v_rule_orders`, seule
+  définition de la règle de verdict :
   `v_rule_performance` et la liste des alertes la lisent ; `tests/test_verdict.py` vérifie que la passerelle
   simulée de l'API la reproduit à l'identique).
 
@@ -435,15 +442,21 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   Il remplace l'ancien onglet « Tests » (l'historique des vérifications faites avant publication) et la
   section « Dernières exécutions » de l'onglet Performance.
 
-  **Graphique de la page règle** : un histogramme journalier sur une seule échelle, en nombre de commandes.
-  Une barre **par version** et par jour : la barre entière donne les commandes **remontées** (teinte claire,
-  **hachurée** quand la version est en test : avant sa mise en production, ou candidate à côté de la
-  version en production) ; superposée en bas, en couleur franche, la part **confirmée frauduleuse** par le
-  prestataire. On voit ainsi, barre par barre, combien de remontées sont de vraies fraudes ; la précision du jour
-  (confirmées ÷ vérifiées) s'affiche au survol. L'analyste affiche les remontées, les fraudes confirmées ou les
-  deux. Une candidate et la version en production se comparent côte à côte sur les mêmes jours. Les fraudes
-  confirmées viennent du prestataire pour une version en production, des qualifications des analystes pour une
-  version en test. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :
+  **Pertinence** : part des commandes vérifiées qui sont **pertinentes**, c'est-à-dire fraudes avérées ou
+  commandes risquées (`orders_relevant ÷ orders_processed`). En test, elle se mesure sur les qualifications des
+  analystes ; en production, le prestataire ne distingue que fraude ou non, et la pertinence y est la part de
+  fraudes. Elle remplace l'ancien taux de précision (fraudes seules) : page règle, comparatif des versions,
+  vue d'ensemble et page Surveillance, où une règle passe « à surveiller » sous un seuil réglable.
+
+  **Graphique de la page règle** : un histogramme journalier, en nombre de commandes. Une barre **par version**
+  et par jour : la barre entière donne les commandes **remontées** (teinte claire, **hachurée** quand la version
+  est en test : avant sa mise en production, ou candidate à côté de la version en production) ; superposée en
+  bas, en couleur franche, la part de **fraudes avérées**. On voit ainsi, barre par barre, combien de remontées
+  sont de vraies fraudes. En option, la **pertinence** du jour : une ligne par version, lue sur l'axe de droite
+  en pourcentage. Chacune des trois mesures s'affiche ou se masque (au moins une reste affichée). Une
+  candidate et la version en production se comparent côte à côte sur les mêmes jours. Les fraudes avérées
+  viennent du prestataire pour une version en production, des qualifications des analystes pour une version
+  en test. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :
   envoyées au prestataire, et remontées en test (ils ne s'additionnent pas, une commande pouvant être
   remontée par la version en production et par la candidate).
 
@@ -549,9 +562,9 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `order_date = DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY)`.
 - **Retour du prestataire** : on considère que le prestataire **traite toutes les commandes** qu'il reçoit ; il
   n'y a donc plus de taux de traitement. Une commande peut toutefois n'apparaître dans sa table de retour qu'un
-  peu plus tard : la **précision** porte sur les **commandes vérifiées**, déjà présentes dans cette table
-  (confirmées ÷ vérifiées), et les autres sont affichées **en attente de vérification** (page règle, comparatif
-  des versions, page Production). Dans les vues, une commande est vérifiée dès qu'elle figure dans la table de retour
+  peu plus tard : la **pertinence** porte sur les **commandes vérifiées**, déjà présentes dans cette table
+  (pertinentes ÷ vérifiées), et les autres sont affichées **en attente de vérification** (page règle, comparatif
+  des versions, page Surveillance). Dans les vues, une commande est vérifiée dès qu'elle figure dans la table de retour
   (`f.order_id IS NOT NULL`) : seules les colonnes `order_id` et `is_fraud` de cette table sont utilisées.
 - **Déploiement** : API en ingress interne sans IAM entre front et API (le contrôle d'accès est réseau, PRD F8).
   La topologie exacte (load balancer interne, routage `/api`) reste à arbitrer.

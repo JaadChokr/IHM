@@ -9,7 +9,7 @@ export function AlertsPage() {
       <div className="page-head">
         <div>
           <h1>Alertes</h1>
-          <p>Commandes remontées par les règles. Qualifiez celles des règles en test : fraude ou pas.</p>
+          <p>Commandes remontées par les règles. Qualifiez celles des règles en test : fraude avérée, commande risquée ou RAS.</p>
         </div>
       </div>
       <AlertsPanel />

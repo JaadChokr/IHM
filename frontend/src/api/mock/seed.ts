@@ -1,4 +1,4 @@
-import type { AuditEvent, RuleInput, RuleVersion, TestRecord, User } from '../types';
+import type { AuditEvent, ReviewVerdict, RuleInput, RuleVersion, TestRecord, User } from '../types';
 import { queryHash } from '../../lib/sql';
 
 export interface MockRule {
@@ -13,9 +13,9 @@ export interface MockRule {
   wasSent?: number[];
   productionUntil: Record<number, string>;
   /** Comportement simulé des indicateurs. */
-  profile?: { dailyVolume: number; processingRate: number; precision: number; brokenSinceDays?: number };
-  /** Variations par version (ex. une v2 au seuil plus strict : moins de volume, plus de précision). */
-  versionProfiles?: Record<number, { dailyVolume?: number; precision?: number }>;
+  profile?: { dailyVolume: number; processingRate: number; fraudRate: number; brokenSinceDays?: number };
+  /** Variations par version (ex. une v2 au seuil plus strict : moins de volume, plus de fraudes). */
+  versionProfiles?: Record<number, { dailyVolume?: number; fraudRate?: number }>;
 }
 
 /** Brouillon personnel stocké (comme la table `drafts`) : visible de son seul auteur. */
@@ -40,14 +40,14 @@ export interface MockDb {
 }
 
 export interface MockReview {
-  isFraud: boolean;
+  verdict: ReviewVerdict;
   by: string;
   at: string;
   ruleId: string;
   ruleVersion: number;
 }
 
-export const SCHEMA_VERSION = 19;
+export const SCHEMA_VERSION = 20;
 
 /** Marqueur : la version a tourné ; v() le remplace par le DAG de sa fréquence. */
 const dag = 'dag';
@@ -360,9 +360,9 @@ export function buildSeed(): MockDb {
       versions: [r1v1, r1v2, r1v3],
       productionSince: { 1: daysAgo(150).slice(0, 10), 2: daysAgo(92).slice(0, 10), 3: daysAgo(38).slice(0, 10) },
       productionUntil: { 1: daysAgo(93).slice(0, 10), 2: daysAgo(39).slice(0, 10) },
-      profile: { dailyVolume: 24, processingRate: 0.82, precision: 0.44 },
+      profile: { dailyVolume: 24, processingRate: 0.82, fraudRate: 0.44 },
       // Chaque version resserre la règle : moins de remontées, plus précises.
-      versionProfiles: { 1: { dailyVolume: 61, precision: 0.19 }, 2: { dailyVolume: 34, precision: 0.31 } },
+      versionProfiles: { 1: { dailyVolume: 61, fraudRate: 0.19 }, 2: { dailyVolume: 34, fraudRate: 0.31 } },
     },
     {
       ruleId: R2.id,
@@ -371,22 +371,22 @@ export function buildSeed(): MockDb {
       // Plus aucun run depuis 5 jours : la règle apparaît « inactive ».
       productionUntil: { 1: daysAgo(59).slice(0, 10), 2: daysAgo(5).slice(0, 10) },
       // v2 au seuil de 100 € : plus de volume, un peu moins précise.
-      profile: { dailyVolume: 22, processingRate: 0.9, precision: 0.47 },
-      versionProfiles: { 1: { dailyVolume: 14, precision: 0.58 } },
+      profile: { dailyVolume: 22, processingRate: 0.9, fraudRate: 0.47 },
+      versionProfiles: { 1: { dailyVolume: 14, fraudRate: 0.58 } },
     },
     {
       ruleId: R3.id,
       versions: [r3v1],
       productionSince: { 1: daysAgo(90).slice(0, 10) },
       productionUntil: {},
-      profile: { dailyVolume: 95, processingRate: 0.31, precision: 0.07 },
+      profile: { dailyVolume: 95, processingRate: 0.31, fraudRate: 0.07 },
     },
     {
       ruleId: R4.id,
       versions: [r4v1, r4v2],
       productionSince: { 1: daysAgo(135).slice(0, 10), 2: daysAgo(41).slice(0, 10) },
       productionUntil: { 1: daysAgo(42).slice(0, 10) },
-      profile: { dailyVolume: 6, processingRate: 0.95, precision: 0.71, brokenSinceDays: 42 },
+      profile: { dailyVolume: 6, processingRate: 0.95, fraudRate: 0.71, brokenSinceDays: 42 },
     },
     {
       // v1 en production, v2 soumise : Airflow la prendra au prochain run hebdomadaire.
@@ -394,7 +394,7 @@ export function buildSeed(): MockDb {
       versions: [r5v1, r5v2],
       productionSince: { 1: daysAgo(65).slice(0, 10) },
       productionUntil: {},
-      profile: { dailyVolume: 3, processingRate: 0.85, precision: 0.52 },
+      profile: { dailyVolume: 3, processingRate: 0.85, fraudRate: 0.52 },
     },
     {
       // En test depuis 9 jours : exécutée par Airflow, rien n'est envoyé au prestataire.
@@ -402,7 +402,7 @@ export function buildSeed(): MockDb {
       versions: [r6v1],
       productionSince: { 1: daysAgo(9).slice(0, 10) },
       productionUntil: {},
-      profile: { dailyVolume: 18, processingRate: 0.85, precision: 0.41 },
+      profile: { dailyVolume: 18, processingRate: 0.85, fraudRate: 0.41 },
     },
     { ruleId: R7.id, versions: [r7v1], productionSince: {}, productionUntil: {} },
     {
@@ -411,8 +411,8 @@ export function buildSeed(): MockDb {
       versions: [r9v1, r9v2],
       productionSince: { 1: daysAgo(80).slice(0, 10), 2: daysAgo(16).slice(0, 10) },
       productionUntil: {},
-      profile: { dailyVolume: 30, processingRate: 0.88, precision: 0.27 },
-      versionProfiles: { 2: { dailyVolume: 18, precision: 0.43 } },
+      profile: { dailyVolume: 30, processingRate: 0.88, fraudRate: 0.27 },
+      versionProfiles: { 2: { dailyVolume: 18, fraudRate: 0.43 } },
     },
   ];
 

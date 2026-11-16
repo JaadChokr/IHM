@@ -2,10 +2,12 @@
 
 import logging
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from app.bigquery.contract import (
+    AlertResult,
     AlertRow,
     DryRunMeta,
     ExecMeta,
@@ -129,6 +131,7 @@ class FakeBigQueryGateway:
                 orders_flagged=d.orders_flagged,
                 orders_processed=d.orders_processed,
                 orders_confirmed_fraud=d.orders_confirmed_fraud,
+                orders_relevant=d.orders_relevant,
             )
             for d in self.performance.get(rule_id, [])
             if start <= d.date <= end
@@ -147,6 +150,7 @@ class FakeBigQueryGateway:
                 orders_flagged=sum(d.orders_flagged for d in ds),
                 orders_processed=sum(d.orders_processed for d in ds),
                 orders_confirmed_fraud=sum(d.orders_confirmed_fraud for d in ds),
+                orders_relevant=sum(d.orders_relevant for d in ds),
             )
             for v, ds in sorted(by.items())
         ]
@@ -163,6 +167,7 @@ class FakeBigQueryGateway:
                     sum(x.orders_confirmed_fraud for x in d),
                     sum(x.orders_to_send for x in d),
                     sum(x.orders_flagged - x.orders_to_send for x in d),
+                    sum(x.orders_relevant for x in d),
                 )
             )
         return out
@@ -173,22 +178,18 @@ class FakeBigQueryGateway:
     # Alertes simulées (rule_alerts + retour prestataire), préremplies par les tests :
     # (AlertRow sans verdict ni qualification, la commande est-elle vérifiée par le prestataire ?).
     alert_rows: list[tuple[AlertRow, bool]] = field(default_factory=list)
-    # Qualifications (alert_reviews), dans l'ordre : (order_id, is_fraud, matricule, horodatage).
-    reviews: list[tuple[str, bool | None, str, datetime]] = field(default_factory=list)
+    # Qualifications (alert_reviews), dans l'ordre : (order_id, verdict, matricule, horodatage).
+    reviews: list[tuple[str, str | None, str, datetime]] = field(default_factory=list)
 
     def alerts(self, f):
         last = {o: (v, by, at) for o, v, by, at in self.reviews}
-        out = []
+        base = []
         for a, has_feedback in self.alert_rows:
-            if not (f.start <= a.run_date <= f.end) or (f.rule_id and a.rule_id != f.rule_id):
-                continue
-            if f.phase and a.to_send != (f.phase == "PRODUCTION"):
-                continue
-            if f.q and f.q not in a.order_id:
+            if not (f.start <= a.run_date <= f.end) or (f.q and f.q not in a.order_id):
                 continue
             review, by, at = last.get(a.order_id, (None, None, None))
             verdict = verdict_of(a.to_send, a.provider_is_fraud, has_feedback, review)
-            out.append(
+            base.append(
                 AlertRow(
                     a.order_id,
                     a.rule_id,
@@ -204,18 +205,35 @@ class FakeBigQueryGateway:
                     a.details,
                 )
             )
-        to_review = sum(x.verdict == "TO_REVIEW" for x in out)
-        out = [x for x in out if not f.verdict or x.verdict == f.verdict]
-        out.sort(key=lambda x: (x.detected_at, x.order_id), reverse=True)
-        return out[f.offset : f.offset + f.limit], len(out), to_review
 
-    def add_review(self, order_id, rule_id, version, is_fraud, by):
+        def rule_ok(x: AlertRow) -> bool:
+            return not f.rule_id or x.rule_id == f.rule_id
+
+        def phase_ok(x: AlertRow) -> bool:
+            return not f.phase or x.to_send == (f.phase == "PRODUCTION")
+
+        def count(rows, key) -> dict[str, int]:
+            return dict(Counter(key(x) for x in rows))
+
+        chosen = [x for x in base if rule_ok(x) and phase_ok(x)]
+        out = [x for x in chosen if not f.verdict or x.verdict == f.verdict]
+        out.sort(key=lambda x: (x.detected_at, x.order_id), reverse=True)
+        return AlertResult(
+            items=out[f.offset : f.offset + f.limit],
+            total=len(out),
+            to_review=sum(rule_ok(x) and x.verdict == "TO_REVIEW" for x in base),
+            phases=count([x for x in base if rule_ok(x)], lambda x: "PRODUCTION" if x.to_send else "TEST"),
+            rules=count([x for x in base if phase_ok(x)], lambda x: x.rule_id),
+            verdicts=count(chosen, lambda x: x.verdict),
+        )
+
+    def add_review(self, order_id, rule_id, version, verdict, by):
         ok = any(
             a.order_id == order_id and a.rule_id == rule_id and a.rule_version == version and not a.to_send
             for a, _ in self.alert_rows
         )
         if ok:
-            self.reviews.append((order_id, is_fraud, by, datetime.now(UTC)))
+            self.reviews.append((order_id, verdict, by, datetime.now(UTC)))
         return ok
 
     def set_registry(self, rule, rows):

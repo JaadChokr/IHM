@@ -4,7 +4,7 @@ import { api } from '../api/client';
 import { RULE_STATUSES, type RuleFilters, type RuleStatus } from '../api/types';
 import { readyToSubmit } from '../lib/drafts';
 import { Alert, Spinner, StatusBadge } from '../components/ui';
-import { ACTION_LABEL } from './AuditPage';
+import { ACTION_LABEL } from './ActivityPage';
 import { fmtDate, fmtDateTime, fmtInt, fmtPct } from '../lib/format';
 import { DEFAULT_WATCH_THRESHOLD, productionHealth, type ProductionHealth } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
@@ -32,10 +32,10 @@ export function OverviewPage() {
   const prod = useAsync(() => api.getConsolidated(), []);
   const audit = useAsync(() => api.listAudit({}), []);
   const drafts = useAsync(() => api.listDrafts(), []);
-  const threshold = readPref<number>('watchPrecisionThreshold', DEFAULT_WATCH_THRESHOLD);
+  const threshold = readPref<number>('watchRelevanceThreshold', DEFAULT_WATCH_THRESHOLD);
 
   const health = useMemo(
-    () => (prod.data ?? []).map((r) => productionHealth(r, threshold)).sort((a, b) => (a.precision ?? -1) - (b.precision ?? -1)),
+    () => (prod.data ?? []).map((r) => productionHealth(r, threshold)).sort((a, b) => (a.relevance ?? -1) - (b.relevance ?? -1)),
     [prod.data, threshold],
   );
 
@@ -83,10 +83,10 @@ export function OverviewPage() {
               {count('SUBMITTED') > 0 && ` · ${count('SUBMITTED')} publiée${count('SUBMITTED') > 1 ? 's' : ''} en attente de première exécution`}
             </span>
           </button>
-          <Link to="/production" className="card kpi kpi-link">
+          <Link to="/surveillance" className="card kpi kpi-link">
             <span className="kpi-label">À surveiller</span>
             <span className="kpi-value">{prod.data ? fmtInt(watch.length) : '…'}</span>
-            <span className="kpi-sub">Précision sous {fmtPct(threshold)}, aucune remontée sur 30 jours ou exécution arrêtée</span>
+            <span className="kpi-sub">Pertinence sous {fmtPct(threshold)}, aucune remontée sur 30 jours ou exécution arrêtée</span>
             {watch.length > 0 && <span className="kpi-flag">⚠ Action requise</span>}
           </Link>
           <Link to="/drafts" className="card kpi kpi-link">
@@ -99,11 +99,11 @@ export function OverviewPage() {
         </div>
 
         <div className="overview-row">
-          <section className="card" aria-labelledby="ov-precision">
+          <section className="card" aria-labelledby="ov-relevance">
             <div className="card-head">
               <div>
-                <h2 id="ov-precision">Précision des règles en production</h2>
-                <p>30 derniers jours · confirmées frauduleuses ÷ commandes vérifiées · la moins précise en premier</p>
+                <h2 id="ov-relevance">Pertinence des règles en production</h2>
+                <p>30 derniers jours · fraudes avérées et commandes risquées ÷ commandes vérifiées · la moins pertinente en premier</p>
               </div>
             </div>
             <div className="card-pad card-body centered">
@@ -114,10 +114,10 @@ export function OverviewPage() {
               ) : health.length === 0 ? (
                 <div className="empty">Aucune règle en production.</div>
               ) : (
-                <PrecisionBars rows={health.filter((h) => h.status !== 'OBSERVATION')} threshold={threshold} />
+                <RelevanceBars rows={health.filter((h) => h.status !== 'OBSERVATION')} threshold={threshold} />
               )}
             </div>
-            <CardFoot to="/production">Voir la vue production</CardFoot>
+            <CardFoot to="/surveillance">Voir la surveillance des règles</CardFoot>
           </section>
 
           <section className="card" aria-labelledby="ov-lifecycle">
@@ -169,7 +169,7 @@ export function OverviewPage() {
                 ))}
               </ul>
             )}
-            <CardFoot to="/production">{watch.length > LIST_MAX ? `Voir les ${watch.length} règles à surveiller` : 'Voir la vue production'}</CardFoot>
+            <CardFoot to="/surveillance">{watch.length > LIST_MAX ? `Voir les ${watch.length} règles à surveiller` : 'Voir la surveillance des règles'}</CardFoot>
           </section>
 
           {/* Masquée sans brouillon : les cartes restantes se partagent la largeur. */}
@@ -225,7 +225,7 @@ export function OverviewPage() {
                 ))}
               </ul>
             )}
-            <CardFoot to="/audit">Tout le journal d'audit</CardFoot>
+            <CardFoot to="/journal">Tout le journal d'activité</CardFoot>
           </section>
         </div>
       </div>
@@ -234,32 +234,32 @@ export function OverviewPage() {
 }
 
 /** Une barre par règle, échelle 0–100 %, seuil « à surveiller » en repère. Jamais de total : les règles ne s'additionnent pas. */
-function PrecisionBars({ rows, threshold }: { rows: ProductionHealth[]; threshold: number }) {
+function RelevanceBars({ rows, threshold }: { rows: ProductionHealth[]; threshold: number }) {
   return (
-    <div className="pbars" role="table" aria-label="Taux de précision par règle en production">
+    <div className="pbars" role="table" aria-label="Pertinence par règle en production">
       {rows.map((r) => {
         const label =
-          r.precision === null
+          r.relevance === null
             ? r.ordersFlagged30d === 0
               ? 'Aucune remontée'
               : 'Aucune commande traitée'
-            : `${fmtPct(r.precision)} — ${fmtInt(r.ordersConfirmed30d)} confirmées / ${fmtInt(r.ordersProcessed30d)} vérifiées`;
+            : `${fmtPct(r.relevance)} — ${fmtInt(r.ordersRelevant30d)} pertinentes / ${fmtInt(r.ordersProcessed30d)} vérifiées`;
         return (
           <div className="pbar-row" role="row" key={r.ruleId}>
             <Link to={`/rules/${r.ruleId}`} className="pbar-name" role="rowheader" title={r.name}>
               {r.name}
             </Link>
             <div className="pbar-track" role="cell" title={label}>
-              {r.precision !== null && (
-                <span className="pbar-fill" style={{ width: `${Math.max(r.precision * 100, 0.5)}%` }} />
+              {r.relevance !== null && (
+                <span className="pbar-fill" style={{ width: `${Math.max(r.relevance * 100, 0.5)}%` }} />
               )}
               <span className="pbar-threshold" style={{ left: `${threshold * 100}%` }} aria-hidden="true" />
             </div>
             <span className="pbar-value" role="cell">
-              {r.precision === null ? (
+              {r.relevance === null ? (
                 <span className="text-bad">{label}</span>
               ) : (
-                <strong>{fmtPct(r.precision)}</strong>
+                <strong>{fmtPct(r.relevance)}</strong>
               )}
             </span>
           </div>

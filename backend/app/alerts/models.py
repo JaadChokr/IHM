@@ -10,13 +10,17 @@ from app.core.models import Model
 # ---------------------------------------------------------------------------
 AlertPhase = Literal["TEST", "PRODUCTION"]
 
-# Verdict effectif d'une alerte : celui du prestataire s'il l'a vérifiée ; sinon, en test, la qualification
-# de l'analyste (TO_REVIEW tant qu'il n'y en a pas) ; en production, en attente du prestataire (PENDING).
-AlertVerdict = Literal["FRAUD", "NOT_FRAUD", "TO_REVIEW", "PENDING"]
+# Qualification d'une commande en test par un analyste : fraude avérée, commande risquée ou RAS.
+ReviewVerdict = Literal["FRAUD", "RISKY", "NOT_FRAUD"]
+
+# Verdict effectif d'une alerte : celui du prestataire s'il l'a vérifiée (FRAUD ou NOT_FRAUD) ; sinon, en
+# test, la qualification de l'analyste (TO_REVIEW tant qu'il n'y en a pas) ; en production, en attente du
+# prestataire (PENDING).
+AlertVerdict = Literal["FRAUD", "RISKY", "NOT_FRAUD", "TO_REVIEW", "PENDING"]
 
 
 class AlertReviewOut(Model):
-    is_fraud: bool
+    verdict: ReviewVerdict
     by_matricule: str
     by_name: str
     at: datetime
@@ -38,16 +42,41 @@ class AlertOut(Model):
     details: dict[str, Any] | None = None
 
 
+class PhaseCount(Model):
+    phase: AlertPhase
+    count: int
+
+
+class RuleCount(Model):
+    rule_id: str
+    rule_name: str
+    count: int
+
+
+class VerdictCount(Model):
+    verdict: AlertVerdict
+    count: int
+
+
 class AlertPage(Model):
+    """Une page d'alertes, et les nombres qui guident les filtres (sur la période et la recherche) : on ne
+    propose que des choix qui renvoient des alertes."""
+
     items: list[AlertOut]
     total: int
-    # Alertes en test pas encore qualifiées, avec les mêmes filtres (hors filtre de verdict).
+    # Alertes en test pas encore qualifiées, pour la règle choisie.
     to_review: int
+    # Alertes par phase, pour la règle choisie.
+    phases: list[PhaseCount] = []
+    # Alertes par règle, dans la phase choisie (les plus nombreuses d'abord).
+    rules: list[RuleCount] = []
+    # Alertes par verdict, pour la règle et la phase choisies.
+    verdicts: list[VerdictCount] = []
 
 
 class AlertReviewIn(Model):
     order_id: str
     rule_id: str
     rule_version: int
-    # Vrai : fraude ; faux : pas une fraude ; None : retirer la qualification.
-    is_fraud: bool | None
+    # Fraude avérée, commande risquée ou RAS ; None : retirer la qualification.
+    verdict: ReviewVerdict | None

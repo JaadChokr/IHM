@@ -6,7 +6,7 @@ import time
 from typing import Any
 
 from app.bigquery.contract import (
-    AlertFilter,
+    AlertResult,
     AlertRow,
     BytesLimitExceeded,
     DryRunMeta,
@@ -124,7 +124,8 @@ class RealBigQueryGateway:
             f"""SELECT run_date, MAX(rule_version) AS rule_version,
                        COUNT(DISTINCT order_id) AS orders_flagged,
                        COUNT(DISTINCT IF(is_verified, order_id, NULL)) AS orders_processed,
-                       COUNT(DISTINCT IF(is_confirmed, order_id, NULL)) AS orders_confirmed_fraud
+                       COUNT(DISTINCT IF(is_confirmed, order_id, NULL)) AS orders_confirmed_fraud,
+                       COUNT(DISTINCT IF(is_relevant, order_id, NULL)) AS orders_relevant
                 FROM {self.ds}.v_rule_orders
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end AND to_send = @sent
                 GROUP BY run_date
@@ -144,6 +145,7 @@ class RealBigQueryGateway:
                 orders_to_send=r["orders_flagged"] if sent else 0,
                 orders_processed=r["orders_processed"],
                 orders_confirmed_fraud=r["orders_confirmed_fraud"],
+                orders_relevant=r["orders_relevant"],
             )
             for r in rows
         ]
@@ -154,7 +156,8 @@ class RealBigQueryGateway:
             f"""SELECT run_date, rule_version, to_send,
                        COUNT(DISTINCT order_id) AS orders_flagged,
                        COUNT(DISTINCT IF(is_verified, order_id, NULL)) AS orders_processed,
-                       COUNT(DISTINCT IF(is_confirmed, order_id, NULL)) AS orders_confirmed_fraud
+                       COUNT(DISTINCT IF(is_confirmed, order_id, NULL)) AS orders_confirmed_fraud,
+                       COUNT(DISTINCT IF(is_relevant, order_id, NULL)) AS orders_relevant
                 FROM {self.ds}.v_rule_orders
                 WHERE rule_id = @rule_id AND run_date BETWEEN @start AND @end
                 GROUP BY run_date, rule_version, to_send
@@ -168,7 +171,8 @@ class RealBigQueryGateway:
             f"""SELECT rule_version AS version, MIN(run_date) AS first_date, MAX(run_date) AS last_date,
                        COUNT(*) AS days, SUM(orders_flagged) AS orders_flagged,
                        SUM(orders_processed) AS orders_processed,
-                       SUM(orders_confirmed_fraud) AS orders_confirmed_fraud
+                       SUM(orders_confirmed_fraud) AS orders_confirmed_fraud,
+                       SUM(orders_relevant) AS orders_relevant
                 FROM {self.ds}.v_rule_performance
                 WHERE rule_id = @rule_id
                 GROUP BY rule_version
@@ -207,6 +211,7 @@ class RealBigQueryGateway:
                        COUNT(DISTINCT IF(kept, order_id, NULL)) AS flagged,
                        COUNT(DISTINCT IF(kept AND is_verified, order_id, NULL)) AS processed,
                        COUNT(DISTINCT IF(kept AND is_confirmed, order_id, NULL)) AS confirmed,
+                       COUNT(DISTINCT IF(kept AND is_relevant, order_id, NULL)) AS relevant,
                        COUNT(DISTINCT IF(to_send, order_id, NULL)) AS to_send,
                        COUNT(DISTINCT IF(NOT to_send, order_id, NULL)) AS observed
                 FROM (
@@ -231,6 +236,7 @@ class RealBigQueryGateway:
                 r["confirmed"] or 0,
                 r["to_send"] or 0,
                 r["observed"] or 0,
+                r["relevant"] or 0,
             )
             for r in rows
         ]
@@ -251,25 +257,39 @@ class RealBigQueryGateway:
     def alerts(self, f):
         P = self._bq.ScalarQueryParameter
         # Verdict, retour du prestataire et qualification : calculés par la vue v_rule_orders, seule
-        # définition de la règle de verdict.
+        # définition de la règle de verdict. Une seule requête, une seule ligne : la page d'alertes et les
+        # nombres qui guident les filtres (par phase pour la règle choisie, par règle dans la phase choisie,
+        # par verdict pour les deux).
         sql = f"""
-            WITH filtered AS (
+            WITH base AS (
               SELECT order_id, rule_id, rule_version, run_date, detected_at, to_send,
                      TO_JSON_STRING(details) AS details, has_feedback, is_fraud AS provider_is_fraud,
-                     review_is_fraud, reviewed_by, reviewed_at, verdict
+                     review_verdict, reviewed_by, reviewed_at, verdict,
+                     (@rule_id IS NULL OR rule_id = @rule_id) AS rule_ok,
+                     (@phase IS NULL OR to_send = (@phase = 'PRODUCTION')) AS phase_ok
               FROM {self.ds}.v_rule_orders
               WHERE run_date BETWEEN @start AND @end
-                AND (@rule_id IS NULL OR rule_id = @rule_id)
-                AND (@phase IS NULL OR to_send = (@phase = 'PRODUCTION'))
                 AND (@q IS NULL OR STRPOS(order_id, @q) > 0)
             ),
-            counted AS (SELECT *, COUNTIF(verdict = 'TO_REVIEW') OVER () AS to_review FROM filtered)
-            SELECT *, COUNT(*) OVER () AS total
-            FROM counted
-            WHERE @verdict IS NULL OR verdict = @verdict
-            ORDER BY detected_at DESC, order_id
-            LIMIT @limit OFFSET @offset"""
-        rows = self._rows(
+            chosen AS (SELECT * FROM base WHERE rule_ok AND phase_ok),
+            listed AS (SELECT * FROM chosen WHERE @verdict IS NULL OR verdict = @verdict)
+            SELECT
+              ARRAY(
+                SELECT AS STRUCT * EXCEPT (rule_ok, phase_ok) FROM listed
+                ORDER BY detected_at DESC, order_id
+                LIMIT @limit OFFSET @offset
+              ) AS items,
+              (SELECT COUNT(*) FROM listed) AS total,
+              (SELECT COUNTIF(verdict = 'TO_REVIEW') FROM base WHERE rule_ok) AS to_review,
+              ARRAY(
+                SELECT AS STRUCT IF(to_send, 'PRODUCTION', 'TEST') AS k, COUNT(*) AS n
+                FROM base WHERE rule_ok GROUP BY k
+              ) AS phases,
+              ARRAY(
+                SELECT AS STRUCT rule_id AS k, COUNT(*) AS n FROM base WHERE phase_ok GROUP BY k
+              ) AS rules,
+              ARRAY(SELECT AS STRUCT verdict AS k, COUNT(*) AS n FROM chosen GROUP BY k) AS verdicts"""
+        (row,) = self._rows(
             sql,
             [
                 P("start", "DATE", f.start),
@@ -281,11 +301,7 @@ class RealBigQueryGateway:
                 P("limit", "INT64", f.limit),
                 P("offset", "INT64", f.offset),
             ],
-        )
-        if not rows and f.offset:
-            # Au-delà de la dernière page : totaux recomptés sur la première.
-            _, total, to_review = self.alerts(AlertFilter(**{**f.__dict__, "limit": 1, "offset": 0}))
-            return [], total, to_review
+        ) or [{}]
         items = [
             AlertRow(
                 order_id=r["order_id"],
@@ -296,23 +312,34 @@ class RealBigQueryGateway:
                 to_send=r["to_send"],
                 verdict=r["verdict"],
                 provider_is_fraud=r["provider_is_fraud"] if r["has_feedback"] else None,
-                review_is_fraud=r["review_is_fraud"],
+                review_verdict=r["review_verdict"],
                 reviewed_by=r["reviewed_by"],
                 reviewed_at=r["reviewed_at"],
                 details=json.loads(r["details"]) if r["details"] else None,
             )
-            for r in rows
+            for r in row.get("items") or []
         ]
-        return items, (rows[0]["total"] if rows else 0), (rows[0]["to_review"] if rows else 0)
 
-    def add_review(self, order_id, rule_id, version, is_fraud, by):
+        def counts(key: str) -> dict[str, int]:
+            return {c["k"]: c["n"] for c in row.get(key) or []}
+
+        return AlertResult(
+            items=items,
+            total=row.get("total") or 0,
+            to_review=row.get("to_review") or 0,
+            phases=counts("phases"),
+            rules=counts("rules"),
+            verdicts=counts("verdicts"),
+        )
+
+    def add_review(self, order_id, rule_id, version, verdict, by):
         P = self._bq.ScalarQueryParameter
         # Ajout seulement, et seulement pour une alerte en test de cette version (non transmise au
         # prestataire) : une commande transmise est vérifiée par le prestataire.
         sql = f"""
             INSERT INTO {self.ds}.alert_reviews
-              (order_id, is_fraud, reviewed_by, reviewed_at, rule_id, rule_version)
-            SELECT @order_id, @is_fraud, @by, CURRENT_TIMESTAMP(), @rule_id, @version
+              (order_id, verdict, reviewed_by, reviewed_at, rule_id, rule_version)
+            SELECT @order_id, @verdict, @by, CURRENT_TIMESTAMP(), @rule_id, @version
             FROM UNNEST([1])
             WHERE EXISTS (
               SELECT 1 FROM {self.ds}.rule_alerts
@@ -321,7 +348,7 @@ class RealBigQueryGateway:
             )"""
         params = [
             P("order_id", "STRING", order_id),
-            P("is_fraud", "BOOL", is_fraud),
+            P("verdict", "STRING", verdict),
             P("by", "STRING", by),
             P("rule_id", "STRING", rule_id),
             P("version", "INT64", version),

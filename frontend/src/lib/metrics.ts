@@ -1,24 +1,43 @@
 import type { ConsolidatedRow, DailyPerformance } from '../api/types';
 import { fmtDate, fmtPct } from './format';
 
-/** Le prestataire vérifie toutes les commandes qu'il reçoit ; la précision porte sur les commandes vérifiées. */
+/**
+ * Pertinence d'une règle : part des commandes vérifiées qui sont pertinentes, c'est-à-dire fraudes avérées
+ * ou commandes risquées. En production, le prestataire ne distingue que fraude ou non : la pertinence y est
+ * la part de fraudes. En test, les analystes qualifient en trois niveaux (fraude avérée, risquée, RAS).
+ */
 export interface Totals {
   flagged: number;
-  /** Vérifiées : présentes dans la table de retour du prestataire. */
+  /** Vérifiées : par le prestataire (table de retour) ou qualifiées par un analyste (en test). */
   processed: number;
-  /** En attente de vérification : remontées mais pas encore dans la table de retour. */
+  /** En attente : remontées mais pas encore vérifiées ni qualifiées. */
   pending: number;
+  /** Fraudes avérées. */
   confirmed: number;
-  precision: number | null;
+  /** Pertinentes : fraudes avérées et commandes risquées. */
+  relevant: number;
+  relevance: number | null;
 }
 
-/** Totaux de jours ou de périodes : seuls les trois compteurs servent. */
-export function totals(rows: Pick<DailyPerformance, 'ordersFlagged' | 'ordersProcessed' | 'ordersConfirmedFraud'>[]): Totals {
-  const flagged = rows.reduce((s, r) => s + r.ordersFlagged, 0);
-  const processed = rows.reduce((s, r) => s + r.ordersProcessed, 0);
-  const confirmed = rows.reduce((s, r) => s + r.ordersConfirmedFraud, 0);
-  const precision = processed > 0 ? confirmed / processed : null;
-  return { flagged, processed, pending: Math.max(0, flagged - processed), confirmed, precision };
+export type Counts = Pick<DailyPerformance, 'ordersFlagged' | 'ordersProcessed' | 'ordersConfirmedFraud' | 'ordersRelevant'>;
+
+/** Pertinence d'un nombre de commandes pertinentes sur un nombre de vérifiées (null : aucune vérifiée). */
+export const relevanceOf = (relevant: number, processed: number) => (processed > 0 ? relevant / processed : null);
+
+/** Totaux de jours ou de périodes : seuls les quatre compteurs servent. */
+export function totals(rows: Counts[]): Totals {
+  const sum = (k: keyof Counts) => rows.reduce((s, r) => s + r[k], 0);
+  const flagged = sum('ordersFlagged');
+  const processed = sum('ordersProcessed');
+  const relevant = sum('ordersRelevant');
+  return {
+    flagged,
+    processed,
+    pending: Math.max(0, flagged - processed),
+    confirmed: sum('ordersConfirmedFraud'),
+    relevant,
+    relevance: relevanceOf(relevant, processed),
+  };
 }
 
 /** Variation relative (comptages) ou absolue en points (taux). */
@@ -28,13 +47,13 @@ export function delta(cur: number | null, prev: number | null, kind: 'relative' 
   return prev === 0 ? null : (cur - prev) / prev;
 }
 
-/** Seuil de précision « à surveiller » par défaut, réglable dans la vue production (PRD F7). */
+/** Seuil de pertinence « à surveiller » par défaut, réglable dans la page Surveillance (PRD F7). */
 export const DEFAULT_WATCH_THRESHOLD = 0.15;
 
 export interface ProductionHealth extends ConsolidatedRow {
   /** Remontées sur 30 jours en attente de vérification (pas encore dans la table de retour). */
   pending: number;
-  precision: number | null;
+  relevance: number | null;
   /** Raisons de surveiller la règle ; vide si tout va bien. */
   reasons: string[];
 }
@@ -42,13 +61,13 @@ export interface ProductionHealth extends ConsolidatedRow {
 /** Indicateurs sur 30 jours d'une règle en production et motifs de surveillance (PRD F7). */
 export function productionHealth(r: ConsolidatedRow, threshold: number): ProductionHealth {
   const pending = Math.max(0, r.ordersFlagged30d - r.ordersProcessed30d);
-  const precision = r.ordersProcessed30d ? r.ordersConfirmed30d / r.ordersProcessed30d : null;
+  const relevance = relevanceOf(r.ordersRelevant30d, r.ordersProcessed30d);
   const reasons: string[] = [];
   if (r.status === 'INACTIVE')
     reasons.push(`Plus exécutée par Airflow${r.lastRunAt ? ` depuis le ${fmtDate(r.lastRunAt)}` : ''} — DAG arrêté ou en panne`);
   if (r.ordersFlagged30d === 0) reasons.push('Aucune remontée sur 30 jours — règle probablement cassée');
-  // En test, rien n'est envoyé au prestataire : la précision n'est pas significative.
-  if (r.status !== 'OBSERVATION' && precision !== null && precision < threshold)
-    reasons.push(`Précision sous le seuil de ${fmtPct(threshold)}`);
-  return { ...r, pending, precision, reasons };
+  // En test, rien n'est envoyé au prestataire : la pertinence se mesure, mais ne déclenche pas de surveillance.
+  if (r.status !== 'OBSERVATION' && relevance !== null && relevance < threshold)
+    reasons.push(`Pertinence sous le seuil de ${fmtPct(threshold)}`);
+  return { ...r, pending, relevance, reasons };
 }

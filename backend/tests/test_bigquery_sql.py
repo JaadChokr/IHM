@@ -78,12 +78,15 @@ def test_alertes_et_qualifications_sql_valide():
     g._rows = lambda sql, params: seen.append(sql) or []
     g.client = SimpleNamespace(query=lambda sql, job_config=None: seen.append(sql) or Job())
     g.alerts(AlertFilter(date(2026, 11, 1), date(2026, 11, 7), verdict="TO_REVIEW"))
-    assert g.add_review("O1", "r", 2, True, "104233") is True
+    assert g.add_review("O1", "r", 2, "RISKY", "104233") is True
     listing, insert = seen
     # Le verdict vient de la vue v_rule_orders : la requête ne le recalcule pas.
-    assert "COUNTIF(verdict = 'TO_REVIEW') OVER () AS to_review" in listing
+    assert "COUNTIF(verdict = 'TO_REVIEW')" in listing
+    # Une seule requête : la page et les nombres qui guident les filtres.
+    assert all(f"AS {k}" in listing for k in ("items", "total", "phases", "rules", "verdicts"))
     assert "`p.d`.v_rule_orders" in listing
     assert "CASE" not in listing and "alert_reviews" not in listing
     assert "INSERT INTO `p.d`.alert_reviews" in insert and "NOT IFNULL(to_send, FALSE)" in insert
+    assert "(order_id, verdict," in insert
     for sql in seen:
         sqlglot.parse_one(re.sub(r"@\w+", "NULL", sql), read="bigquery")

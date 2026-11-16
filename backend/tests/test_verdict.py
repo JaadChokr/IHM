@@ -24,11 +24,11 @@ def _verdict_case() -> str:
 
 def test_verdict_identique_dans_la_vue_et_la_simulation():
     db = sqlite3.connect(":memory:")
-    row = "SELECT ? AS to_send, ? AS has_feedback, ? AS is_fraud, ? AS review_is_fraud"
+    row = "SELECT ? AS to_send, ? AS has_feedback, ? AS is_fraud, ? AS review_verdict"
     query = f"SELECT {_verdict_case()} FROM ({row})"
     cases = 0
     for to_send, has_feedback, provider, review in itertools.product(
-        (False, True), (False, True), (None, False, True), (None, False, True)
+        (False, True), (False, True), (None, False, True), (None, "FRAUD", "RISKY", "NOT_FRAUD")
     ):
         if not has_feedback and provider is not None:
             continue  # pas de verdict du prestataire sans retour
@@ -40,4 +40,4 @@ def test_verdict_identique_dans_la_vue_et_la_simulation():
             review,
         )
         cases += 1
-    assert cases == 24
+    assert cases == 32

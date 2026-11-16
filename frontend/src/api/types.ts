@@ -48,13 +48,18 @@ export type AuditAction = AuditEvent['action'];
 export type Alert = Schemas['AlertOut'];
 export type AlertReview = Schemas['AlertReviewOut'];
 export type AlertPage = Schemas['AlertPage'];
+/** Qualification d'une commande en test : sa dernière version (None : la retirer). */
+export type AlertReviewIn = Schemas['AlertReviewIn'];
 /** Phase de la version qui a remonté la commande : en test (non transmise) ou en production (transmise). */
 export type AlertPhase = Alert['phase'];
 /**
- * Verdict effectif d'une alerte : celui du prestataire s'il l'a vérifiée ; sinon, en test, la qualification
- * de l'analyste (TO_REVIEW tant qu'il n'y en a pas) ; en production, en attente du prestataire (PENDING).
+ * Verdict effectif d'une alerte : celui du prestataire s'il l'a vérifiée (FRAUD, NOT_FRAUD) ; sinon, en test,
+ * la qualification de l'analyste (TO_REVIEW tant qu'il n'y en a pas) ; en production, en attente du
+ * prestataire (PENDING).
  */
 export type AlertVerdict = Alert['verdict'];
+/** Qualification d'une commande en test : fraude avérée, commande risquée ou RAS. */
+export type ReviewVerdict = AlertReview['verdict'];
 /** Action de l'analyste sur la dernière version d'une règle. */
 export type DecisionAction = Schemas['DecisionIn']['action'];
 

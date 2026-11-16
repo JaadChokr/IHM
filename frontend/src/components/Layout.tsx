@@ -77,13 +77,13 @@ export function Layout() {
           <span className="nav-section">Pilotage</span>
           <NavItem to="/" end icon={<IconHome />} label="Vue d'ensemble" />
           <NavItem to="/alerts" icon={<IconAlert />} label="Alertes" />
-          <NavItem to="/production" icon={<IconChart />} label="Production" />
+          <NavItem to="/surveillance" icon={<IconChart />} label="Surveillance" />
           <span className="nav-section">Règles</span>
           {/* Sans `end` : reste active sur la fiche, la modification et la création d'une règle. */}
           <NavItem to="/rules" icon={<IconRules />} label="Toutes les règles" />
           <NavItem to="/drafts" icon={<IconDraft />} label="Mes brouillons" />
           <span className="nav-section">Suivi</span>
-          <NavItem to="/audit" icon={<IconAudit />} label="Journal d'audit" />
+          <NavItem to="/journal" icon={<IconAudit />} label="Journal d'activité" />
         </nav>
         {API_MODE === 'mock' && (
           <div className="sidebar-demo nav-label" role="note">

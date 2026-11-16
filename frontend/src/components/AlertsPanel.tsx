@@ -1,19 +1,34 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import type { Alert, AlertFilters, AlertPage, AlertPhase, AlertVerdict, RuleSummary } from '../api/types';
+import type { Alert, AlertFilters, AlertPage, AlertPhase, AlertVerdict, ReviewVerdict } from '../api/types';
 import { addDays, fmtDateTime, fmtInt, isoDate } from '../lib/format';
 import { usePref } from '../prefs/prefs';
 import { Pager } from './Pager';
 import { Alert as Notice, Card, InfoTip, Spinner } from './ui';
 
 export const VERDICT_LABEL: Record<AlertVerdict, string> = {
-  FRAUD: 'Fraude',
-  NOT_FRAUD: 'Pas une fraude',
+  FRAUD: 'Fraude avérée',
+  RISKY: 'Commande risquée',
+  NOT_FRAUD: 'RAS',
   TO_REVIEW: 'À qualifier',
-  PENDING: 'En attente',
+  PENDING: 'En attente du prestataire',
 };
-const PHASE_LABEL: Record<AlertPhase, string> = { TEST: 'En test', PRODUCTION: 'En production' };
+/** Les trois qualifications possibles d'une commande en test, dans l'ordre des boutons. */
+const REVIEW_CHOICES: { verdict: ReviewVerdict; label: string }[] = [
+  { verdict: 'FRAUD', label: 'Fraude avérée' },
+  { verdict: 'RISKY', label: 'Risquée' },
+  { verdict: 'NOT_FRAUD', label: 'RAS' },
+];
+/** Verdicts possibles dans chaque phase : en test, ceux des analystes ; en production, ceux du prestataire. */
+const PHASE_VERDICTS: Record<AlertPhase, AlertVerdict[]> = {
+  TEST: ['TO_REVIEW', 'FRAUD', 'RISKY', 'NOT_FRAUD'],
+  PRODUCTION: ['PENDING', 'FRAUD', 'NOT_FRAUD'],
+};
+const PHASES: { phase: AlertPhase; label: string; ofRule: string; hint: string }[] = [
+  { phase: 'TEST', label: 'Règles en test', ofRule: 'En test', hint: 'Commandes non transmises au prestataire : à qualifier par les analystes.' },
+  { phase: 'PRODUCTION', label: 'Règles en production', ofRule: 'En production', hint: 'Commandes transmises au prestataire, qui rend le verdict.' },
+];
 const PERIODS = [7, 30, 90] as const;
 
 /** Autres colonnes renvoyées par la règle, en une ligne lisible : « montant_eur : 1 240 · pays : NG ». */
@@ -24,12 +39,9 @@ function detailsText(d: Alert['details']): string {
     .join(' · ');
 }
 
-/** Qui a donné le verdict : le prestataire, ou l'analyste qui a qualifié la commande. */
-function verdictSource(a: Alert): string | undefined {
-  if (a.providerIsFraud !== null && a.providerIsFraud !== undefined) return 'selon le prestataire';
-  if (a.review) return `${a.review.byName}, ${fmtDateTime(a.review.at)}`;
-  return undefined;
-}
+/** Nombre d'alertes d'une phase, ou d'un verdict, dans une page (0 si absent). */
+const phaseCountIn = (d: AlertPage | undefined, p: AlertPhase) => d?.phases.find((c) => c.phase === p)?.count ?? 0;
+const verdictCountIn = (d: AlertPage | undefined, v: AlertVerdict) => d?.verdicts.find((c) => c.verdict === v)?.count ?? 0;
 
 interface Props {
   /** Alertes d'une seule règle (onglet de la fiche) ; sans : toutes les règles, avec un filtre par règle. */
@@ -37,14 +49,16 @@ interface Props {
 }
 
 /**
- * Alertes remontées par les règles : une ligne par commande et par version. Les commandes d'une version EN
- * TEST (non transmises au prestataire) se qualifient ici : fraude ou pas. La qualification porte sur la
- * commande (toutes règles confondues) et entre dans les chiffres de la règle en test. Les commandes
- * transmises sont vérifiées par le prestataire.
+ * Alertes remontées par les règles : une ligne par commande et par version. On choisit d'abord la phase :
+ * - en test, les commandes ne sont pas transmises au prestataire ; les analystes les qualifient (fraude
+ *   avérée, commande risquée ou RAS). La qualification porte sur la commande, toutes règles confondues, et
+ *   entre dans la pertinence de la règle ;
+ * - en production, le prestataire rend le verdict : rien à qualifier.
+ * Les filtres ne proposent que des choix qui renvoient des alertes (nombres renvoyés par l'API).
  */
 export function AlertsPanel({ ruleId }: Props) {
   const [days, setDays] = usePref<(typeof PERIODS)[number]>('alertsDays', 7);
-  const [phase, setPhase] = useState<AlertPhase | ''>('');
+  const [phase, setPhase] = useState<AlertPhase>('TEST');
   const [verdict, setVerdict] = useState<AlertVerdict | ''>('');
   const [rule, setRule] = useState('');
   const [q, setQ] = useState('');
@@ -54,11 +68,8 @@ export function AlertsPanel({ ruleId }: Props) {
   const [data, setData] = useState<AlertPage>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
-  const [rules, setRules] = useState<RuleSummary[]>([]);
-
-  useEffect(() => {
-    if (!ruleId) api.listRules({ q: '', status: '', typology: '', owner: '', criticality: '', sort: 'updated_desc' }).then(setRules, () => undefined);
-  }, [ruleId]);
+  // Phase choisie d'office une seule fois : en production si la règle n'a rien en test.
+  const phaseSettled = useRef(false);
 
   // Recherche par numéro de commande : appliquée après une courte pause de saisie.
   useEffect(() => {
@@ -69,7 +80,7 @@ export function AlertsPanel({ ruleId }: Props) {
   const filters: AlertFilters = {
     from: addDays(isoDate(new Date()), -(days - 1)),
     ruleId: ruleId ?? (rule || undefined),
-    phase: phase || undefined,
+    phase,
     verdict: verdict || undefined,
     q: query || undefined,
     limit: size,
@@ -90,13 +101,24 @@ export function AlertsPanel({ ruleId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  async function review(a: Alert, isFraud: boolean) {
+  // Un choix qui ne renvoie plus rien (autre phase, autre période) est retiré plutôt que d'afficher une liste vide.
+  useEffect(() => {
+    if (!data) return;
+    if (!phaseSettled.current) {
+      phaseSettled.current = true;
+      if (phaseCountIn(data, 'TEST') === 0 && phaseCountIn(data, 'PRODUCTION') > 0) return setPhase('PRODUCTION');
+    }
+    if (rule && !data.rules.some((c) => c.ruleId === rule)) return setRule('');
+    if (verdict && !data.verdicts.some((c) => c.verdict === verdict)) setVerdict('');
+  }, [data, rule, verdict]);
+
+  async function review(a: Alert, choice: ReviewVerdict) {
     // Un second clic sur le même choix retire la qualification.
-    const next = a.review?.isFraud === isFraud ? null : isFraud;
+    const next = a.review?.verdict === choice ? null : choice;
     setBusy(a.orderId + a.ruleId + a.ruleVersion);
     setError(undefined);
     try {
-      await api.reviewAlert({ orderId: a.orderId, ruleId: a.ruleId, ruleVersion: a.ruleVersion, isFraud: next });
+      await api.reviewAlert({ orderId: a.orderId, ruleId: a.ruleId, ruleVersion: a.ruleVersion, verdict: next });
       setData(await api.listAlerts(filters));
     } catch (e) {
       setError((e as Error).message);
@@ -105,18 +127,36 @@ export function AlertsPanel({ ruleId }: Props) {
     }
   }
 
+  function choosePhase(p: AlertPhase) {
+    setPhase(p);
+    setVerdict('');
+  }
+
+  const phaseCount = (p: AlertPhase) => phaseCountIn(data, p);
+  const verdictCount = (v: AlertVerdict) => verdictCountIn(data, v);
+  const all = phaseCount('TEST') + phaseCount('PRODUCTION');
+  const inPhase = data ? phaseCount(phase) : 0;
   const pages = data ? Math.max(1, Math.ceil(data.total / size)) : 1;
+  const testing = phase === 'TEST';
+
   return (
     <Card
       title="Alertes remontées"
       subtitle={
         data ? (
           <>
-            {fmtInt(data.total)} alerte{data.total > 1 ? 's' : ''} sur {days} jours
+            {fmtInt(all)} alerte{all > 1 ? 's' : ''} sur {days} jours
             {data.toReview > 0 && (
               <>
                 {' · '}
-                <button type="button" className="linkish" onClick={() => setVerdict('TO_REVIEW')}>
+                <button
+                  type="button"
+                  className="linkish"
+                  onClick={() => {
+                    setPhase('TEST');
+                    setVerdict('TO_REVIEW');
+                  }}
+                >
                   {fmtInt(data.toReview)} à qualifier
                 </button>
               </>
@@ -126,7 +166,7 @@ export function AlertsPanel({ ruleId }: Props) {
           '…'
         )
       }
-      info="Une ligne par commande remontée et par version de règle. Les commandes d'une version en test ne sont pas transmises au prestataire : qualifiez-les vous-même (fraude ou pas) ; votre qualification vaut pour la commande, toutes règles confondues, et entre dans la précision de la règle en test. Les commandes d'une version en production sont vérifiées par le prestataire."
+      info="Une ligne par commande remontée et par version de règle. Choisissez d'abord la phase. En test, les commandes ne sont pas transmises au prestataire : qualifiez-les (fraude avérée, commande risquée ou RAS). Votre qualification vaut pour la commande, toutes règles confondues, et entre dans la pertinence de la règle. En production, le prestataire rend le verdict."
       actions={
         <div className="seg" role="group" aria-label="Période">
           {PERIODS.map((p) => (
@@ -137,33 +177,40 @@ export function AlertsPanel({ ruleId }: Props) {
         </div>
       }
     >
-      <div className="card-pad row gap-3 divider-bottom alerts-filters">
-        <div className="field grow-field">
-          <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Numéro de commande…" aria-label="Rechercher une commande" />
+      <div className="card-pad stack gap-3 divider-bottom">
+        <div className="seg phase-seg" role="group" aria-label="Phase des règles">
+          {PHASES.map((p) => (
+            <button key={p.phase} type="button" aria-pressed={phase === p.phase} onClick={() => choosePhase(p.phase)} title={p.hint}>
+              {ruleId ? p.ofRule : p.label}
+              {data && <span className="count">{fmtInt(phaseCount(p.phase))}</span>}
+            </button>
+          ))}
         </div>
-        {!ruleId && (
-          <select className="select-sm" value={rule} onChange={(e) => setRule(e.target.value)} aria-label="Règle">
-            <option value="">Toutes les règles</option>
-            {rules.map((r) => (
-              <option key={r.ruleId} value={r.ruleId}>
-                {r.name}
+        <p className="small muted m-0">{PHASES.find((p) => p.phase === phase)!.hint}</p>
+        <div className="row gap-3 alerts-filters">
+          <div className="field grow-field">
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Numéro de commande…" aria-label="Rechercher une commande" />
+          </div>
+          {!ruleId && (
+            <select className="select-sm" value={rule} onChange={(e) => setRule(e.target.value)} aria-label="Règle">
+              <option value="">Toutes les règles{data ? ` (${fmtInt(inPhase)})` : ''}</option>
+              {data?.rules.map((c) => (
+                <option key={c.ruleId} value={c.ruleId}>
+                  {c.ruleName} ({fmtInt(c.count)})
+                </option>
+              ))}
+            </select>
+          )}
+          <select className="select-sm" value={verdict} onChange={(e) => setVerdict(e.target.value as AlertVerdict | '')} aria-label="Verdict">
+            <option value="">Tous les verdicts</option>
+            {PHASE_VERDICTS[phase].map((v) => (
+              <option key={v} value={v} disabled={!!data && verdictCount(v) === 0 && verdict !== v}>
+                {VERDICT_LABEL[v]}
+                {data ? ` (${fmtInt(verdictCount(v))})` : ''}
               </option>
             ))}
           </select>
-        )}
-        <select className="select-sm" value={phase} onChange={(e) => setPhase(e.target.value as AlertPhase | '')} aria-label="Phase">
-          <option value="">En test et en production</option>
-          <option value="TEST">En test</option>
-          <option value="PRODUCTION">En production</option>
-        </select>
-        <select className="select-sm" value={verdict} onChange={(e) => setVerdict(e.target.value as AlertVerdict | '')} aria-label="Verdict">
-          <option value="">Tous les verdicts</option>
-          {(Object.keys(VERDICT_LABEL) as AlertVerdict[]).map((v) => (
-            <option key={v} value={v}>
-              {VERDICT_LABEL[v]}
-            </option>
-          ))}
-        </select>
+        </div>
       </div>
       {error && (
         <div className="card-pad">
@@ -175,7 +222,11 @@ export function AlertsPanel({ ruleId }: Props) {
           <Spinner />
         </div>
       ) : data.items.length === 0 ? (
-        <div className="empty">Aucune alerte avec ces critères.</div>
+        <div className="empty">
+          {inPhase === 0
+            ? `Aucune alerte ${ruleId ? 'de cette règle' : "d'une règle"} ${testing ? 'en test' : 'en production'} sur ${days} jours.`
+            : 'Aucune alerte avec ces critères.'}
+        </div>
       ) : (
         <div className="table-wrap">
           <table className="data alerts-table">
@@ -185,18 +236,23 @@ export function AlertsPanel({ ruleId }: Props) {
                 <th>Commande</th>
                 <th>{ruleId ? 'Version' : 'Règle'}</th>
                 <th>Détails</th>
-                <th>Verdict</th>
-                <th>
-                  Qualification
-                  <InfoTip align="end">Commandes en test : fraude ou pas. Un second clic sur le même choix retire la qualification.</InfoTip>
-                </th>
+                {testing ? (
+                  <th>
+                    Qualification
+                    <InfoTip align="end">
+                      Fraude avérée, commande risquée ou RAS (rien à signaler). Un second clic sur le même choix retire la qualification.
+                    </InfoTip>
+                  </th>
+                ) : (
+                  <th>Verdict du prestataire</th>
+                )}
               </tr>
             </thead>
             <tbody>
               {data.items.map((a) => {
                 const id = a.orderId + a.ruleId + a.ruleVersion;
-                const qualifiable = a.phase === 'TEST' && (a.providerIsFraud === null || a.providerIsFraud === undefined);
-                const source = verdictSource(a);
+                // Une commande en test déjà vérifiée par le prestataire (transmise par une autre règle) : son verdict prime.
+                const byProvider = a.providerIsFraud !== null && a.providerIsFraud !== undefined;
                 return (
                   <tr key={id}>
                     <td className="small nowrap">{fmtDateTime(a.detectedAt)}</td>
@@ -212,12 +268,6 @@ export function AlertsPanel({ ruleId }: Props) {
                           <span className="small muted">v{a.ruleVersion}</span>
                         </>
                       )}
-                      <div>
-                        <span className={`badge ${a.phase === 'TEST' ? 'st-OBSERVATION' : 'st-IN_PRODUCTION'}`}>
-                          <span className="badge-dot" aria-hidden="true" />
-                          {PHASE_LABEL[a.phase]}
-                        </span>
-                      </div>
                     </td>
                     <td className="small muted alert-details">
                       <div className="ellipsis" title={detailsText(a.details)}>
@@ -225,21 +275,33 @@ export function AlertsPanel({ ruleId }: Props) {
                       </div>
                     </td>
                     <td>
-                      <span className={`badge verdict verdict-${a.verdict}`}>{VERDICT_LABEL[a.verdict]}</span>
-                      {source && <div className="small muted">{source}</div>}
-                    </td>
-                    <td>
-                      {qualifiable ? (
-                        <div className="seg verdict-seg" role="group" aria-label={`Qualifier la commande ${a.orderId}`}>
-                          <button type="button" aria-pressed={a.review?.isFraud === true} disabled={busy === id} onClick={() => review(a, true)}>
-                            Fraude
-                          </button>
-                          <button type="button" aria-pressed={a.review?.isFraud === false} disabled={busy === id} onClick={() => review(a, false)}>
-                            Pas fraude
-                          </button>
-                        </div>
+                      {testing && !byProvider ? (
+                        <>
+                          <div className="seg verdict-seg" role="group" aria-label={`Qualifier la commande ${a.orderId}`}>
+                            {REVIEW_CHOICES.map((c) => (
+                              <button
+                                key={c.verdict}
+                                type="button"
+                                data-verdict={c.verdict}
+                                aria-pressed={a.review?.verdict === c.verdict}
+                                disabled={busy === id}
+                                onClick={() => review(a, c.verdict)}
+                              >
+                                {c.label}
+                              </button>
+                            ))}
+                          </div>
+                          {a.review && (
+                            <div className="small muted">
+                              {a.review.byName}, {fmtDateTime(a.review.at)}
+                            </div>
+                          )}
+                        </>
                       ) : (
-                        <span className="small muted nowrap">{a.phase === 'PRODUCTION' ? 'Par le prestataire' : 'Déjà vérifiée par le prestataire'}</span>
+                        <>
+                          <span className={`badge verdict verdict-${a.verdict}`}>{VERDICT_LABEL[a.verdict]}</span>
+                          {testing && <div className="small muted">Déjà vérifiée par le prestataire</div>}
+                        </>
                       )}
                     </td>
                   </tr>

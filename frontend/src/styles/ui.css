@@ -661,21 +661,37 @@ table.data a:not(.btn):hover {
   background: var(--good-soft);
   color: var(--good);
 }
-.badge.verdict-TO_REVIEW {
+.badge.verdict-RISKY {
   background: var(--warn-soft);
   color: var(--warn);
+}
+.badge.verdict-TO_REVIEW {
+  background: var(--surface);
+  border: 1px dashed var(--border-strong);
+  color: var(--text);
 }
 .badge.verdict-PENDING {
   background: var(--muted-soft);
   color: var(--text-2);
 }
-.verdict-seg button:first-child[aria-pressed='true'] {
+.verdict-seg button[data-verdict='FRAUD'][aria-pressed='true'] {
   background: var(--bad-soft);
   color: var(--bad);
 }
-.verdict-seg button:last-child[aria-pressed='true'] {
+.verdict-seg button[data-verdict='RISKY'][aria-pressed='true'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.verdict-seg button[data-verdict='NOT_FRAUD'][aria-pressed='true'] {
   background: var(--good-soft);
   color: var(--good);
+}
+/* Choix de la phase (alertes) : le nombre d'alertes de chaque phase dans le bouton */
+.phase-seg {
+  align-self: flex-start;
+}
+.phase-seg .count {
+  margin-left: var(--space-2);
 }
 .alerts-filters select {
   flex: none;
@@ -1114,6 +1130,31 @@ table.data a:not(.btn):hover {
 .legend-swatch.legend-hatched {
   background: repeating-linear-gradient(45deg, var(--text-3) 0 2px, transparent 2px 5px);
   box-shadow: inset 0 0 0 1px var(--text-3);
+}
+.legend-line {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--text-3);
+}
+/* Pertinence (DailyBars) : une ligne par version, sur un liseré du fond pour rester lisible sur les barres. */
+.chart .relevance-halo {
+  fill: none;
+  stroke: var(--surface);
+  stroke-width: 5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart .relevance-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart .relevance-dot {
+  fill: var(--surface);
+  stroke-width: 1.5;
 }
 .chart .marker line {
   stroke: var(--text-2);

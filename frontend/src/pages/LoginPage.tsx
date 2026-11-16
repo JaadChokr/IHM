@@ -70,7 +70,7 @@ export function LoginPage() {
           <ul>
             <li>Écrivez la règle en SQL et testez-la sur les vraies données.</li>
             <li>Testez-la : qualifiez ses alertes avant de l'envoyer au prestataire.</li>
-            <li>Suivez sa précision et ses exécutions, version par version.</li>
+            <li>Suivez sa pertinence et ses exécutions, version par version.</li>
           </ul>
         </div>
       </aside>
@@ -112,7 +112,7 @@ export function LoginPage() {
               Continuer
             </button>
             <p className="small muted m-0">
-              Le matricule sert à attribuer vos actions dans le journal d'audit ; il n'est pas vérifié. L'accès à la plateforme est
+              Le matricule sert à attribuer vos actions dans le journal d'activité ; il n'est pas vérifié. L'accès à la plateforme est
               restreint au réseau interne. Session de 8 h, prolongée à chaque action.
             </p>
           </form>
@@ -120,7 +120,7 @@ export function LoginPage() {
           <form className="stack" onSubmit={submitProfile}>
             <Alert kind="info" title="Première connexion">
               Le matricule <span className="mono">{matricule}</span> est inconnu. Indiquez vos nom et prénom : ils apparaîtront comme
-              propriétaire de vos règles et dans le journal d'audit.
+              propriétaire de vos règles et dans le journal d'activité.
             </Alert>
             <div className="field">
               <label htmlFor="firstName">

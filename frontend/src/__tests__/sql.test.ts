@@ -84,10 +84,12 @@ describe('diff et indicateurs', () => {
     const d = diffLines('a\nb\nc', 'a\nB\nc');
     expect(d.map((l) => l.kind)).toEqual(['same', 'del', 'add', 'same']);
   });
-  it('précision calculée sur les commandes vérifiées, commandes en attente comptées', () => {
-    const t = totals([{ ordersFlagged: 100, ordersProcessed: 10, ordersConfirmedFraud: 5 }]);
-    expect(t.precision).toBe(0.5);
+  it('pertinence calculée sur les commandes vérifiées (fraudes avérées et risquées), commandes en attente comptées', () => {
+    const t = totals([{ ordersFlagged: 100, ordersProcessed: 10, ordersConfirmedFraud: 3, ordersRelevant: 5 }]);
+    expect(t.relevance).toBe(0.5);
+    expect(t.confirmed).toBe(3);
     expect(t.pending).toBe(90);
+    expect(totals([{ ordersFlagged: 4, ordersProcessed: 0, ordersConfirmedFraud: 0, ordersRelevant: 0 }]).relevance).toBeNull();
   });
 });
 

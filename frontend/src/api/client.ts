@@ -1,6 +1,7 @@
 import type {
   AlertFilters,
   AlertPage,
+  AlertReviewIn,
   AuditEvent,
   Draft,
   ConsolidatedRow,
@@ -70,7 +71,7 @@ export interface Api {
 
   // Alertes remontées ; qualification d'une commande en test (fraude, pas fraude, ou null : retirée).
   listAlerts(filters: AlertFilters): Promise<AlertPage>;
-  reviewAlert(body: { orderId: string; ruleId: string; ruleVersion: number; isFraud: boolean | null }): Promise<void>;
+  reviewAlert(body: AlertReviewIn): Promise<void>;
 
   /** Présent uniquement en mode démo : simule les actions de l'équipe data en base. */
   demo?: {
