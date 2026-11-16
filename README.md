@@ -448,14 +448,16 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   fraudes. Elle remplace l'ancien taux de précision (fraudes seules) : page règle, comparatif des versions,
   vue d'ensemble et page Surveillance, où une règle passe « à surveiller » sous un seuil réglable.
 
-  **Graphique de la page règle** : un histogramme journalier, en nombre de commandes, avec une couleur par
-  mesure. Une barre **par version** et par jour : la barre entière, en **gris**, donne les commandes
-  **remontées** (**hachurée** quand la version est en test : avant sa mise en production, ou candidate à côté
-  de la version en production) ; superposée en bas, en **rouge**, la part de **fraudes avérées**. On voit
-  ainsi, barre par barre, combien de remontées sont de vraies fraudes. En option, la **pertinence** du jour, en
-  **vert** : une ligne par version (trait plein, puis tirets), lue sur l'axe de droite en pourcentage. Les
-  versions qui tournent le même jour sont côte à côte, la plus ancienne à gauche. Chacune des trois mesures s'affiche ou se masque (au moins une reste affichée). Une
-  candidate et la version en production se comparent côte à côte sur les mêmes jours. Les fraudes avérées
+  **Graphique de la page règle** : un histogramme journalier, en nombre de commandes, qui reprend les couleurs
+  de la qualification pour se lire sans légende. Une barre **par version** et par jour : toutes les commandes
+  **remontées**, découpées par verdict, de bas en haut : **rouge** fraude avérée, **orange** commande risquée,
+  **vert** RAS, **gris** pas encore vérifiée (à qualifier en test, en attente du prestataire en production). La
+  barre est **hachurée** quand la version est en test (avant sa mise en production, ou candidate à côté de la
+  version en production). En production, le prestataire ne distingue que fraude ou non : pas d'orange. En
+  option, la **pertinence** du jour, en ligne sombre neutre (trait plein, puis tirets pour une seconde version),
+  lue sur l'axe de droite en pourcentage. Chaque part et la pertinence s'affichent ou se masquent avec les
+  boutons, dont la pastille sert de légende. Les versions qui tournent le même jour sont côte à côte, la plus
+  ancienne à gauche : une candidate et la version en production se comparent sur les mêmes jours. Les verdicts
   viennent du prestataire pour une version en production, des qualifications des analystes pour une version
   en test. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :
   envoyées au prestataire, et remontées en test (ils ne s'additionnent pas, une commande pouvant être

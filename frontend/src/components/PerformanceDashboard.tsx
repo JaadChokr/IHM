@@ -5,7 +5,7 @@ import { addDays, daysBetween, fmtDate, fmtInt, fmtPct, isoDate } from '../lib/f
 import { delta, relevanceOf, totals } from '../lib/metrics';
 import { useAsync } from '../lib/useAsync';
 import { KpiTile } from './KpiTile';
-import { DailyBars, type BarMeasure, type VersionBars } from './DailyBars';
+import { DailyBars, MEASURES, type BarMeasure, type VersionBars } from './DailyBars';
 import { usePref } from '../prefs/prefs';
 import { Alert, Card, InfoTip, Spinner } from './ui';
 
@@ -73,19 +73,16 @@ interface Props {
   observing?: boolean;
 }
 
-const MEASURES: [BarMeasure, string][] = [
-  ['flagged', 'Remontées'],
-  ['confirmed', 'Fraudes avérées'],
-  ['relevance', 'Pertinence'],
-];
-const MEASURE_ORDER: Record<BarMeasure, number> = { flagged: 0, confirmed: 1, relevance: 2 };
+/** Par défaut : toute la barre, découpée par verdict ; la pertinence s'ajoute à la demande. */
+const DEFAULT_MEASURES: BarMeasure[] = ['fraud', 'risky', 'ras', 'pending'];
+const order = (m: BarMeasure) => MEASURES.findIndex((x) => x.key === m);
 
 export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observing }: Props) {
   const today = isoDate(new Date());
-  const [stored, setMeasures] = usePref<BarMeasure[]>('perfBars', ['flagged', 'confirmed']);
+  const [stored, setMeasures] = usePref<BarMeasure[]>('perfMeasures', DEFAULT_MEASURES);
   // Préférence enregistrée par une version antérieure : mesures inconnues ignorées.
-  const kept = stored.filter((m) => m in MEASURE_ORDER);
-  const measures: BarMeasure[] = kept.length ? kept : ['flagged', 'confirmed'];
+  const kept = stored.filter((m) => order(m) >= 0);
+  const measures: BarMeasure[] = kept.length ? kept : DEFAULT_MEASURES;
   const [preset, setPreset] = useState<Preset>(versionsRun > 1 ? 'all' : 30);
   const [custom, setCustom] = useState({ from: addDays(today, -59), to: today });
   const from =
@@ -219,11 +216,11 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
           </div>
 
           <Card
-            title="Remontées, fraudes avérées et pertinence par jour"
-            info="Une barre par version et par jour. La barre entière : les commandes remontées (hachurée quand la version est en test). En couleur franche, en bas : les fraudes avérées, selon le prestataire pour une version en production, selon vos qualifications (onglet Alertes) pour une version en test. La ligne : la pertinence du jour (fraudes avérées et commandes risquées, sur les commandes vérifiées), lue sur l'axe de droite. Chaque mesure s'affiche ou se masque."
+            title="Remontées par verdict et pertinence, par jour"
+            info="Une barre par version et par jour : toutes les commandes remontées, découpées par verdict avec les couleurs de la qualification. Rouge : fraude avérée ; orange : commande risquée ; vert : RAS ; gris : pas encore vérifiée (à qualifier en test, en attente du prestataire en production). Hachurée quand la version est en test. En production, le prestataire ne distingue que fraude ou non. La ligne : la pertinence du jour (fraudes avérées et commandes risquées, sur les commandes vérifiées), lue sur l'axe de droite. Chaque mesure s'affiche ou se masque avec les boutons."
             actions={
-              <div className="seg" role="group" aria-label="Mesures affichées">
-                {MEASURES.map(([key, name]) => (
+              <div className="seg measure-seg" role="group" aria-label="Mesures affichées">
+                {MEASURES.map(({ key, label }) => (
                   <button
                     key={key}
                     type="button"
@@ -235,18 +232,19 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
                           ? measures.length > 1
                             ? measures.filter((m) => m !== key)
                             : measures
-                          : [...measures, key].sort((x, y) => MEASURE_ORDER[x] - MEASURE_ORDER[y]),
+                          : [...measures, key].sort((x, y) => order(x) - order(y)),
                       )
                     }
                   >
-                    {name}
+                    <span className={`legend-swatch m-${key}`} aria-hidden="true" />
+                    {label}
                   </button>
                 ))}
               </div>
             }
             padded
           >
-            <DailyBars label="Commandes remontées, fraudes avérées et pertinence par jour" dates={view.dates} series={view.series} show={measures} markers={view.markers} />
+            <DailyBars label="Commandes remontées par verdict et pertinence, par jour" dates={view.dates} series={view.series} show={measures} markers={view.markers} />
           </Card>
 
           <details className="card card-pad">

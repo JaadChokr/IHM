@@ -18,8 +18,33 @@ export interface VersionBars {
   observed: boolean[];
 }
 
-/** Mesures affichables : remontées (barre entière), fraudes avérées (partie pleine), pertinence (ligne, en %). */
-export type BarMeasure = 'flagged' | 'confirmed' | 'relevance';
+/** Parts d'une barre, de bas en haut, et ligne de pertinence. */
+export type BarMeasure = 'fraud' | 'risky' | 'ras' | 'pending' | 'relevance';
+type Segment = Exclude<BarMeasure, 'relevance'>;
+
+/**
+ * Les couleurs de la qualification, pour que le graphique se lise sans légende : rouge = fraude avérée,
+ * orange = commande risquée, vert = RAS, gris = pas encore vérifiée (à qualifier en test, en attente du
+ * prestataire en production). La pertinence est une ligne sombre, neutre. Classes `.m-<mesure>` (ui.css).
+ */
+export const MEASURES: { key: BarMeasure; label: string }[] = [
+  { key: 'fraud', label: 'Fraudes avérées' },
+  { key: 'risky', label: 'Risquées' },
+  { key: 'ras', label: 'RAS' },
+  { key: 'pending', label: 'Non vérifiées' },
+  { key: 'relevance', label: 'Pertinence' },
+];
+const SEGMENTS: Segment[] = ['fraud', 'risky', 'ras', 'pending'];
+const COLOR: Record<BarMeasure, string> = {
+  fraud: 'var(--chart-fraud)',
+  risky: 'var(--chart-risky)',
+  ras: 'var(--chart-ras)',
+  pending: 'var(--chart-pending)',
+  relevance: 'var(--chart-relevance)',
+};
+/** Trait de la ligne de pertinence de la k-ième version affichée : plein, tirets, points, mixte. */
+const DASHES = [undefined, '6 4', '2 3', '8 3 2 3'];
+const dashOf = (k: number) => DASHES[k % DASHES.length];
 
 interface Props {
   label: string;
@@ -32,18 +57,6 @@ interface Props {
   height?: number;
 }
 
-/**
- * Une couleur par mesure, qui dit ce qu'elle montre : remontées en gris, fraudes avérées en rouge, pertinence
- * en vert (jetons --chart-*). Les versions se distinguent par leur place (côte à côte, de la plus ancienne à
- * la plus récente), leur repère sur le graphique, et le trait de leur ligne de pertinence.
- */
-const FLAGGED = 'var(--chart-flagged)';
-const FRAUD = 'var(--chart-fraud)';
-const RELEVANCE = 'var(--chart-relevance)';
-/** Trait de la ligne de pertinence de la k-ième version affichée : plein, tirets, points, mixte. */
-const DASHES = [undefined, '6 4', '2 3', '8 3 2 3'];
-const dashOf = (k: number) => DASHES[k % DASHES.length];
-
 const M = { top: 14, bottom: 26, left: 52 };
 
 function niceMax(v: number): number {
@@ -54,22 +67,32 @@ function niceMax(v: number): number {
   return ([1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((k) => n <= k) ?? 10) * p;
 }
 
-/** Barre aux coins supérieurs arrondis, posée sur la ligne de base. */
-function barPath(x: number, w: number, y0: number, h: number): string {
-  const r = Math.max(0, Math.min(3, w / 2, h));
+/** Barre aux coins supérieurs arrondis (ou rectangle, pour une part intermédiaire), posée en y0. */
+function barPath(x: number, w: number, y0: number, h: number, rounded = true): string {
+  const r = rounded ? Math.max(0, Math.min(3, w / 2, h)) : 0;
   const top = y0 - h;
   return `M${x},${y0}V${top + r}Q${x},${top} ${x + r},${top}H${x + w - r}Q${x + w},${top} ${x + w},${top + r}V${y0}Z`;
+}
+
+/** Les parts d'une barre un jour donné : fraudes avérées, risquées, RAS, non vérifiées (null : pas de run). */
+function partsAt(s: VersionBars, i: number): Record<Segment, number> | null {
+  const flagged = s.flagged[i];
+  if (flagged === null) return null;
+  const processed = Math.min(flagged, s.processed[i] ?? 0);
+  const relevant = Math.min(processed, s.relevant[i] ?? 0);
+  const fraud = Math.min(relevant, s.confirmed[i] ?? 0);
+  return { fraud, risky: relevant - fraud, ras: processed - relevant, pending: flagged - processed };
 }
 
 /** Pertinence d'une version un jour donné (null : rien de vérifié ce jour-là, pas de point). */
 const relevanceAt = (s: VersionBars, i: number) => (s.flagged[i] === null ? null : relevanceOf(s.relevant[i] ?? 0, s.processed[i] ?? 0));
 
 /**
- * Histogramme journalier, une barre par version et par jour (versions parallèles côte à côte), sur une seule
- * échelle en nombre de commandes. La barre entière : les commandes remontées (teinte claire ; hachurée en
- * test). Superposée en bas, en couleur franche : les fraudes avérées. On voit ainsi, barre par barre, combien
- * de remontées sont de vraies fraudes. En option, la pertinence du jour (fraudes avérées et commandes
- * risquées, sur les vérifiées) : une ligne par version, lue sur l'axe de droite en pourcentage.
+ * Histogramme journalier, une barre par version et par jour (versions parallèles côte à côte, la plus
+ * ancienne à gauche), en nombre de commandes. Chaque barre est l'ensemble des commandes remontées, découpé
+ * par verdict avec les couleurs de la qualification (fraude avérée, risquée, RAS, non vérifiée) ; hachurée
+ * quand la version est en test. Chaque part s'affiche ou se masque. En option, la pertinence du jour (fraudes
+ * avérées et commandes risquées, sur les vérifiées) : une ligne par version, lue sur l'axe de droite.
  * Survol et clavier (flèches) : infobulle du jour.
  */
 export function DailyBars({ label, dates, series, show, markers = [], height = 260 }: Props) {
@@ -86,10 +109,9 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
     return () => ro.disconnect();
   }, []);
 
-  const showFlagged = show.includes('flagged');
-  const showConfirmed = show.includes('confirmed');
+  const visible = SEGMENTS.filter((k) => show.includes(k));
   const showRelevance = show.includes('relevance');
-  const showCounts = showFlagged || showConfirmed;
+  const showCounts = visible.length > 0;
   const right = showRelevance ? 44 : 12;
   const left = showCounts ? M.left : 12;
   const n = dates.length;
@@ -101,13 +123,16 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
 
   const shown = series.filter((s) => s.flagged.some((v) => v !== null));
   const anyObserved = shown.some((s) => s.flagged.some((v, i) => v !== null && s.observed[i]));
-  const anyProduction = shown.some((s) => s.flagged.some((v, i) => v !== null && !s.observed[i]));
-  const anyConfirmed = shown.some((s) => s.confirmed.some((v) => v !== null && v > 0));
   const anyRelevance = shown.some((s) => dates.some((_, i) => relevanceAt(s, i) !== null));
+  /** Hauteur d'une barre : la somme de ses parts affichées. */
+  const stackAt = (s: VersionBars, i: number) => {
+    const p = partsAt(s, i);
+    return p ? visible.reduce((t, k) => t + p[k], 0) : 0;
+  };
 
   if (n === 0 || shown.length === 0) return <div className="empty">Aucune donnée sur la période.</div>;
 
-  const top = Math.max(0, ...shown.flatMap((s) => (showFlagged ? s.flagged : s.confirmed).map((v) => v ?? 0)));
+  const top = Math.max(0, ...shown.flatMap((s) => dates.map((_, i) => stackAt(s, i))));
   const max = niceMax(top);
   const y = (v: number) => (Math.min(v, max) / max) * ih;
   // Graduations entières : 5, 4 ou 2 intervalles selon ce qui tombe juste (50 → 0, 10, 20…). L'axe de la
@@ -163,48 +188,38 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
   }
 
   const empty =
-    !showFlagged && showConfirmed && !anyConfirmed && !(showRelevance && anyRelevance)
-      ? 'Aucune fraude avérée sur la période (en test : qualifiez les alertes pour en mesurer).'
+    showCounts && top === 0 && !(showRelevance && anyRelevance)
+      ? 'Aucune commande de ce type sur la période (en test : qualifiez les alertes pour en mesurer).'
       : !showCounts && !anyRelevance
         ? 'Aucune commande vérifiée sur la période : pertinence non mesurable (en test : qualifiez les alertes).'
         : null;
 
   return (
     <div className="chart" ref={wrap}>
-      <ul className="chart-legend" aria-label="Légende">
-        {showFlagged && (
-          <li>
-            <span className="legend-swatch legend-flagged" aria-hidden="true" />
-            remontées
-          </li>
-        )}
-        {showConfirmed && anyConfirmed && (
-          <li>
-            <span className="legend-swatch legend-fraud" aria-hidden="true" />
-            {showFlagged ? 'dont fraudes avérées' : 'fraudes avérées'}
-          </li>
-        )}
-        {showRelevance &&
-          anyRelevance &&
-          shown.map((s, k) => (
-            <li key={`rel-${s.version}`}>
-              <svg className="legend-line" width="18" height="6" aria-hidden="true">
-                <line x1="0" y1="3" x2="18" y2="3" stroke={RELEVANCE} strokeWidth="2" strokeDasharray={dashOf(k)} />
-              </svg>
-              {shown.length > 1 ? `pertinence v${s.version}` : 'pertinence'}
-              {k === shown.length - 1 && showCounts ? ' (axe de droite)' : ''}
+      {(anyObserved || shown.length > 1) && (
+        <ul className="chart-legend" aria-label="Légende">
+          {showCounts && anyObserved && (
+            <li className="legend-style">
+              <span className="legend-swatch legend-hatched" aria-hidden="true" />
+              hachuré : version en test (rien n'est envoyé au prestataire)
             </li>
-          ))}
-        {showFlagged && anyObserved && (
-          <li className="legend-style">
-            <span className="legend-swatch legend-hatched" aria-hidden="true" />
-            en test{anyProduction ? '' : " (rien n'est envoyé)"}
-          </li>
-        )}
-        {showCounts && shown.length > 1 && (
-          <li className="legend-style">versions côte à côte, de gauche à droite : {shown.map((s) => `v${s.version}`).join(', ')}</li>
-        )}
-      </ul>
+          )}
+          {showCounts && shown.length > 1 && (
+            <li className="legend-style">versions côte à côte, de gauche à droite : {shown.map((s) => `v${s.version}`).join(', ')}</li>
+          )}
+          {showRelevance &&
+            anyRelevance &&
+            shown.length > 1 &&
+            shown.map((s, k) => (
+              <li key={`rel-${s.version}`} className="legend-style">
+                <svg className="legend-line" width="18" height="6" aria-hidden="true">
+                  <line x1="0" y1="3" x2="18" y2="3" stroke={COLOR.relevance} strokeWidth="2" strokeDasharray={dashOf(k)} />
+                </svg>
+                pertinence v{s.version}
+              </li>
+            ))}
+        </ul>
+      )}
       <svg
         height={height}
         role="img"
@@ -214,12 +229,10 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
         onBlur={() => setHover(null)}
       >
         <defs>
-          {shown.map((s) => (
-            <pattern key={s.version} id={`${uid}-hatch-${s.version}`} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="5" height="5" className="hatch-bg" fill={FLAGGED} />
-              <line x1="0" y1="0" x2="0" y2="5" stroke={FLAGGED} strokeWidth="2.5" />
-            </pattern>
-          ))}
+          {/* Hachures claires posées sur toute la barre d'une version en test, quelle que soit sa couleur. */}
+          <pattern id={`${uid}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" strokeWidth="2.5" />
+          </pattern>
         </defs>
 
         {hover !== null && <rect className="bar-hover" x={xBand(hover)} y={M.top} width={band} height={ih} />}
@@ -250,20 +263,21 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
         {showCounts &&
           dates.map((_, i) =>
             slots(i).map(({ s, x, bw }) => {
-              const flagged = s.flagged[i] ?? 0;
-              const confirmed = s.confirmed[i];
+              const parts = partsAt(s, i)!;
+              const total = stackAt(s, i);
+              if (total <= 0) return null;
+              // Les parts s'empilent de bas en haut ; seule la dernière a les coins arrondis.
+              const drawn = visible.filter((k) => parts[k] > 0);
+              let from = 0;
               return (
                 <g key={`${s.version}-${i}`}>
-                  {showFlagged && (
-                    <path
-                      className="bar"
-                      d={barPath(x, bw, base, Math.max(flagged > 0 ? 1 : 0, y(flagged)))}
-                      fill={s.observed[i] ? `url(#${uid}-hatch-${s.version})` : FLAGGED}
-                    />
-                  )}
-                  {showConfirmed && confirmed !== null && confirmed > 0 && (
-                    <path className="bar" d={barPath(x, bw, base, Math.max(1, y(confirmed)))} fill={FRAUD} />
-                  )}
+                  {drawn.map((k, j) => {
+                    const y0 = base - y(from);
+                    const h = Math.max(1, y(from + parts[k]) - y(from));
+                    from += parts[k];
+                    return <path key={k} className="bar" d={barPath(x, bw, y0, h, j === drawn.length - 1)} fill={COLOR[k]} />;
+                  })}
+                  {s.observed[i] && <path className="bar" d={barPath(x, bw, base, Math.max(1, y(total)))} fill={`url(#${uid}-hatch)`} />}
                 </g>
               );
             }),
@@ -276,9 +290,9 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
             return (
               <g key={`rel-${s.version}`} className="relevance">
                 <path className="relevance-halo" d={d} />
-                <path className="relevance-line" d={d} stroke={RELEVANCE} strokeDasharray={dashOf(k)} />
+                <path className="relevance-line" d={d} stroke={COLOR.relevance} strokeDasharray={dashOf(k)} />
                 {points.map((p, j) => (
-                  <circle key={j} className="relevance-dot" cx={p.x} cy={p.y} r={points.length > 60 ? 1.5 : 2.5} stroke={RELEVANCE} />
+                  <circle key={j} className="relevance-dot" cx={p.x} cy={p.y} r={points.length > 60 ? 1.5 : 2.5} stroke={COLOR.relevance} />
                 ))}
               </g>
             );
@@ -306,35 +320,46 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
         <rect x={left} y={0} width={iw} height={height} fill="transparent" onPointerMove={onMove} onPointerLeave={() => setHover(null)} />
       </svg>
       {hover !== null && (
-        <div className="tooltip" style={{ left: Math.min(Math.max(xBand(hover) + band / 2, 120), width - 120), top: M.top }} aria-live="polite">
+        <div className="tooltip" style={{ left: Math.min(Math.max(xBand(hover) + band / 2, 140), width - 140), top: M.top }} aria-live="polite">
           <div className="muted">{fmtDate(dates[hover])}</div>
           {shown.every((s) => s.flagged[hover] === null) && <strong>Pas d'exécution</strong>}
           {shown
             .filter((s) => s.flagged[hover] !== null)
             .map((s) => {
-              const flagged = s.flagged[hover] ?? 0;
-              const confirmed = s.confirmed[hover];
+              const p = partsAt(s, hover)!;
+              const processed = s.processed[hover] ?? 0;
               const relevant = s.relevant[hover] ?? 0;
-              const processed = s.processed[hover];
               const test = s.observed[hover];
+              const plural = (k: Segment, one: string, many: string) => (p[k] > 1 ? many : one);
+              const lines: [Segment, string][] = [
+                ['fraud', plural('fraud', 'fraude avérée', 'fraudes avérées')],
+                ['risky', plural('risky', 'risquée', 'risquées')],
+                ['ras', 'RAS'],
+                ['pending', test ? 'à qualifier' : 'en attente du prestataire'],
+              ];
               return (
-                <div key={s.version}>
-                  v{s.version} · <strong>{fmtInt(flagged)}</strong> remontées
-                  {confirmed !== null && (
-                    <>
-                      {' '}
-                      · <strong className="tt-fraud">{fmtInt(confirmed)}</strong> fraudes avérées
-                    </>
-                  )}{' '}
-                  <span className="muted">{test ? '(en test)' : '(production)'}</span>
-                  {processed ? (
-                    <div className="muted">
-                      Pertinence <strong className="tt-relevance">{fmtPct(relevant / processed)}</strong> · {fmtInt(relevant)} pertinentes sur {fmtInt(processed)}{' '}
-                      {test ? 'qualifiées' : 'vérifiées'}
-                    </div>
-                  ) : (
-                    <div className="muted">{test ? 'Aucune commande encore qualifiée' : 'Aucune commande encore vérifiée'}</div>
-                  )}
+                <div key={s.version} className="tt-version">
+                  <div>
+                    v{s.version} · <strong>{fmtInt(s.flagged[hover] ?? 0)}</strong> remontées{' '}
+                    <span className="muted">{test ? '(en test)' : '(production)'}</span>
+                  </div>
+                  <ul className="tt-parts">
+                    {lines
+                      .filter(([k]) => p[k] > 0)
+                      .map(([k, name]) => (
+                        <li key={k}>
+                          <span className={`tt-dot m-${k}`} aria-hidden="true" />
+                          <strong>{fmtInt(p[k])}</strong> {name}
+                        </li>
+                      ))}
+                  </ul>
+                  <div className="muted">
+                    {processed
+                      ? `Pertinence ${fmtPct(relevant / processed)} · ${fmtInt(relevant)} pertinentes sur ${fmtInt(processed)} ${test ? 'qualifiées' : 'vérifiées'}`
+                      : test
+                        ? 'Aucune commande encore qualifiée'
+                        : 'Aucune commande encore vérifiée'}
+                  </div>
                 </div>
               );
             })}

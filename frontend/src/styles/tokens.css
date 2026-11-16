@@ -48,10 +48,13 @@
   --series-1: #c8102e;
   /* Règle en test : bleu, distinct de « inactive » (orange) et de « en production » (vert) */
   --testing: #2a78d6;
-  /* Histogramme journalier : une couleur par mesure, qui dit ce qu'elle montre */
-  --chart-flagged: #b9bec6; /* remontées : gris neutre */
-  --chart-fraud: #d02a2a; /* fraudes avérées : rouge */
-  --chart-relevance: #12854a; /* pertinence : vert */
+  /* Histogramme journalier : les couleurs de la qualification (rouge fraude avérée, orange risquée, vert RAS,
+     gris non vérifiée) ; la pertinence en ligne sombre, neutre */
+  --chart-fraud: #d02a2a;
+  --chart-risky: #ec8a1c;
+  --chart-ras: #2f9e5b;
+  --chart-pending: #c3c7ce;
+  --chart-relevance: #22262d;
   --grid: #e6e7eb;
   --incomplete: rgba(111, 110, 105, 0.1);
 
@@ -130,9 +133,11 @@
     --diff-del: #3d1b1b;
     --series-1: #f0646f;
     --testing: #3987e5;
-    --chart-flagged: #5d636c;
     --chart-fraud: #f06a6a;
-    --chart-relevance: #4fc77e;
+    --chart-risky: #f2a345;
+    --chart-ras: #4fc77e;
+    --chart-pending: #50565f;
+    --chart-relevance: #eef0f3;
     --grid: #2d2d2a;
     --incomplete: rgba(200, 200, 190, 0.07);
     --shadow: none;
@@ -173,9 +178,11 @@
   --diff-del: #3d1b1b;
   --series-1: #f0646f;
   --testing: #3987e5;
-  --chart-flagged: #5d636c;
   --chart-fraud: #f06a6a;
-  --chart-relevance: #4fc77e;
+  --chart-risky: #f2a345;
+  --chart-ras: #4fc77e;
+  --chart-pending: #50565f;
+  --chart-relevance: #eef0f3;
   --grid: #2d2d2a;
   --incomplete: rgba(200, 200, 190, 0.07);
   --shadow: none;
