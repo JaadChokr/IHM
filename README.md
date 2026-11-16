@@ -448,12 +448,13 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   fraudes. Elle remplace l'ancien taux de précision (fraudes seules) : page règle, comparatif des versions,
   vue d'ensemble et page Surveillance, où une règle passe « à surveiller » sous un seuil réglable.
 
-  **Graphique de la page règle** : un histogramme journalier, en nombre de commandes. Une barre **par version**
-  et par jour : la barre entière donne les commandes **remontées** (teinte claire, **hachurée** quand la version
-  est en test : avant sa mise en production, ou candidate à côté de la version en production) ; superposée en
-  bas, en couleur franche, la part de **fraudes avérées**. On voit ainsi, barre par barre, combien de remontées
-  sont de vraies fraudes. En option, la **pertinence** du jour : une ligne par version, lue sur l'axe de droite
-  en pourcentage. Chacune des trois mesures s'affiche ou se masque (au moins une reste affichée). Une
+  **Graphique de la page règle** : un histogramme journalier, en nombre de commandes, avec une couleur par
+  mesure. Une barre **par version** et par jour : la barre entière, en **gris**, donne les commandes
+  **remontées** (**hachurée** quand la version est en test : avant sa mise en production, ou candidate à côté
+  de la version en production) ; superposée en bas, en **rouge**, la part de **fraudes avérées**. On voit
+  ainsi, barre par barre, combien de remontées sont de vraies fraudes. En option, la **pertinence** du jour, en
+  **vert** : une ligne par version (trait plein, puis tirets), lue sur l'axe de droite en pourcentage. Les
+  versions qui tournent le même jour sont côte à côte, la plus ancienne à gauche. Chacune des trois mesures s'affiche ou se masque (au moins une reste affichée). Une
   candidate et la version en production se comparent côte à côte sur les mêmes jours. Les fraudes avérées
   viennent du prestataire pour une version en production, des qualifications des analystes pour une version
   en test. L'indicateur de volume donne les deux totaux de la période, en commandes distinctes :

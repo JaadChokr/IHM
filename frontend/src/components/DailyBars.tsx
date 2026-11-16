@@ -33,13 +33,16 @@ interface Props {
 }
 
 /**
- * Couleur d'une version : rouge de la marque, bleu, vert d'eau, violet (palette validée daltonisme et
- * contraste, clair et sombre). Au-delà de 4 versions les couleurs reviennent ; la légende et l'infobulle
- * portent toujours le numéro.
+ * Une couleur par mesure, qui dit ce qu'elle montre : remontées en gris, fraudes avérées en rouge, pertinence
+ * en vert (jetons --chart-*). Les versions se distinguent par leur place (côte à côte, de la plus ancienne à
+ * la plus récente), leur repère sur le graphique, et le trait de leur ligne de pertinence.
  */
-export function versionColor(version: number | undefined): string {
-  return version === undefined ? 'var(--series-1)' : `var(--version-${((version - 1) % 4) + 1})`;
-}
+const FLAGGED = 'var(--chart-flagged)';
+const FRAUD = 'var(--chart-fraud)';
+const RELEVANCE = 'var(--chart-relevance)';
+/** Trait de la ligne de pertinence de la k-ième version affichée : plein, tirets, points, mixte. */
+const DASHES = [undefined, '6 4', '2 3', '8 3 2 3'];
+const dashOf = (k: number) => DASHES[k % DASHES.length];
 
 const M = { top: 14, bottom: 26, left: 52 };
 
@@ -169,35 +172,37 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
   return (
     <div className="chart" ref={wrap}>
       <ul className="chart-legend" aria-label="Légende">
-        {shown.length > 1 &&
-          shown.map((s) => (
-            <li key={s.version}>
-              <span className="legend-swatch" style={{ background: versionColor(s.version) }} aria-hidden="true" />v{s.version}
-            </li>
-          ))}
         {showFlagged && (
-          <li className="legend-style">
-            <span className="legend-swatch legend-tint" aria-hidden="true" />
+          <li>
+            <span className="legend-swatch legend-flagged" aria-hidden="true" />
             remontées
           </li>
         )}
         {showConfirmed && anyConfirmed && (
-          <li className="legend-style">
-            <span className="legend-swatch legend-solid" aria-hidden="true" />
+          <li>
+            <span className="legend-swatch legend-fraud" aria-hidden="true" />
             {showFlagged ? 'dont fraudes avérées' : 'fraudes avérées'}
           </li>
         )}
-        {showRelevance && anyRelevance && (
-          <li className="legend-style">
-            <span className="legend-line" aria-hidden="true" />
-            {showCounts ? 'pertinence (axe de droite)' : 'pertinence'}
-          </li>
-        )}
+        {showRelevance &&
+          anyRelevance &&
+          shown.map((s, k) => (
+            <li key={`rel-${s.version}`}>
+              <svg className="legend-line" width="18" height="6" aria-hidden="true">
+                <line x1="0" y1="3" x2="18" y2="3" stroke={RELEVANCE} strokeWidth="2" strokeDasharray={dashOf(k)} />
+              </svg>
+              {shown.length > 1 ? `pertinence v${s.version}` : 'pertinence'}
+              {k === shown.length - 1 && showCounts ? ' (axe de droite)' : ''}
+            </li>
+          ))}
         {showFlagged && anyObserved && (
           <li className="legend-style">
             <span className="legend-swatch legend-hatched" aria-hidden="true" />
             en test{anyProduction ? '' : " (rien n'est envoyé)"}
           </li>
+        )}
+        {showCounts && shown.length > 1 && (
+          <li className="legend-style">versions côte à côte, de gauche à droite : {shown.map((s) => `v${s.version}`).join(', ')}</li>
         )}
       </ul>
       <svg
@@ -211,8 +216,8 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
         <defs>
           {shown.map((s) => (
             <pattern key={s.version} id={`${uid}-hatch-${s.version}`} width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <rect width="5" height="5" className="hatch-bg" fill={versionColor(s.version)} />
-              <line x1="0" y1="0" x2="0" y2="5" stroke={versionColor(s.version)} strokeWidth="2.5" />
+              <rect width="5" height="5" className="hatch-bg" fill={FLAGGED} />
+              <line x1="0" y1="0" x2="0" y2="5" stroke={FLAGGED} strokeWidth="2.5" />
             </pattern>
           ))}
         </defs>
@@ -251,13 +256,13 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
                 <g key={`${s.version}-${i}`}>
                   {showFlagged && (
                     <path
-                      className={`bar${s.observed[i] ? '' : ' bar-tint'}`}
+                      className="bar"
                       d={barPath(x, bw, base, Math.max(flagged > 0 ? 1 : 0, y(flagged)))}
-                      fill={s.observed[i] ? `url(#${uid}-hatch-${s.version})` : versionColor(s.version)}
+                      fill={s.observed[i] ? `url(#${uid}-hatch-${s.version})` : FLAGGED}
                     />
                   )}
                   {showConfirmed && confirmed !== null && confirmed > 0 && (
-                    <path className="bar" d={barPath(x, bw, base, Math.max(1, y(confirmed)))} fill={versionColor(s.version)} />
+                    <path className="bar" d={barPath(x, bw, base, Math.max(1, y(confirmed)))} fill={FRAUD} />
                   )}
                 </g>
               );
@@ -265,15 +270,15 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
           )}
 
         {showRelevance &&
-          shown.map((s) => {
+          shown.map((s, k) => {
             const { d, points } = relevancePath(s);
             if (!points.length) return null;
             return (
               <g key={`rel-${s.version}`} className="relevance">
                 <path className="relevance-halo" d={d} />
-                <path className="relevance-line" d={d} stroke={versionColor(s.version)} />
-                {points.map((p, k) => (
-                  <circle key={k} className="relevance-dot" cx={p.x} cy={p.y} r={points.length > 60 ? 1.5 : 2.5} stroke={versionColor(s.version)} />
+                <path className="relevance-line" d={d} stroke={RELEVANCE} strokeDasharray={dashOf(k)} />
+                {points.map((p, j) => (
+                  <circle key={j} className="relevance-dot" cx={p.x} cy={p.y} r={points.length > 60 ? 1.5 : 2.5} stroke={RELEVANCE} />
                 ))}
               </g>
             );
@@ -314,18 +319,17 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
               const test = s.observed[hover];
               return (
                 <div key={s.version}>
-                  <span className="tt-key" aria-hidden="true" style={{ background: versionColor(s.version) }} />
                   v{s.version} · <strong>{fmtInt(flagged)}</strong> remontées
                   {confirmed !== null && (
                     <>
                       {' '}
-                      · <strong>{fmtInt(confirmed)}</strong> fraudes avérées
+                      · <strong className="tt-fraud">{fmtInt(confirmed)}</strong> fraudes avérées
                     </>
                   )}{' '}
                   <span className="muted">{test ? '(en test)' : '(production)'}</span>
                   {processed ? (
                     <div className="muted">
-                      Pertinence <strong>{fmtPct(relevant / processed)}</strong> · {fmtInt(relevant)} pertinentes sur {fmtInt(processed)}{' '}
+                      Pertinence <strong className="tt-relevance">{fmtPct(relevant / processed)}</strong> · {fmtInt(relevant)} pertinentes sur {fmtInt(processed)}{' '}
                       {test ? 'qualifiées' : 'vérifiées'}
                     </div>
                   ) : (

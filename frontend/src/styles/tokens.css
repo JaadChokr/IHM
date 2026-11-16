@@ -46,11 +46,12 @@
 
   /* graphiques */
   --series-1: #c8102e;
-  /* Une couleur par version de règle (graphique journalier, tableau des versions) */
-  --version-1: #c8102e;
-  --version-2: #2a78d6;
-  --version-3: #1baf7a;
-  --version-4: #6250d6;
+  /* Règle en test : bleu, distinct de « inactive » (orange) et de « en production » (vert) */
+  --testing: #2a78d6;
+  /* Histogramme journalier : une couleur par mesure, qui dit ce qu'elle montre */
+  --chart-flagged: #b9bec6; /* remontées : gris neutre */
+  --chart-fraud: #d02a2a; /* fraudes avérées : rouge */
+  --chart-relevance: #12854a; /* pertinence : vert */
   --grid: #e6e7eb;
   --incomplete: rgba(111, 110, 105, 0.1);
 
@@ -128,10 +129,10 @@
     --diff-add: #17301a;
     --diff-del: #3d1b1b;
     --series-1: #f0646f;
-    --version-1: #e66767;
-    --version-2: #3987e5;
-    --version-3: #199e70;
-    --version-4: #9085e9;
+    --testing: #3987e5;
+    --chart-flagged: #5d636c;
+    --chart-fraud: #f06a6a;
+    --chart-relevance: #4fc77e;
     --grid: #2d2d2a;
     --incomplete: rgba(200, 200, 190, 0.07);
     --shadow: none;
@@ -171,10 +172,10 @@
   --diff-add: #17301a;
   --diff-del: #3d1b1b;
   --series-1: #f0646f;
-    --version-1: #e66767;
-    --version-2: #3987e5;
-    --version-3: #199e70;
-    --version-4: #9085e9;
+  --testing: #3987e5;
+  --chart-flagged: #5d636c;
+  --chart-fraud: #f06a6a;
+  --chart-relevance: #4fc77e;
   --grid: #2d2d2a;
   --incomplete: rgba(200, 200, 190, 0.07);
   --shadow: none;

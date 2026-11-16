@@ -11,7 +11,6 @@ import { Breadcrumb } from '../components/Breadcrumb';
 import { usePageTitle } from '../nav/history';
 import { DiffView } from '../components/DiffView';
 import { PerformanceDashboard, versionStats } from '../components/PerformanceDashboard';
-import { versionColor } from '../components/DailyBars';
 import { KpiTile } from '../components/KpiTile';
 import { Alert, Card, CriticalityBadge, idleFor, InfoTip, Lifecycle, Spinner, StatusBadge } from '../components/ui';
 import { AuditTable } from './ActivityPage';
@@ -424,11 +423,7 @@ function VersionsTab({ r, onRestored }: { r: RuleDetail; onRestored: (draftId: s
                 return (
                 <tr key={v.version}>
                   <td>
-                    <span className="row gap-2 nowrap-row">
-                      {/* Même couleur que les barres de la version dans l'onglet Performance */}
-                      <span className="legend-key" style={{ background: versionColor(v.version) }} aria-hidden="true" />
-                      <strong>v{v.version}</strong>
-                    </span>
+                    <strong>v{v.version}</strong>
                     {v.version === r.version && <div className="small muted">courante</div>}
                   </td>
                   <td>
