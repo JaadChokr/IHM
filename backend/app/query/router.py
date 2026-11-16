@@ -9,7 +9,7 @@ from app.bigquery import BigQueryGateway, BytesLimitExceeded, QueryError, get_bi
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.errors import ApiError
-from app.query.schemas import DryRunResult, ExecutionResult, Guardrails, QueryIn, TestPeriod
+from app.query.models import DryRunResult, ExecutionResult, Guardrails, QueryIn, TestPeriod
 from app.query.service import analyse, record_test, resolve_target, test_period_for
 
 router = APIRouter(tags=["test"])

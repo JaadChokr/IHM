@@ -5,9 +5,9 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Protocol
 
-from app.performance.schemas import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
-from app.query.periods import Period
-from app.query.schemas import Column
+from app.core.periods import Period
+from app.performance.models import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
+from app.query.models import Column
 from app.rules.models import Rule, RuleVersion
 
 

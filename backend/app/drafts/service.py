@@ -9,13 +9,11 @@ from app.auth.models import User
 from app.auth.service import users_by_matricule
 from app.core.clock import as_utc, now
 from app.core.errors import ApiError
-from app.drafts.models import Draft
-from app.drafts.schemas import DraftOut
+from app.core.sql import query_hash
+from app.drafts.models import Draft, DraftOut
 from app.query.models import TestRun
 from app.query.service import as_test_record
-from app.query.sql_checks import query_hash
-from app.rules.models import RuleVersion
-from app.rules.schemas import RuleInput
+from app.rules.models import RuleInput, RuleVersion
 from app.rules.service import find_rule
 
 # Fenêtre pendant laquelle un test fait depuis l'éditeur est rattaché au brouillon enregistré ensuite.

@@ -9,12 +9,17 @@ dû précédent à celui-ci. Calage fixe, pour des heures d'exécution prévisib
 
 Au test, la plateforme prend la dernière période complète de ce calendrier : la requête testée voit ce que
 verrait le dernier run. Calendrier à garder aligné sur infra/airflow/fraud_rules_dags.py (SCHEDULES, _due,
-_period_start) et frontend/src/lib/period.ts.
+_period_start) et frontend/src/lib/period.ts. Partagé par les règles (validation de la fréquence), le test de
+requête (période testée) et la passerelle BigQuery.
 """
 
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo
+
+# Unité de la fréquence : le DAG Airflow qui exécute la règle.
+Schedule = Literal["DAILY", "HOURLY", "WEEKLY"]
 
 TZ = ZoneInfo("Europe/Paris")
 PARAMS = ("period_start", "period_end")
@@ -32,6 +37,14 @@ class Period:
 
 def valid_every(schedule: str, every: int) -> bool:
     return every in EVERY.get(schedule, ())
+
+
+def check_every(schedule: str, every: int) -> None:
+    """Refuse un pas non autorisé pour l'unité, avec la liste des valeurs possibles."""
+    if not valid_every(schedule, every):
+        allowed = ", ".join(map(str, EVERY[schedule]))
+        unit = {"HOURLY": "heures", "DAILY": "jours", "WEEKLY": "semaines"}[schedule]
+        raise ValueError(f"Fréquence invalide : toutes les {every} {unit}. Valeurs possibles : {allowed}.")
 
 
 def _local(t: datetime) -> datetime:

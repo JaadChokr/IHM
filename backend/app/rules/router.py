@@ -11,8 +11,7 @@ from app.bigquery import BigQueryGateway, get_bigquery
 from app.core.clock import now
 from app.core.db import get_db
 from app.core.errors import ApiError
-from app.rules.models import Rule
-from app.rules.schemas import DecisionIn, NameAvailable, RuleDetail, RuleSummary
+from app.rules.models import DecisionIn, NameAvailable, Rule, RuleDetail, RuleStatus, RuleSummary
 from app.rules.service import (
     derive_status,
     detail,
@@ -24,7 +23,6 @@ from app.rules.service import (
     summary,
     sync_registry,
 )
-from app.rules.types import RuleStatus
 
 router = APIRouter(prefix="/rules", tags=["règles"])
 

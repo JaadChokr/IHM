@@ -1,12 +1,12 @@
-"""Schémas d'échange des indicateurs de performance."""
+"""Indicateurs de performance : formats d'API (les données vivent dans BigQuery)."""
 
 from datetime import date, datetime
 from typing import Literal
 
 from pydantic import Field
 
-from app.core.schemas import Model
-from app.rules.types import Criticality, RuleStatus
+from app.core.models import Model
+from app.rules.models import Criticality, RuleStatus
 
 
 class DailyPerformance(Model):

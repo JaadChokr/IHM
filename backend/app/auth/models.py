@@ -1,11 +1,39 @@
-"""Utilisateurs et sessions (le matricule est la clé d'identité, PRD §5.4)."""
+"""Utilisateurs et sessions (le matricule est la clé d'identité, PRD §5.4) : tables et formats d'API."""
 
 from datetime import datetime
 
 from sqlmodel import Field, SQLModel
 
-from app.auth.schemas import UserBase
-from app.core.schemas import UtcDateTime
+from app.core.models import Model, UtcDateTime
+
+# ---------- formats d'API (UserBase est aussi la base de la table users) ----------
+
+
+class UserBase(Model):
+    matricule: str = Field(primary_key=True, max_length=6)
+    first_name: str = Field(max_length=100)
+    last_name: str = Field(max_length=100)
+
+
+class UserOut(UserBase):
+    pass
+
+
+class LoginIn(Model):
+    matricule: str
+
+
+class LoginOut(Model):
+    user: UserOut | None
+    needs_profile: bool
+
+
+class ProfileIn(Model):
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+
+
+# ---------- tables ----------
 
 
 class User(UserBase, table=True):

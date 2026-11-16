@@ -15,10 +15,10 @@ from app.bigquery.contract import (
     RunStats,
     verdict_of,
 )
-from app.performance.schemas import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
-from app.query.periods import Period
-from app.query.schemas import Column
-from app.query.sql_checks import mask_sql
+from app.core.periods import Period
+from app.core.sql import mask_sql
+from app.performance.models import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
+from app.query.models import Column
 
 log = logging.getLogger(__name__)
 

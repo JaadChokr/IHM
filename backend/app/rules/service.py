@@ -16,12 +16,11 @@ from app.bigquery import BigQueryGateway, QueryError
 from app.core.clock import as_utc, now
 from app.core.config import get_settings
 from app.core.errors import ApiError
+from app.core.periods import last_period
 from app.drafts.models import Draft
 from app.query.models import TestRun
-from app.query.periods import last_period
 from app.query.service import as_test_record
-from app.rules.models import Rule, RuleVersion
-from app.rules.schemas import RuleDetail, RuleInput, RuleSummary, RuleVersionOut
+from app.rules.models import Rule, RuleDetail, RuleInput, RuleSummary, RuleVersion, RuleVersionOut
 
 log = logging.getLogger(__name__)
 

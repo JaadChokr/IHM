@@ -5,8 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.audit.service import record_audit
-from app.auth.models import User, UserSession
-from app.auth.schemas import LoginIn, LoginOut, ProfileIn, UserOut
+from app.auth.models import LoginIn, LoginOut, ProfileIn, User, UserOut, UserSession
 from app.auth.service import MATRICULE_RE, close_session, get_current_user, get_session_record, open_session
 from app.core.clock import now
 from app.core.db import get_db

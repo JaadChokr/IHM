@@ -1,9 +1,9 @@
-"""Schémas d'échange des alertes et de leur qualification."""
+"""Alertes remontées et leur qualification : formats d'API (les données vivent dans BigQuery)."""
 
 from datetime import date, datetime
 from typing import Any, Literal
 
-from app.core.schemas import Model
+from app.core.models import Model
 
 # ---------------------------------------------------------------------------
 # Alertes remontées et qualification par les analystes

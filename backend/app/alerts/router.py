@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.alerts.schemas import AlertOut, AlertPage, AlertReviewIn, AlertReviewOut
+from app.alerts.models import AlertOut, AlertPage, AlertReviewIn, AlertReviewOut
 from app.audit.service import record_audit
 from app.auth.models import User
 from app.auth.service import get_current_user, users_by_matricule

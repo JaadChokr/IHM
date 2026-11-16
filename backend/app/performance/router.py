@@ -12,7 +12,7 @@ from app.bigquery import BigQueryGateway, get_bigquery
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.errors import ApiError
-from app.performance.schemas import ConsolidatedRow, PerformanceResponse, PeriodTotals, RuleRun
+from app.performance.models import ConsolidatedRow, PerformanceResponse, PeriodTotals, RuleRun
 from app.rules.models import Rule
 from app.rules.service import derive_status, load_rule, production_version, running_version, sync_runs
 

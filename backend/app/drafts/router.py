@@ -14,13 +14,11 @@ from app.bigquery import BigQueryGateway, get_bigquery
 from app.core.clock import now
 from app.core.db import get_db
 from app.core.errors import ApiError
-from app.drafts.models import Draft
-from app.drafts.schemas import DraftIn, DraftOut
+from app.core.sql import query_hash
+from app.drafts.models import Draft, DraftIn, DraftOut
 from app.drafts.service import adopt_tests, apply_content, draft_out, draft_tests, load_draft
 from app.query.models import TestRun
-from app.query.sql_checks import query_hash
-from app.rules.models import Rule, RuleVersion
-from app.rules.schemas import RuleDetail, RuleInput
+from app.rules.models import Rule, RuleDetail, RuleInput, RuleVersion
 from app.rules.service import (
     detail,
     find_rule,

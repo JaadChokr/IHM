@@ -13,14 +13,15 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   ├── src/pages/       écrans (liste, éditeur, détail, vue production, audit, profil)
 │   ├── src/styles/      style centralisé : tokens.css (valeurs) + ui.css (classes communes), voir frontend/STYLE.md
 │   └── nginx/           conf Nginx : sert la SPA et relaie /api vers l'API
-├── backend/             Python 3.12 + FastAPI + SQLModel — l'API, un dossier par fonctionnalité
-│                        (schemas.py : formats d'échange et bases partagées ; models.py : les tables qui en héritent)
+├── backend/             Python 3.12 + FastAPI + SQLModel — l'API, un dossier par fonctionnalité, chacun avec
+│                        models.py (tables et formats d'API), router.py (routes) et service.py (logique)
 │   ├── app/main.py      création de l'application, branchement des routes
-│   ├── app/core/        transverse : config.py (variables RM_*), errors.py, clock.py, db.py, schemas.py (base SQLModel camelCase)
+│   ├── app/core/        transverse : config.py (variables RM_*), errors.py, clock.py, db.py, models.py (base
+│   │                    SQLModel camelCase), periods.py (calendrier des fréquences), sql.py (lecture du SQL)
 │   ├── app/auth/        identification par matricule, sessions ; point UNIQUE de résolution de l'identité
 │   ├── app/rules/       règles : référentiel, versions, statuts, registre BigQuery, décisions (F1, F5)
 │   ├── app/drafts/      brouillons personnels et publication (F4)
-│   ├── app/query/       test d'une requête (F3) : contrôles SQL, période testée (periods.py), garde-fous
+│   ├── app/query/       test d'une requête (F3) : contrôles SQL, période testée, garde-fous
 │   ├── app/performance/ indicateurs de performance, historique des exécutions (F6, F7)
 │   ├── app/alerts/      alertes remontées et qualification par les analystes
 │   ├── app/audit/       journal d'audit, écriture et consultation (F8)
@@ -173,9 +174,9 @@ implémente la même interface : il est vérifié contre les mêmes types.
 ### Tables et formats d'API : SQLModel
 
 Le back déclare ses tables et ses formats d'échange avec SQLModel : une classe peut être les deux à la fois.
-Un champ commun à une table et à l'API n'est donc écrit qu'une fois, dans une base partagée du `schemas.py` de
-la fonctionnalité. La table (`models.py`, avec `table=True`) et le format d'API en héritent, et chacun n'ajoute
-que ce qui lui est propre. Par exemple, `RuleInput` (le contenu éditable d'une règle) est la base des versions
+Chaque fonctionnalité les réunit dans son `models.py`. Un champ commun à une table et à l'API n'y est écrit
+qu'une fois, dans une base partagée. La table (avec `table=True`) et le format d'API en héritent, et chacun
+n'ajoute que ce qui lui est propre. Par exemple, `RuleInput` (le contenu éditable d'une règle) est la base des versions
 publiées, des brouillons et de leurs formats d'API.
 
 Pour ajouter une colonne exposée par l'API :
@@ -489,7 +490,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `rule_runs` garde la période de chaque run (`period_start`, `period_end`) ; des tables existantes
   reçoivent les nouvelles colonnes par
   `infra/bigquery/tables/010_maj_suivi_envoi_candidate.sql`. Les crons sont à garder alignés entre le DAG et
-  `backend/app/query/periods.py`, qui calcule la période testée dans l'IHM.
+  `backend/app/core/periods.py`, qui calcule la période testée dans l'IHM.
 
   **Premier run d'une version** : le dédoublonnage ne joue qu'à partir du deuxième run. Une requête sans
   plage de dates remonte donc, à son premier run, toutes les commandes qu'elle lit ;

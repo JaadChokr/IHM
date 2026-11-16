@@ -17,9 +17,9 @@ from app.bigquery.contract import (
     RunStats,
 )
 from app.core.config import Settings
-from app.performance.schemas import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
-from app.query.periods import Period
-from app.query.schemas import Column
+from app.core.periods import Period
+from app.performance.models import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
+from app.query.models import Column
 
 log = logging.getLogger(__name__)
 
