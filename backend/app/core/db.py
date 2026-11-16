@@ -1,18 +1,15 @@
-"""Connexion à la base applicative (Cloud SQL / PostgreSQL, SQLite en test) et base des modèles."""
+"""Connexion à la base applicative (Cloud SQL / PostgreSQL, SQLite en test).
+
+Les tables sont des classes SQLModel (`table=True`), enregistrées sur `SQLModel.metadata`
+(voir app/models.py).
+"""
 
 from collections.abc import Iterator
 
-from sqlalchemy import (
-    create_engine,
-)
-from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
-
-
-class Base(DeclarativeBase):
-    pass
-
 
 _engine = None
 

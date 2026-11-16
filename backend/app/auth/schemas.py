@@ -1,14 +1,18 @@
-"""Schémas d'échange de l'identification."""
+"""Formats d'échange de l'identification. `UserBase` est aussi la base de la table `users`."""
 
-from pydantic import Field
+from sqlmodel import Field
 
 from app.core.schemas import Model
 
 
-class UserOut(Model):
-    matricule: str
-    first_name: str
-    last_name: str
+class UserBase(Model):
+    matricule: str = Field(primary_key=True, max_length=6)
+    first_name: str = Field(max_length=100)
+    last_name: str = Field(max_length=100)
+
+
+class UserOut(UserBase):
+    pass
 
 
 class LoginIn(Model):

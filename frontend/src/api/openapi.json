@@ -1407,6 +1407,7 @@
         "properties": {
           "id": {
             "type": "string",
+            "maxLength": 36,
             "title": "Id"
           },
           "at": {
@@ -1416,10 +1417,12 @@
           },
           "matricule": {
             "type": "string",
+            "maxLength": 6,
             "title": "Matricule"
           },
           "userName": {
             "type": "string",
+            "maxLength": 200,
             "title": "Username"
           },
           "action": {
@@ -1443,7 +1446,8 @@
           "ruleId": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 36
               },
               {
                 "type": "null"
@@ -1454,7 +1458,8 @@
           "ruleName": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               {
                 "type": "null"
@@ -1677,6 +1682,7 @@
           },
           "fraudTypology": {
             "type": "string",
+            "maxLength": 100,
             "title": "Fraudtypology"
           },
           "criticality": {
@@ -1742,6 +1748,7 @@
           },
           "fraudTypology": {
             "type": "string",
+            "maxLength": 100,
             "title": "Fraudtypology"
           },
           "criticality": {
@@ -1773,10 +1780,12 @@
           },
           "id": {
             "type": "string",
+            "maxLength": 36,
             "title": "Id"
           },
           "ruleId": {
             "type": "string",
+            "maxLength": 36,
             "title": "Ruleid"
           },
           "baseVersion": {
@@ -1789,6 +1798,16 @@
               }
             ],
             "title": "Baseversion"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
           },
           "newRule": {
             "type": "boolean",
@@ -1809,16 +1828,6 @@
             "type": "boolean",
             "title": "Withdrawn",
             "default": false
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Createdat"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time",
-            "title": "Updatedat"
           },
           "lastTest": {
             "anyOf": [
@@ -1849,9 +1858,9 @@
           "sqlQuery",
           "id",
           "ruleId",
-          "newRule",
           "createdAt",
-          "updatedAt"
+          "updatedAt",
+          "newRule"
         ],
         "title": "DraftOut",
         "description": "Brouillon personnel (visible de son seul auteur)."
@@ -2325,6 +2334,7 @@
           },
           "fraudTypology": {
             "type": "string",
+            "maxLength": 100,
             "title": "Fraudtypology"
           },
           "criticality": {
@@ -2356,39 +2366,17 @@
           },
           "ruleId": {
             "type": "string",
+            "maxLength": 36,
             "title": "Ruleid"
           },
           "version": {
             "type": "integer",
             "title": "Version"
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "SUBMITTED",
-              "OBSERVATION",
-              "IN_PRODUCTION",
-              "INACTIVE",
-              "REPLACED",
-              "DISCARDED"
-            ],
-            "title": "Status"
-          },
-          "ownerMatricule": {
-            "type": "string",
-            "title": "Ownermatricule"
-          },
-          "ownerName": {
-            "type": "string",
-            "title": "Ownername"
-          },
           "submittedBy": {
             "type": "string",
+            "maxLength": 6,
             "title": "Submittedby"
-          },
-          "submittedByName": {
-            "type": "string",
-            "title": "Submittedbyname"
           },
           "createdAt": {
             "type": "string",
@@ -2432,21 +2420,11 @@
             ],
             "title": "Decidedat"
           },
-          "decidedByName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Decidedbyname"
-          },
           "airflowDagId": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               {
                 "type": "null"
@@ -2477,6 +2455,41 @@
               }
             ],
             "title": "Lastrunat"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "OBSERVATION",
+              "IN_PRODUCTION",
+              "INACTIVE",
+              "REPLACED",
+              "DISCARDED"
+            ],
+            "title": "Status"
+          },
+          "ownerMatricule": {
+            "type": "string",
+            "title": "Ownermatricule"
+          },
+          "ownerName": {
+            "type": "string",
+            "title": "Ownername"
+          },
+          "submittedByName": {
+            "type": "string",
+            "title": "Submittedbyname"
+          },
+          "decidedByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedbyname"
           },
           "candidate": {
             "type": "boolean",
@@ -2549,14 +2562,14 @@
           "sqlQuery",
           "ruleId",
           "version",
-          "status",
-          "ownerMatricule",
-          "ownerName",
           "submittedBy",
-          "submittedByName",
           "createdAt",
           "updatedAt",
           "submittedAt",
+          "status",
+          "ownerMatricule",
+          "ownerName",
+          "submittedByName",
           "versionCount",
           "versions",
           "tests"
@@ -2576,6 +2589,7 @@
           },
           "fraudTypology": {
             "type": "string",
+            "maxLength": 100,
             "title": "Fraudtypology"
           },
           "criticality": {
@@ -2744,6 +2758,7 @@
           },
           "fraudTypology": {
             "type": "string",
+            "maxLength": 100,
             "title": "Fraudtypology"
           },
           "criticality": {
@@ -2775,39 +2790,17 @@
           },
           "ruleId": {
             "type": "string",
+            "maxLength": 36,
             "title": "Ruleid"
           },
           "version": {
             "type": "integer",
             "title": "Version"
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "SUBMITTED",
-              "OBSERVATION",
-              "IN_PRODUCTION",
-              "INACTIVE",
-              "REPLACED",
-              "DISCARDED"
-            ],
-            "title": "Status"
-          },
-          "ownerMatricule": {
-            "type": "string",
-            "title": "Ownermatricule"
-          },
-          "ownerName": {
-            "type": "string",
-            "title": "Ownername"
-          },
           "submittedBy": {
             "type": "string",
+            "maxLength": 6,
             "title": "Submittedby"
-          },
-          "submittedByName": {
-            "type": "string",
-            "title": "Submittedbyname"
           },
           "createdAt": {
             "type": "string",
@@ -2851,21 +2844,11 @@
             ],
             "title": "Decidedat"
           },
-          "decidedByName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Decidedbyname"
-          },
           "airflowDagId": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               {
                 "type": "null"
@@ -2896,6 +2879,41 @@
               }
             ],
             "title": "Lastrunat"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "OBSERVATION",
+              "IN_PRODUCTION",
+              "INACTIVE",
+              "REPLACED",
+              "DISCARDED"
+            ],
+            "title": "Status"
+          },
+          "ownerMatricule": {
+            "type": "string",
+            "title": "Ownermatricule"
+          },
+          "ownerName": {
+            "type": "string",
+            "title": "Ownername"
+          },
+          "submittedByName": {
+            "type": "string",
+            "title": "Submittedbyname"
+          },
+          "decidedByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedbyname"
           },
           "candidate": {
             "type": "boolean",
@@ -2938,14 +2956,14 @@
           "sqlQuery",
           "ruleId",
           "version",
-          "status",
-          "ownerMatricule",
-          "ownerName",
           "submittedBy",
-          "submittedByName",
           "createdAt",
           "updatedAt",
           "submittedAt",
+          "status",
+          "ownerMatricule",
+          "ownerName",
+          "submittedByName",
           "versionCount"
         ],
         "title": "RuleSummary"
@@ -2963,6 +2981,7 @@
           },
           "fraudTypology": {
             "type": "string",
+            "maxLength": 100,
             "title": "Fraudtypology"
           },
           "criticality": {
@@ -2994,39 +3013,17 @@
           },
           "ruleId": {
             "type": "string",
+            "maxLength": 36,
             "title": "Ruleid"
           },
           "version": {
             "type": "integer",
             "title": "Version"
           },
-          "status": {
-            "type": "string",
-            "enum": [
-              "SUBMITTED",
-              "OBSERVATION",
-              "IN_PRODUCTION",
-              "INACTIVE",
-              "REPLACED",
-              "DISCARDED"
-            ],
-            "title": "Status"
-          },
-          "ownerMatricule": {
-            "type": "string",
-            "title": "Ownermatricule"
-          },
-          "ownerName": {
-            "type": "string",
-            "title": "Ownername"
-          },
           "submittedBy": {
             "type": "string",
+            "maxLength": 6,
             "title": "Submittedby"
-          },
-          "submittedByName": {
-            "type": "string",
-            "title": "Submittedbyname"
           },
           "createdAt": {
             "type": "string",
@@ -3070,21 +3067,11 @@
             ],
             "title": "Decidedat"
           },
-          "decidedByName": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Decidedbyname"
-          },
           "airflowDagId": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 200
               },
               {
                 "type": "null"
@@ -3116,6 +3103,41 @@
             ],
             "title": "Lastrunat"
           },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "OBSERVATION",
+              "IN_PRODUCTION",
+              "INACTIVE",
+              "REPLACED",
+              "DISCARDED"
+            ],
+            "title": "Status"
+          },
+          "ownerMatricule": {
+            "type": "string",
+            "title": "Ownermatricule"
+          },
+          "ownerName": {
+            "type": "string",
+            "title": "Ownername"
+          },
+          "submittedByName": {
+            "type": "string",
+            "title": "Submittedbyname"
+          },
+          "decidedByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedbyname"
+          },
           "candidate": {
             "type": "boolean",
             "title": "Candidate",
@@ -3132,14 +3154,14 @@
           "sqlQuery",
           "ruleId",
           "version",
+          "submittedBy",
+          "createdAt",
+          "updatedAt",
+          "submittedAt",
           "status",
           "ownerMatricule",
           "ownerName",
-          "submittedBy",
-          "submittedByName",
-          "createdAt",
-          "updatedAt",
-          "submittedAt"
+          "submittedByName"
         ],
         "title": "RuleVersionOut"
       },
@@ -3228,12 +3250,14 @@
         "properties": {
           "id": {
             "type": "string",
+            "maxLength": 36,
             "title": "Id"
           },
           "ruleId": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 36
               },
               {
                 "type": "null"
@@ -3255,7 +3279,8 @@
           "draftId": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "string",
+                "maxLength": 36
               },
               {
                 "type": "null"
@@ -3265,6 +3290,7 @@
           },
           "queryHash": {
             "type": "string",
+            "maxLength": 16,
             "title": "Queryhash"
           },
           "at": {
@@ -3274,11 +3300,8 @@
           },
           "byMatricule": {
             "type": "string",
+            "maxLength": 6,
             "title": "Bymatricule"
-          },
-          "byName": {
-            "type": "string",
-            "title": "Byname"
           },
           "phase": {
             "type": "string",
@@ -3335,6 +3358,10 @@
               }
             ],
             "title": "Error"
+          },
+          "byName": {
+            "type": "string",
+            "title": "Byname"
           }
         },
         "type": "object",
@@ -3343,24 +3370,28 @@
           "queryHash",
           "at",
           "byMatricule",
-          "byName",
           "phase",
-          "success"
+          "success",
+          "byName"
         ],
-        "title": "TestRecord"
+        "title": "TestRecord",
+        "description": "Un test tel que l'API le renvoie : ses métadonnées et le nom de son auteur."
       },
       "UserOut": {
         "properties": {
           "matricule": {
             "type": "string",
+            "maxLength": 6,
             "title": "Matricule"
           },
           "firstName": {
             "type": "string",
+            "maxLength": 100,
             "title": "Firstname"
           },
           "lastName": {
             "type": "string",
+            "maxLength": 100,
             "title": "Lastname"
           }
         },

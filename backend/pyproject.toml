@@ -9,6 +9,7 @@ dependencies = [
   "pydantic==2.10.3",
   "pydantic-settings==2.6.1",
   "sqlalchemy==2.0.36",
+  "sqlmodel==0.0.33",  # tables et formats d'API dans les mêmes classes (dernière version pour pydantic 2.10)
   "psycopg[binary]==3.2.3",
   "alembic==1.14.0",
   "google-cloud-bigquery==3.27.0",

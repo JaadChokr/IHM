@@ -598,15 +598,6 @@ export interface components {
             ruleId: string;
             /** Baseversion */
             baseVersion?: number | null;
-            /** Newrule */
-            newRule: boolean;
-            /** Latestversion */
-            latestVersion?: number | null;
-            /**
-             * Withdrawn
-             * @default false
-             */
-            withdrawn: boolean;
             /**
              * Createdat
              * Format: date-time
@@ -617,6 +608,15 @@ export interface components {
              * Format: date-time
              */
             updatedAt: string;
+            /** Newrule */
+            newRule: boolean;
+            /** Latestversion */
+            latestVersion?: number | null;
+            /**
+             * Withdrawn
+             * @default false
+             */
+            withdrawn: boolean;
             lastTest?: components["schemas"]["TestRecord"] | null;
             /**
              * Tests
@@ -799,19 +799,8 @@ export interface components {
             ruleId: string;
             /** Version */
             version: number;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
-            /** Ownermatricule */
-            ownerMatricule: string;
-            /** Ownername */
-            ownerName: string;
             /** Submittedby */
             submittedBy: string;
-            /** Submittedbyname */
-            submittedByName: string;
             /**
              * Createdat
              * Format: date-time
@@ -831,14 +820,25 @@ export interface components {
             decision?: ("SENT" | "DISCARDED") | null;
             /** Decidedat */
             decidedAt?: string | null;
-            /** Decidedbyname */
-            decidedByName?: string | null;
             /** Airflowdagid */
             airflowDagId?: string | null;
             /** Firstrunat */
             firstRunAt?: string | null;
             /** Lastrunat */
             lastRunAt?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
+            /** Ownermatricule */
+            ownerMatricule: string;
+            /** Ownername */
+            ownerName: string;
+            /** Submittedbyname */
+            submittedByName: string;
+            /** Decidedbyname */
+            decidedByName?: string | null;
             /**
              * Candidate
              * @default false
@@ -959,19 +959,8 @@ export interface components {
             ruleId: string;
             /** Version */
             version: number;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
-            /** Ownermatricule */
-            ownerMatricule: string;
-            /** Ownername */
-            ownerName: string;
             /** Submittedby */
             submittedBy: string;
-            /** Submittedbyname */
-            submittedByName: string;
             /**
              * Createdat
              * Format: date-time
@@ -991,14 +980,25 @@ export interface components {
             decision?: ("SENT" | "DISCARDED") | null;
             /** Decidedat */
             decidedAt?: string | null;
-            /** Decidedbyname */
-            decidedByName?: string | null;
             /** Airflowdagid */
             airflowDagId?: string | null;
             /** Firstrunat */
             firstRunAt?: string | null;
             /** Lastrunat */
             lastRunAt?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
+            /** Ownermatricule */
+            ownerMatricule: string;
+            /** Ownername */
+            ownerName: string;
+            /** Submittedbyname */
+            submittedByName: string;
+            /** Decidedbyname */
+            decidedByName?: string | null;
             /**
              * Candidate
              * @default false
@@ -1039,19 +1039,8 @@ export interface components {
             ruleId: string;
             /** Version */
             version: number;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
-            /** Ownermatricule */
-            ownerMatricule: string;
-            /** Ownername */
-            ownerName: string;
             /** Submittedby */
             submittedBy: string;
-            /** Submittedbyname */
-            submittedByName: string;
             /**
              * Createdat
              * Format: date-time
@@ -1071,14 +1060,25 @@ export interface components {
             decision?: ("SENT" | "DISCARDED") | null;
             /** Decidedat */
             decidedAt?: string | null;
-            /** Decidedbyname */
-            decidedByName?: string | null;
             /** Airflowdagid */
             airflowDagId?: string | null;
             /** Firstrunat */
             firstRunAt?: string | null;
             /** Lastrunat */
             lastRunAt?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
+            /** Ownermatricule */
+            ownerMatricule: string;
+            /** Ownername */
+            ownerName: string;
+            /** Submittedbyname */
+            submittedByName: string;
+            /** Decidedbyname */
+            decidedByName?: string | null;
             /**
              * Candidate
              * @default false
@@ -1119,7 +1119,10 @@ export interface components {
              */
             end: string;
         };
-        /** TestRecord */
+        /**
+         * TestRecord
+         * @description Un test tel que l'API le renvoie : ses métadonnées et le nom de son auteur.
+         */
         TestRecord: {
             /** Id */
             id: string;
@@ -1138,8 +1141,6 @@ export interface components {
             at: string;
             /** Bymatricule */
             byMatricule: string;
-            /** Byname */
-            byName: string;
             /**
              * Phase
              * @enum {string}
@@ -1155,6 +1156,8 @@ export interface components {
             totalRows?: number | null;
             /** Error */
             error?: string | null;
+            /** Byname */
+            byName: string;
         };
         /** UserOut */
         UserOut: {

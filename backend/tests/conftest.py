@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool  # noqa: E402
 from app.bigquery import FakeBigQueryGateway, get_bigquery  # noqa: E402
 from app.core.db import get_db
 from app.main import create_app  # noqa: E402
-from app.models import Base  # noqa: E402
+from app.models import metadata  # noqa: E402
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def bq():
 @pytest.fixture
 def session_factory():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine)
+    metadata.create_all(engine)
     return sessionmaker(engine, expire_on_commit=False)
 
 

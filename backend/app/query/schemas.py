@@ -3,25 +3,38 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from app.core.schemas import Model
+from sqlalchemy import BigInteger, String, Text
+from sqlmodel import Field
+
+from app.core.schemas import Model, UtcDateTime
 from app.rules.types import Schedule
 
 
-class TestRecord(Model):
-    id: str
-    rule_id: str | None = None
+class TestRunBase(Model):
+    """Métadonnées d'un test (F3), jamais les lignes retournées (PRD §10). Base de la table `rule_tests`."""
+
+    __test__ = False  # pas une classe de test pytest
+
+    id: str = Field(primary_key=True, max_length=36)
+    rule_id: str | None = Field(default=None, max_length=36, index=True)
     version: int | None = None
-    draft_id: str | None = None
-    query_hash: str
-    at: datetime
-    by_matricule: str
-    by_name: str
-    phase: Literal["DRY_RUN", "EXECUTION"]
+    # Test d'un brouillon : rattaché à la version créée lors de sa soumission.
+    draft_id: str | None = Field(default=None, max_length=36, index=True)
+    query_hash: str = Field(max_length=16)
+    at: datetime = Field(sa_type=UtcDateTime, index=True)
+    by_matricule: str = Field(max_length=6, index=True)
+    phase: Literal["DRY_RUN", "EXECUTION"] = Field(sa_type=String(10))
     success: bool
-    bytes_processed: int | None = None
+    bytes_processed: int | None = Field(default=None, sa_type=BigInteger)
     duration_ms: int | None = None
-    total_rows: int | None = None
-    error: str | None = None
+    total_rows: int | None = Field(default=None, sa_type=BigInteger)
+    error: str | None = Field(default=None, sa_type=Text)
+
+
+class TestRecord(TestRunBase):
+    """Un test tel que l'API le renvoie : ses métadonnées et le nom de son auteur."""
+
+    by_name: str
 
 
 class Guardrails(Model):

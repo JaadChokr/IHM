@@ -99,5 +99,4 @@ def analyse(bq: BigQueryGateway, body: QueryIn, period: Period) -> tuple[list[Sq
 
 
 def as_test_record(t: TestRun, users: dict[str, User]) -> TestRecord:
-    fields = {k: getattr(t, k) for k in TestRecord.model_fields if k != "by_name"}
-    return TestRecord(**fields, by_name=display_name(users, t.by_matricule))
+    return TestRecord.model_validate(t, update={"by_name": display_name(users, t.by_matricule)})

@@ -1,9 +1,12 @@
-"""Schémas d'échange du journal d'audit."""
+"""Formats d'échange du journal d'audit. `AuditEventOut` est aussi la base de la table `audit_events`."""
 
 from datetime import datetime
 from typing import Literal
 
-from app.core.schemas import Model
+from sqlalchemy import String, Text
+from sqlmodel import Field
+
+from app.core.schemas import Model, UtcDateTime
 
 # Actions tracées dans le journal (les anciennes valeurs RULE_CREATE, RULE_UPDATE, RULE_NEW_VERSION restent
 # lisibles : le journal est immuable).
@@ -24,12 +27,12 @@ AuditAction = Literal[
 
 
 class AuditEventOut(Model):
-    id: str
-    at: datetime
-    matricule: str
-    user_name: str
-    action: AuditAction
-    rule_id: str | None = None
-    rule_name: str | None = None
+    id: str = Field(primary_key=True, max_length=36)
+    at: datetime = Field(sa_type=UtcDateTime, index=True)
+    matricule: str = Field(max_length=6, index=True)
+    user_name: str = Field(max_length=200)
+    action: AuditAction = Field(sa_type=String(30))
+    rule_id: str | None = Field(default=None, max_length=36, index=True)
+    rule_name: str | None = Field(default=None, max_length=200)
     version: int | None = None
-    details: str | None = None
+    details: str | None = Field(default=None, sa_type=Text)

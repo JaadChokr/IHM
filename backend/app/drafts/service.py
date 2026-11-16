@@ -21,7 +21,8 @@ from app.rules.service import find_rule
 # Fenêtre pendant laquelle un test fait depuis l'éditeur est rattaché au brouillon enregistré ensuite.
 TEST_ADOPTION_WINDOW = timedelta(hours=1)
 
-CONTENT = ("name", "description", "fraud_typology", "criticality", "schedule", "schedule_every", "sql_query")
+# Contenu éditable d'une règle, recopié du brouillon vers la version à la soumission.
+CONTENT = tuple(RuleInput.model_fields)
 
 
 def draft_tests(db: Session, draft_id: str) -> list[TestRun]:
@@ -32,18 +33,15 @@ def draft_out(db: Session, d: Draft, withdrawn: bool = False) -> DraftOut:
     users = users_by_matricule(db)
     rule = find_rule(db, d.rule_id)
     tests = draft_tests(db, d.id)
-    return DraftOut(
-        id=d.id,
-        rule_id=d.rule_id,
-        base_version=d.base_version,
-        **{k: getattr(d, k) for k in CONTENT},
-        new_rule=rule is None,
-        latest_version=rule.versions[-1].version if rule and rule.versions else None,
-        withdrawn=withdrawn,
-        created_at=d.created_at,
-        updated_at=d.updated_at,
-        last_test=as_test_record(tests[0], users) if tests else None,
-        tests=[as_test_record(t, users) for t in tests],
+    return DraftOut.model_validate(
+        d,
+        update={
+            "new_rule": rule is None,
+            "latest_version": rule.versions[-1].version if rule and rule.versions else None,
+            "withdrawn": withdrawn,
+            "last_test": as_test_record(tests[0], users) if tests else None,
+            "tests": [as_test_record(t, users) for t in tests],
+        },
     )
 
 

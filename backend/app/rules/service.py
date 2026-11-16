@@ -123,31 +123,17 @@ def withdrawable(rule: Rule, user: User) -> bool:
 
 
 def _version_out(v: RuleVersion, rule: Rule, users: dict[str, User]) -> RuleVersionOut:
-    return RuleVersionOut(
-        rule_id=v.rule_id,
-        version=v.version,
-        name=v.name,
-        description=v.description,
-        fraud_typology=v.fraud_typology,
-        criticality=v.criticality,  # type: ignore[arg-type]
-        schedule=v.schedule,  # type: ignore[arg-type]
-        schedule_every=v.schedule_every or 1,
-        sql_query=v.sql_query,
-        status=derive_status(rule, v),  # type: ignore[arg-type]
-        owner_matricule=rule.owner_matricule,
-        owner_name=display_name(users, rule.owner_matricule),
-        submitted_by=v.submitted_by,
-        submitted_by_name=display_name(users, v.submitted_by),
-        created_at=v.created_at,
-        updated_at=v.updated_at,
-        submitted_at=v.submitted_at,
-        decision=v.decision,  # type: ignore[arg-type]
-        decided_at=v.decided_at,
-        decided_by_name=display_name(users, v.decided_by) if v.decided_by else None,
-        airflow_dag_id=v.airflow_dag_id,
-        first_run_at=v.first_run_at,
-        last_run_at=v.last_run_at,
-        candidate=is_candidate(rule, v),
+    return RuleVersionOut.model_validate(
+        v,
+        update={
+            "schedule_every": v.schedule_every or 1,
+            "status": derive_status(rule, v),
+            "owner_matricule": rule.owner_matricule,
+            "owner_name": display_name(users, rule.owner_matricule),
+            "submitted_by_name": display_name(users, v.submitted_by),
+            "decided_by_name": display_name(users, v.decided_by) if v.decided_by else None,
+            "candidate": is_candidate(rule, v),
+        },
     )
 
 

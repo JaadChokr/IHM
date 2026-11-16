@@ -13,9 +13,10 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   ├── src/pages/       écrans (liste, éditeur, détail, vue production, audit, profil)
 │   ├── src/styles/      style centralisé : tokens.css (valeurs) + ui.css (classes communes), voir frontend/STYLE.md
 │   └── nginx/           conf Nginx : sert la SPA et relaie /api vers l'API
-├── backend/             Python 3.12 + FastAPI — l'API, un dossier par fonctionnalité
+├── backend/             Python 3.12 + FastAPI + SQLModel — l'API, un dossier par fonctionnalité
+│                        (schemas.py : formats d'échange et bases partagées ; models.py : les tables qui en héritent)
 │   ├── app/main.py      création de l'application, branchement des routes
-│   ├── app/core/        transverse : config.py (variables RM_*), errors.py, clock.py, db.py, schemas.py (base camelCase)
+│   ├── app/core/        transverse : config.py (variables RM_*), errors.py, clock.py, db.py, schemas.py (base SQLModel camelCase)
 │   ├── app/auth/        identification par matricule, sessions ; point UNIQUE de résolution de l'identité
 │   ├── app/rules/       règles : référentiel, versions, statuts, registre BigQuery, décisions (F1, F5)
 │   ├── app/drafts/      brouillons personnels et publication (F4)
@@ -168,6 +169,21 @@ Après une modification d'une route ou d'un schéma du back : `make api-types` (
 puis committer les deux fichiers régénérés. S'ils sont oubliés, les tests du back échouent (contrat périmé) et la
 CI du front aussi (types périmés) : le front ne peut pas diverger de l'API sans que ça se voie. Le mode démo
 implémente la même interface : il est vérifié contre les mêmes types.
+
+### Tables et formats d'API : SQLModel
+
+Le back déclare ses tables et ses formats d'échange avec SQLModel : une classe peut être les deux à la fois.
+Un champ commun à une table et à l'API n'est donc écrit qu'une fois, dans une base partagée du `schemas.py` de
+la fonctionnalité. La table (`models.py`, avec `table=True`) et le format d'API en héritent, et chacun n'ajoute
+que ce qui lui est propre. Par exemple, `RuleInput` (le contenu éditable d'une règle) est la base des versions
+publiées, des brouillons et de leurs formats d'API.
+
+Pour ajouter une colonne exposée par l'API :
+1. la déclarer dans la base partagée, avec son type de colonne si besoin (`sa_type=Text`, `UtcDateTime` pour
+   un horodatage avec fuseau, `max_length` pour une chaîne bornée) ;
+2. écrire la migration Alembic (`alembic revision --autogenerate`, puis relire), et vérifier avec
+   `alembic check` qu'il ne reste aucun écart ;
+3. régénérer le contrat du front (`make api-types`).
 
 ### Avec Docker (optionnel)
 
