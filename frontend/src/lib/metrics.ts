@@ -12,7 +12,8 @@ export interface Totals {
   precision: number | null;
 }
 
-export function totals(rows: DailyPerformance[]): Totals {
+/** Totaux de jours ou de périodes : seuls les trois compteurs servent. */
+export function totals(rows: Pick<DailyPerformance, 'ordersFlagged' | 'ordersProcessed' | 'ordersConfirmedFraud'>[]): Totals {
   const flagged = rows.reduce((s, r) => s + r.ordersFlagged, 0);
   const processed = rows.reduce((s, r) => s + r.ordersProcessed, 0);
   const confirmed = rows.reduce((s, r) => s + r.ordersConfirmedFraud, 0);

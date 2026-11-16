@@ -88,9 +88,9 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
     if (!data) return null;
     // Totaux exacts du serveur (commandes distinctes : une commande remontée par deux versions compte une
     // fois) ; à défaut, la somme des jours.
-    const exact = (t: PeriodTotals | undefined, rows: DailyPerformance[]) =>
+    const exact = (t: PeriodTotals | null | undefined, rows: DailyPerformance[]) =>
       t
-        ? totals([{ date: '', ordersFlagged: t.ordersFlagged, ordersProcessed: t.ordersProcessed, ordersConfirmedFraud: t.ordersConfirmedFraud }])
+        ? totals([{ ordersFlagged: t.ordersFlagged, ordersProcessed: t.ordersProcessed, ordersConfirmedFraud: t.ordersConfirmedFraud }])
         : totals(rows);
     const cur = exact(data.totals, data.daily);
     const prev = exact(data.previousTotals, data.previous);
@@ -286,7 +286,7 @@ export function versionStats(versions: VersionPerformance[]): Map<number, Versio
   const sorted = [...versions].sort((a, b) => a.version - b.version);
   const out = new Map<number, VersionStats>();
   sorted.forEach((v, i) => {
-    const t = totals([{ date: v.lastDate, ordersFlagged: v.ordersFlagged, ordersProcessed: v.ordersProcessed, ordersConfirmedFraud: v.ordersConfirmedFraud }]);
+    const t = totals([{ ordersFlagged: v.ordersFlagged, ordersProcessed: v.ordersProcessed, ordersConfirmedFraud: v.ordersConfirmedFraud }]);
     const before = i > 0 ? out.get(sorted[i - 1].version) : undefined;
     out.set(v.version, {
       firstDate: v.firstDate,

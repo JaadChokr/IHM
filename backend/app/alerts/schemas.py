@@ -1,7 +1,7 @@
 """Schémas d'échange des alertes et de leur qualification."""
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from app.core.schemas import Model
 
@@ -35,7 +35,7 @@ class AlertOut(Model):
     provider_is_fraud: bool | None = None
     review: AlertReviewOut | None = None
     # Autres colonnes renvoyées par la règle pour cette commande (rule_alerts.details).
-    details: dict | None = None
+    details: dict[str, Any] | None = None
 
 
 class AlertPage(Model):

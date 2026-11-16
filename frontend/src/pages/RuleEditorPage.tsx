@@ -523,7 +523,7 @@ export function RuleEditorPage() {
                     <span>
                       {i.message}{' '}
                       {i.line && (
-                        <button type="button" className="linkish small" onClick={() => editor.current?.goTo(i.line!, i.column)}>
+                        <button type="button" className="linkish small" onClick={() => editor.current?.goTo(i.line!, i.column ?? undefined)}>
                           ligne {i.line}
                         </button>
                       )}

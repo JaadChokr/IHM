@@ -98,6 +98,7 @@ function content(def: Def): RuleInput {
 function v(def: Def, version: number, created: number, extra: Partial<RuleVersion> = {}): RuleVersion {
   return {
     ruleId: def.id,
+    candidate: false,
     version,
     name: def.name,
     description: def.description,

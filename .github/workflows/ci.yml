@@ -14,6 +14,9 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
+      # Les types de l'API sont générés depuis le contrat OpenAPI (openapi.json, vérifié par les tests du back) :
+      # ils doivent être à jour.
+      - run: npm run api:types && git diff --exit-code src/api/schema.gen.ts
       - run: npm run typecheck
       - run: npm test
       - run: npm run build

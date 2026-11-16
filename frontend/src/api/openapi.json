@@ -1,0 +1,3496 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Fraud Rules API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/session": {
+      "post": {
+        "tags": [
+          "identification"
+        ],
+        "summary": "Login",
+        "operationId": "login_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "identification"
+        ],
+        "summary": "Logout",
+        "operationId": "logout_session_delete",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
+    "/me/profile": {
+      "post": {
+        "tags": [
+          "identification"
+        ],
+        "summary": "Complete Profile",
+        "operationId": "complete_profile_me_profile_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "tags": [
+          "identification"
+        ],
+        "summary": "Me",
+        "operationId": "me_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "identification"
+        ],
+        "summary": "Update Me",
+        "operationId": "update_me_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": [
+          "identification"
+        ],
+        "summary": "Users",
+        "operationId": "users_users_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/UserOut"
+                  },
+                  "type": "array",
+                  "title": "Response Users Users Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules": {
+      "get": {
+        "tags": [
+          "règles"
+        ],
+        "summary": "List Rules",
+        "operationId": "list_rules_rules_get",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "SUBMITTED",
+                    "OBSERVATION",
+                    "IN_PRODUCTION",
+                    "INACTIVE",
+                    "REPLACED",
+                    "DISCARDED"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "typology",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Typology"
+            }
+          },
+          {
+            "name": "owner",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Owner"
+            }
+          },
+          {
+            "name": "criticality",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Criticality"
+            }
+          },
+          {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "updated_desc",
+              "title": "Sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleSummary"
+                  },
+                  "title": "Response List Rules Rules Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/name-available": {
+      "get": {
+        "tags": [
+          "règles"
+        ],
+        "summary": "Name Available",
+        "operationId": "name_available_rules_name_available_get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          },
+          {
+            "name": "exclude",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Exclude"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NameAvailable"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/{rule_id}": {
+      "get": {
+        "tags": [
+          "règles"
+        ],
+        "summary": "Get Rule",
+        "operationId": "get_rule_rules__rule_id__get",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/{rule_id}/decision": {
+      "post": {
+        "tags": [
+          "règles"
+        ],
+        "summary": "Decide",
+        "description": "Décision de l'analyste : mettre la dernière version en production (elle prend la place de la\nversion en production, qui s'arrête), l'écarter, ou suspendre l'envoi de la version en production.\nrules_registry est mis à jour ; le DAG en tient compte au run suivant.",
+        "operationId": "decide_rules__rule_id__decision_post",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rule Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drafts": {
+      "get": {
+        "tags": [
+          "brouillons"
+        ],
+        "summary": "List Drafts",
+        "operationId": "list_drafts_drafts_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DraftOut"
+                  },
+                  "type": "array",
+                  "title": "Response List Drafts Drafts Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "brouillons"
+        ],
+        "summary": "Create Draft",
+        "description": "Nouvelle règle, ou nouvelle version d'une règle existante (`ruleId`).\n\nSi l'utilisateur a soumis la dernière version et qu'Airflow ne l'a jamais exécutée, elle est\nretirée du référentiel et redevient son brouillon (même numéro à la resoumission).",
+        "operationId": "create_draft_drafts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drafts/{draft_id}": {
+      "get": {
+        "tags": [
+          "brouillons"
+        ],
+        "summary": "Get Draft",
+        "operationId": "get_draft_drafts__draft_id__get",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "brouillons"
+        ],
+        "summary": "Update Draft",
+        "operationId": "update_draft_drafts__draft_id__put",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftOut"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "brouillons"
+        ],
+        "summary": "Delete Draft",
+        "operationId": "delete_draft_drafts__draft_id__delete",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/drafts/{draft_id}/submit": {
+      "post": {
+        "tags": [
+          "brouillons"
+        ],
+        "summary": "Submit Draft",
+        "operationId": "submit_draft_drafts__draft_id__submit_post",
+        "parameters": [
+          {
+            "name": "draft_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Draft Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/config/guardrails": {
+      "get": {
+        "tags": [
+          "test"
+        ],
+        "summary": "Guardrails",
+        "operationId": "guardrails_config_guardrails_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Guardrails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/query/dry-run": {
+      "post": {
+        "tags": [
+          "test"
+        ],
+        "summary": "Dry Run",
+        "operationId": "dry_run_query_dry_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DryRunResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/query/execute": {
+      "post": {
+        "tags": [
+          "test"
+        ],
+        "summary": "Execute",
+        "operationId": "execute_query_execute_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/{rule_id}/performance": {
+      "get": {
+        "tags": [
+          "performance"
+        ],
+        "summary": "Performance",
+        "operationId": "performance_rules__rule_id__performance_get",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rule Id"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PerformanceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rules/{rule_id}/runs": {
+      "get": {
+        "tags": [
+          "performance"
+        ],
+        "summary": "Rule Runs",
+        "description": "Historique des exécutions automatiques de la règle (toutes versions), la plus récente d'abord.",
+        "operationId": "rule_runs_rules__rule_id__runs_get",
+        "parameters": [
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Rule Id"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 400,
+              "minimum": 1,
+              "default": 90,
+              "title": "Days"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "default": 200,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/RuleRun"
+                  },
+                  "title": "Response Rule Runs Rules  Rule Id  Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/performance/production": {
+      "get": {
+        "tags": [
+          "performance"
+        ],
+        "summary": "Production",
+        "operationId": "production_performance_production_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConsolidatedRow"
+                  },
+                  "type": "array",
+                  "title": "Response Production Performance Production Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alerts": {
+      "get": {
+        "tags": [
+          "alertes"
+        ],
+        "summary": "List Alerts",
+        "operationId": "list_alerts_alerts_get",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "name": "ruleId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ruleid"
+            }
+          },
+          {
+            "name": "phase",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "TEST",
+                    "PRODUCTION"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phase"
+            }
+          },
+          {
+            "name": "verdict",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "FRAUD",
+                    "NOT_FRAUD",
+                    "TO_REVIEW",
+                    "PENDING"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Verdict"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 25,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/alerts/review": {
+      "post": {
+        "tags": [
+          "alertes"
+        ],
+        "summary": "Review Alert",
+        "operationId": "review_alert_alerts_review_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlertReviewIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/audit": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "summary": "List Audit",
+        "operationId": "list_audit_audit_get",
+        "parameters": [
+          {
+            "name": "ruleId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ruleid"
+            }
+          },
+          {
+            "name": "matricule",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Matricule"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 500,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AuditEventOut"
+                  },
+                  "title": "Response List Audit Audit Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AlertOut": {
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "title": "Orderid"
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "ruleName": {
+            "type": "string",
+            "title": "Rulename"
+          },
+          "ruleVersion": {
+            "type": "integer",
+            "title": "Ruleversion"
+          },
+          "runDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Rundate"
+          },
+          "detectedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Detectedat"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "TEST",
+              "PRODUCTION"
+            ],
+            "title": "Phase"
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "FRAUD",
+              "NOT_FRAUD",
+              "TO_REVIEW",
+              "PENDING"
+            ],
+            "title": "Verdict"
+          },
+          "providerIsFraud": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Providerisfraud"
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlertReviewOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orderId",
+          "ruleId",
+          "ruleName",
+          "ruleVersion",
+          "runDate",
+          "detectedAt",
+          "phase",
+          "verdict"
+        ],
+        "title": "AlertOut"
+      },
+      "AlertPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AlertOut"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "toReview": {
+            "type": "integer",
+            "title": "Toreview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "toReview"
+        ],
+        "title": "AlertPage"
+      },
+      "AlertReviewIn": {
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "title": "Orderid"
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "ruleVersion": {
+            "type": "integer",
+            "title": "Ruleversion"
+          },
+          "isFraud": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Isfraud"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orderId",
+          "ruleId",
+          "ruleVersion",
+          "isFraud"
+        ],
+        "title": "AlertReviewIn"
+      },
+      "AlertReviewOut": {
+        "properties": {
+          "isFraud": {
+            "type": "boolean",
+            "title": "Isfraud"
+          },
+          "byMatricule": {
+            "type": "string",
+            "title": "Bymatricule"
+          },
+          "byName": {
+            "type": "string",
+            "title": "Byname"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "isFraud",
+          "byMatricule",
+          "byName",
+          "at"
+        ],
+        "title": "AlertReviewOut"
+      },
+      "AuditEventOut": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "matricule": {
+            "type": "string",
+            "title": "Matricule"
+          },
+          "userName": {
+            "type": "string",
+            "title": "Username"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "LOGIN",
+              "PROFILE_UPDATE",
+              "RULE_CREATE",
+              "RULE_UPDATE",
+              "RULE_NEW_VERSION",
+              "RULE_TEST",
+              "RULE_SUBMIT",
+              "RULE_WITHDRAW",
+              "RULE_SEND_TO_PROVIDER",
+              "RULE_SUSPEND_SENDING",
+              "RULE_DISCARD",
+              "ALERT_REVIEW"
+            ],
+            "title": "Action"
+          },
+          "ruleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruleid"
+          },
+          "ruleName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rulename"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "at",
+          "matricule",
+          "userName",
+          "action"
+        ],
+        "title": "AuditEventOut"
+      },
+      "Column": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "Column"
+      },
+      "ConsolidatedRow": {
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "fraudTypology": {
+            "type": "string",
+            "title": "Fraudtypology"
+          },
+          "criticality": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Criticality"
+          },
+          "ownerName": {
+            "type": "string",
+            "title": "Ownername"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "OBSERVATION",
+              "IN_PRODUCTION",
+              "INACTIVE",
+              "REPLACED",
+              "DISCARDED"
+            ],
+            "title": "Status"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "ordersFlagged30d": {
+            "type": "integer",
+            "title": "Ordersflagged30D"
+          },
+          "ordersProcessed30d": {
+            "type": "integer",
+            "title": "Ordersprocessed30D"
+          },
+          "ordersConfirmed30d": {
+            "type": "integer",
+            "title": "Ordersconfirmed30D"
+          },
+          "ordersToSend30d": {
+            "type": "integer",
+            "title": "Orderstosend30D",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "ruleId",
+          "name",
+          "version",
+          "fraudTypology",
+          "criticality",
+          "ownerName",
+          "status",
+          "ordersFlagged30d",
+          "ordersProcessed30d",
+          "ordersConfirmed30d"
+        ],
+        "title": "ConsolidatedRow"
+      },
+      "DailyPerformance": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "ruleVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruleversion"
+          },
+          "ordersFlagged": {
+            "type": "integer",
+            "title": "Ordersflagged"
+          },
+          "ordersToSend": {
+            "type": "integer",
+            "title": "Orderstosend",
+            "default": 0
+          },
+          "ordersProcessed": {
+            "type": "integer",
+            "title": "Ordersprocessed"
+          },
+          "ordersConfirmedFraud": {
+            "type": "integer",
+            "title": "Ordersconfirmedfraud"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "ordersFlagged",
+          "ordersProcessed",
+          "ordersConfirmedFraud"
+        ],
+        "title": "DailyPerformance"
+      },
+      "DecisionIn": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "send",
+              "suspend",
+              "discard"
+            ],
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "DecisionIn"
+      },
+      "DraftIn": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "fraudTypology": {
+            "type": "string",
+            "title": "Fraudtypology"
+          },
+          "criticality": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Criticality"
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "HOURLY",
+              "WEEKLY"
+            ],
+            "title": "Schedule"
+          },
+          "scheduleEvery": {
+            "type": "integer",
+            "title": "Scheduleevery",
+            "default": 1
+          },
+          "sqlQuery": {
+            "type": "string",
+            "title": "Sqlquery"
+          },
+          "ruleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruleid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "fraudTypology",
+          "criticality",
+          "schedule",
+          "sqlQuery"
+        ],
+        "title": "DraftIn"
+      },
+      "DraftOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "fraudTypology": {
+            "type": "string",
+            "title": "Fraudtypology"
+          },
+          "criticality": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Criticality"
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "HOURLY",
+              "WEEKLY"
+            ],
+            "title": "Schedule"
+          },
+          "scheduleEvery": {
+            "type": "integer",
+            "title": "Scheduleevery",
+            "default": 1
+          },
+          "sqlQuery": {
+            "type": "string",
+            "title": "Sqlquery"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "baseVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseversion"
+          },
+          "newRule": {
+            "type": "boolean",
+            "title": "Newrule"
+          },
+          "latestVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latestversion"
+          },
+          "withdrawn": {
+            "type": "boolean",
+            "title": "Withdrawn",
+            "default": false
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          },
+          "lastTest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TestRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "tests": {
+            "items": {
+              "$ref": "#/components/schemas/TestRecord"
+            },
+            "type": "array",
+            "title": "Tests",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "fraudTypology",
+          "criticality",
+          "schedule",
+          "sqlQuery",
+          "id",
+          "ruleId",
+          "newRule",
+          "createdAt",
+          "updatedAt"
+        ],
+        "title": "DraftOut",
+        "description": "Brouillon personnel (visible de son seul auteur)."
+      },
+      "DryRunResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "statementType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statementtype"
+          },
+          "outputSchema": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/Column"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outputschema"
+          },
+          "bytesProcessed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytesprocessed"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/SqlIssue"
+            },
+            "type": "array",
+            "title": "Issues"
+          },
+          "exceedsBytesLimit": {
+            "type": "boolean",
+            "title": "Exceedsbyteslimit"
+          },
+          "period": {
+            "$ref": "#/components/schemas/TestPeriod"
+          },
+          "testId": {
+            "type": "string",
+            "title": "Testid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "issues",
+          "exceedsBytesLimit",
+          "period",
+          "testId"
+        ],
+        "title": "DryRunResult"
+      },
+      "ExecutionResult": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "columns": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Columns"
+          },
+          "rows": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Rows"
+          },
+          "totalRows": {
+            "type": "integer",
+            "title": "Totalrows"
+          },
+          "durationMs": {
+            "type": "integer",
+            "title": "Durationms"
+          },
+          "bytesProcessed": {
+            "type": "integer",
+            "title": "Bytesprocessed"
+          },
+          "ordersFlagged": {
+            "type": "integer",
+            "title": "Ordersflagged"
+          },
+          "ordersAlreadyFlagged": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ordersalreadyflagged"
+          },
+          "overlapDays": {
+            "type": "integer",
+            "title": "Overlapdays"
+          },
+          "period": {
+            "$ref": "#/components/schemas/TestPeriod"
+          },
+          "testId": {
+            "type": "string",
+            "title": "Testid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ok",
+          "columns",
+          "rows",
+          "totalRows",
+          "durationMs",
+          "bytesProcessed",
+          "ordersFlagged",
+          "overlapDays",
+          "period",
+          "testId"
+        ],
+        "title": "ExecutionResult"
+      },
+      "Guardrails": {
+        "properties": {
+          "maxBytesBilled": {
+            "type": "integer",
+            "title": "Maxbytesbilled"
+          },
+          "jobTimeoutMs": {
+            "type": "integer",
+            "title": "Jobtimeoutms"
+          },
+          "maxResults": {
+            "type": "integer",
+            "title": "Maxresults"
+          }
+        },
+        "type": "object",
+        "required": [
+          "maxBytesBilled",
+          "jobTimeoutMs",
+          "maxResults"
+        ],
+        "title": "Guardrails"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LoginIn": {
+        "properties": {
+          "matricule": {
+            "type": "string",
+            "title": "Matricule"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matricule"
+        ],
+        "title": "LoginIn"
+      },
+      "LoginOut": {
+        "properties": {
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "needsProfile": {
+            "type": "boolean",
+            "title": "Needsprofile"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user",
+          "needsProfile"
+        ],
+        "title": "LoginOut"
+      },
+      "NameAvailable": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "NameAvailable"
+      },
+      "PerformanceResponse": {
+        "properties": {
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "from": {
+            "type": "string",
+            "format": "date",
+            "title": "From"
+          },
+          "to": {
+            "type": "string",
+            "format": "date",
+            "title": "To"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/DailyPerformance"
+            },
+            "type": "array",
+            "title": "Daily"
+          },
+          "previous": {
+            "items": {
+              "$ref": "#/components/schemas/DailyPerformance"
+            },
+            "type": "array",
+            "title": "Previous"
+          },
+          "totals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeriodTotals"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previousTotals": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PeriodTotals"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "byVersion": {
+            "items": {
+              "$ref": "#/components/schemas/VersionDaily"
+            },
+            "type": "array",
+            "title": "Byversion",
+            "default": []
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/RuleRun"
+            },
+            "type": "array",
+            "title": "Runs"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/VersionPerformance"
+            },
+            "type": "array",
+            "title": "Versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ruleId",
+          "from",
+          "to",
+          "daily",
+          "previous",
+          "runs",
+          "versions"
+        ],
+        "title": "PerformanceResponse"
+      },
+      "PeriodTotals": {
+        "properties": {
+          "ordersFlagged": {
+            "type": "integer",
+            "title": "Ordersflagged"
+          },
+          "ordersToSend": {
+            "type": "integer",
+            "title": "Orderstosend"
+          },
+          "ordersProcessed": {
+            "type": "integer",
+            "title": "Ordersprocessed"
+          },
+          "ordersConfirmedFraud": {
+            "type": "integer",
+            "title": "Ordersconfirmedfraud"
+          },
+          "ordersObserved": {
+            "type": "integer",
+            "title": "Ordersobserved",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "ordersFlagged",
+          "ordersToSend",
+          "ordersProcessed",
+          "ordersConfirmedFraud"
+        ],
+        "title": "PeriodTotals",
+        "description": "Chiffres d'une règle sur une période, en commandes distinctes : exacts même si deux versions ont\nremonté la même commande (la somme des jours peut la compter deux fois)."
+      },
+      "ProfileIn": {
+        "properties": {
+          "firstName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Firstname"
+          },
+          "lastName": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Lastname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "firstName",
+          "lastName"
+        ],
+        "title": "ProfileIn"
+      },
+      "QueryIn": {
+        "properties": {
+          "sql": {
+            "type": "string",
+            "title": "Sql"
+          },
+          "ruleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruleid"
+          },
+          "draftId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draftid"
+          },
+          "excludeRuleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluderuleid"
+          },
+          "schedule": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "DAILY",
+                  "HOURLY",
+                  "WEEKLY"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Schedule"
+          },
+          "scheduleEvery": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduleevery"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sql"
+        ],
+        "title": "QueryIn"
+      },
+      "RuleDetail": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "fraudTypology": {
+            "type": "string",
+            "title": "Fraudtypology"
+          },
+          "criticality": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Criticality"
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "HOURLY",
+              "WEEKLY"
+            ],
+            "title": "Schedule"
+          },
+          "scheduleEvery": {
+            "type": "integer",
+            "title": "Scheduleevery",
+            "default": 1
+          },
+          "sqlQuery": {
+            "type": "string",
+            "title": "Sqlquery"
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "OBSERVATION",
+              "IN_PRODUCTION",
+              "INACTIVE",
+              "REPLACED",
+              "DISCARDED"
+            ],
+            "title": "Status"
+          },
+          "ownerMatricule": {
+            "type": "string",
+            "title": "Ownermatricule"
+          },
+          "ownerName": {
+            "type": "string",
+            "title": "Ownername"
+          },
+          "submittedBy": {
+            "type": "string",
+            "title": "Submittedby"
+          },
+          "submittedByName": {
+            "type": "string",
+            "title": "Submittedbyname"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submittedat"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "SENT",
+                  "DISCARDED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedat"
+          },
+          "decidedByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedbyname"
+          },
+          "airflowDagId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Airflowdagid"
+          },
+          "firstRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firstrunat"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "candidate": {
+            "type": "boolean",
+            "title": "Candidate",
+            "default": false
+          },
+          "versionCount": {
+            "type": "integer",
+            "title": "Versioncount"
+          },
+          "productionVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Productionversion"
+          },
+          "lastTest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TestRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/RuleVersionOut"
+            },
+            "type": "array",
+            "title": "Versions"
+          },
+          "tests": {
+            "items": {
+              "$ref": "#/components/schemas/TestRecord"
+            },
+            "type": "array",
+            "title": "Tests"
+          },
+          "myDraftId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mydraftid"
+          },
+          "canWithdraw": {
+            "type": "boolean",
+            "title": "Canwithdraw",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "fraudTypology",
+          "criticality",
+          "schedule",
+          "sqlQuery",
+          "ruleId",
+          "version",
+          "status",
+          "ownerMatricule",
+          "ownerName",
+          "submittedBy",
+          "submittedByName",
+          "createdAt",
+          "updatedAt",
+          "submittedAt",
+          "versionCount",
+          "versions",
+          "tests"
+        ],
+        "title": "RuleDetail"
+      },
+      "RuleInput": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "fraudTypology": {
+            "type": "string",
+            "title": "Fraudtypology"
+          },
+          "criticality": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Criticality"
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "HOURLY",
+              "WEEKLY"
+            ],
+            "title": "Schedule"
+          },
+          "scheduleEvery": {
+            "type": "integer",
+            "title": "Scheduleevery",
+            "default": 1
+          },
+          "sqlQuery": {
+            "type": "string",
+            "title": "Sqlquery"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "fraudTypology",
+          "criticality",
+          "schedule",
+          "sqlQuery"
+        ],
+        "title": "RuleInput"
+      },
+      "RuleRun": {
+        "properties": {
+          "runId": {
+            "type": "string",
+            "title": "Runid"
+          },
+          "ruleVersion": {
+            "type": "integer",
+            "title": "Ruleversion"
+          },
+          "runDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Rundate"
+          },
+          "periodStart": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Periodstart"
+          },
+          "periodEnd": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Periodend"
+          },
+          "startedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Startedat"
+          },
+          "finishedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finishedat"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUCCESS",
+              "FAILED"
+            ],
+            "title": "Status"
+          },
+          "rowsReturned": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rowsreturned"
+          },
+          "rowsToSend": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rowstosend"
+          },
+          "errorMessage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errormessage"
+          },
+          "attempts": {
+            "type": "integer",
+            "title": "Attempts",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "required": [
+          "runId",
+          "ruleVersion",
+          "runDate",
+          "startedAt",
+          "status"
+        ],
+        "title": "RuleRun",
+        "description": "Une exécution automatique d'une version : sa dernière tentative (une exécution en échec est\nretentée automatiquement ; `attempts` en donne le nombre)."
+      },
+      "RuleSummary": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "fraudTypology": {
+            "type": "string",
+            "title": "Fraudtypology"
+          },
+          "criticality": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Criticality"
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "HOURLY",
+              "WEEKLY"
+            ],
+            "title": "Schedule"
+          },
+          "scheduleEvery": {
+            "type": "integer",
+            "title": "Scheduleevery",
+            "default": 1
+          },
+          "sqlQuery": {
+            "type": "string",
+            "title": "Sqlquery"
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "OBSERVATION",
+              "IN_PRODUCTION",
+              "INACTIVE",
+              "REPLACED",
+              "DISCARDED"
+            ],
+            "title": "Status"
+          },
+          "ownerMatricule": {
+            "type": "string",
+            "title": "Ownermatricule"
+          },
+          "ownerName": {
+            "type": "string",
+            "title": "Ownername"
+          },
+          "submittedBy": {
+            "type": "string",
+            "title": "Submittedby"
+          },
+          "submittedByName": {
+            "type": "string",
+            "title": "Submittedbyname"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submittedat"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "SENT",
+                  "DISCARDED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedat"
+          },
+          "decidedByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedbyname"
+          },
+          "airflowDagId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Airflowdagid"
+          },
+          "firstRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firstrunat"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "candidate": {
+            "type": "boolean",
+            "title": "Candidate",
+            "default": false
+          },
+          "versionCount": {
+            "type": "integer",
+            "title": "Versioncount"
+          },
+          "productionVersion": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Productionversion"
+          },
+          "lastTest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TestRecord"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "fraudTypology",
+          "criticality",
+          "schedule",
+          "sqlQuery",
+          "ruleId",
+          "version",
+          "status",
+          "ownerMatricule",
+          "ownerName",
+          "submittedBy",
+          "submittedByName",
+          "createdAt",
+          "updatedAt",
+          "submittedAt",
+          "versionCount"
+        ],
+        "title": "RuleSummary"
+      },
+      "RuleVersionOut": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 200,
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "fraudTypology": {
+            "type": "string",
+            "title": "Fraudtypology"
+          },
+          "criticality": {
+            "type": "string",
+            "enum": [
+              "HIGH",
+              "MEDIUM",
+              "LOW"
+            ],
+            "title": "Criticality"
+          },
+          "schedule": {
+            "type": "string",
+            "enum": [
+              "DAILY",
+              "HOURLY",
+              "WEEKLY"
+            ],
+            "title": "Schedule"
+          },
+          "scheduleEvery": {
+            "type": "integer",
+            "title": "Scheduleevery",
+            "default": 1
+          },
+          "sqlQuery": {
+            "type": "string",
+            "title": "Sqlquery"
+          },
+          "ruleId": {
+            "type": "string",
+            "title": "Ruleid"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "SUBMITTED",
+              "OBSERVATION",
+              "IN_PRODUCTION",
+              "INACTIVE",
+              "REPLACED",
+              "DISCARDED"
+            ],
+            "title": "Status"
+          },
+          "ownerMatricule": {
+            "type": "string",
+            "title": "Ownermatricule"
+          },
+          "ownerName": {
+            "type": "string",
+            "title": "Ownername"
+          },
+          "submittedBy": {
+            "type": "string",
+            "title": "Submittedby"
+          },
+          "submittedByName": {
+            "type": "string",
+            "title": "Submittedbyname"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Createdat"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updatedat"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Submittedat"
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "SENT",
+                  "DISCARDED"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decision"
+          },
+          "decidedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedat"
+          },
+          "decidedByName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Decidedbyname"
+          },
+          "airflowDagId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Airflowdagid"
+          },
+          "firstRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Firstrunat"
+          },
+          "lastRunAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lastrunat"
+          },
+          "candidate": {
+            "type": "boolean",
+            "title": "Candidate",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "fraudTypology",
+          "criticality",
+          "schedule",
+          "sqlQuery",
+          "ruleId",
+          "version",
+          "status",
+          "ownerMatricule",
+          "ownerName",
+          "submittedBy",
+          "submittedByName",
+          "createdAt",
+          "updatedAt",
+          "submittedAt"
+        ],
+        "title": "RuleVersionOut"
+      },
+      "SqlIssue": {
+        "properties": {
+          "severity": {
+            "type": "string",
+            "enum": [
+              "error",
+              "warning"
+            ],
+            "title": "Severity"
+          },
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "line": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Line"
+          },
+          "column": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Column"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length"
+          }
+        },
+        "type": "object",
+        "required": [
+          "severity",
+          "code",
+          "message"
+        ],
+        "title": "SqlIssue"
+      },
+      "TestPeriod": {
+        "properties": {
+          "start": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start"
+          },
+          "end": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "TestPeriod",
+        "description": "Valeurs de @period_start / @period_end au test : la dernière période complète de la fréquence."
+      },
+      "TestRecord": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "ruleId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ruleid"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
+          },
+          "draftId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draftid"
+          },
+          "queryHash": {
+            "type": "string",
+            "title": "Queryhash"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "At"
+          },
+          "byMatricule": {
+            "type": "string",
+            "title": "Bymatricule"
+          },
+          "byName": {
+            "type": "string",
+            "title": "Byname"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "DRY_RUN",
+              "EXECUTION"
+            ],
+            "title": "Phase"
+          },
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "bytesProcessed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bytesprocessed"
+          },
+          "durationMs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Durationms"
+          },
+          "totalRows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Totalrows"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "queryHash",
+          "at",
+          "byMatricule",
+          "byName",
+          "phase",
+          "success"
+        ],
+        "title": "TestRecord"
+      },
+      "UserOut": {
+        "properties": {
+          "matricule": {
+            "type": "string",
+            "title": "Matricule"
+          },
+          "firstName": {
+            "type": "string",
+            "title": "Firstname"
+          },
+          "lastName": {
+            "type": "string",
+            "title": "Lastname"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matricule",
+          "firstName",
+          "lastName"
+        ],
+        "title": "UserOut"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      },
+      "VersionDaily": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "format": "date",
+            "title": "Date"
+          },
+          "ruleVersion": {
+            "type": "integer",
+            "title": "Ruleversion"
+          },
+          "toSend": {
+            "type": "boolean",
+            "title": "Tosend"
+          },
+          "ordersFlagged": {
+            "type": "integer",
+            "title": "Ordersflagged"
+          },
+          "ordersProcessed": {
+            "type": "integer",
+            "title": "Ordersprocessed"
+          },
+          "ordersConfirmedFraud": {
+            "type": "integer",
+            "title": "Ordersconfirmedfraud"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "ruleVersion",
+          "toSend",
+          "ordersFlagged",
+          "ordersProcessed",
+          "ordersConfirmedFraud"
+        ],
+        "title": "VersionDaily",
+        "description": "Commandes d'une version un jour donné, en production (to_send) ou en test : une courbe par\nversion, pleine en production, hachurée en test."
+      },
+      "VersionPerformance": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "firstDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Firstdate"
+          },
+          "lastDate": {
+            "type": "string",
+            "format": "date",
+            "title": "Lastdate"
+          },
+          "days": {
+            "type": "integer",
+            "title": "Days"
+          },
+          "ordersFlagged": {
+            "type": "integer",
+            "title": "Ordersflagged"
+          },
+          "ordersProcessed": {
+            "type": "integer",
+            "title": "Ordersprocessed"
+          },
+          "ordersConfirmedFraud": {
+            "type": "integer",
+            "title": "Ordersconfirmedfraud"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "firstDate",
+          "lastDate",
+          "days",
+          "ordersFlagged",
+          "ordersProcessed",
+          "ordersConfirmedFraud"
+        ],
+        "title": "VersionPerformance",
+        "description": "Indicateurs cumulés d'une version sur toute sa période d'exécution (comparaison des versions)."
+      }
+    }
+  }
+}

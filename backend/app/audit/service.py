@@ -5,13 +5,18 @@ import uuid
 from sqlalchemy.orm import Session
 
 from app.audit.models import AuditEvent
+from app.audit.schemas import AuditAction
 from app.auth.models import User
 from app.core.clock import now
 from app.rules.models import RuleVersion
 
 
 def record_audit(
-    db: Session, user: User, action: str, version: RuleVersion | None = None, details: str | None = None
+    db: Session,
+    user: User,
+    action: AuditAction,
+    version: RuleVersion | None = None,
+    details: str | None = None,
 ) -> None:
     """Ajoute un événement au journal (jamais de mise à jour ni de suppression)."""
     db.add(

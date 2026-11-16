@@ -1,4 +1,4 @@
-.PHONY: install dev-front dev-api test lint up
+.PHONY: install dev-front dev-api test lint up api-types
 
 install:
 	cd frontend && npm ci
@@ -25,3 +25,7 @@ test:
 
 lint:
 	cd backend && .venv/bin/ruff check . && .venv/bin/ruff format --check .
+
+api-types:            ## après un changement de route ou de schéma : régénère le contrat et les types du front
+	cd backend && .venv/bin/python -m app.openapi_export
+	cd frontend && npm run api:types

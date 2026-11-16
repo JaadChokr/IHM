@@ -488,7 +488,7 @@ export function createMockApi(): Api {
   /** Totaux d'une période (côté serveur : commandes distinctes ; ici, la somme des jours simulés). */
   function periodTotals(rows: DailyPerformance[]): PeriodTotals {
     const sum = (k: 'ordersFlagged' | 'ordersToSend' | 'ordersProcessed' | 'ordersConfirmedFraud') => rows.reduce((s, x) => s + (x[k] ?? 0), 0);
-    return { ordersFlagged: sum('ordersFlagged'), ordersToSend: sum('ordersToSend'), ordersProcessed: sum('ordersProcessed'), ordersConfirmedFraud: sum('ordersConfirmedFraud') };
+    return { ordersFlagged: sum('ordersFlagged'), ordersToSend: sum('ordersToSend'), ordersProcessed: sum('ordersProcessed'), ordersConfirmedFraud: sum('ordersConfirmedFraud'), ordersObserved: 0 };
   }
   const withObserved = (t: PeriodTotals, byVersion: VersionDaily[]): PeriodTotals => ({
     ...t,
@@ -813,6 +813,7 @@ export function createMockApi(): Api {
       const v: RuleVersion = {
         ...clone({ name: d.name, description: d.description, fraudTypology: d.fraudTypology, criticality: d.criticality, schedule: d.schedule, scheduleEvery: d.scheduleEvery ?? 1, sqlQuery: d.sqlQuery }),
         ruleId: d.ruleId,
+        candidate: false,
         version: r.versions.length ? current(r).version + 1 : 1,
         status: 'SUBMITTED',
         ownerMatricule: owner.ownerMatricule,

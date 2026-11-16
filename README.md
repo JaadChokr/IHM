@@ -8,7 +8,8 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 ```
 .
 ├── frontend/            React + TypeScript + Vite — l'IHM (Nginx non-root en production)
-│   ├── src/api/         contrat d'API (client.ts, types.ts) + implémentation mock pour la démo
+│   ├── src/api/         contrat d'API : openapi.json et schema.gen.ts (générés depuis le back), types.ts (noms
+│   │                    côté front), client.ts (appels) + implémentation mock pour la démo
 │   ├── src/pages/       écrans (liste, éditeur, détail, vue production, audit, profil)
 │   ├── src/styles/      style centralisé : tokens.css (valeurs) + ui.css (classes communes), voir frontend/STYLE.md
 │   └── nginx/           conf Nginx : sert la SPA et relaie /api vers l'API
@@ -151,6 +152,22 @@ cd frontend && npm test          # tests de l'interface
 cd ../backend
 .venv/bin/pytest -q              # tests de l'API (Windows : .venv\Scripts\pytest -q)
 ```
+
+### Contrat d'API front ↔ back
+
+Les types échangés avec l'API ne sont pas écrits à la main côté front : ils sont **générés** depuis le contrat
+OpenAPI que FastAPI tire des routes et des schémas du back.
+
+- `frontend/src/api/openapi.json` : le contrat, exporté par le back (`python -m app.openapi_export`) ;
+- `frontend/src/api/schema.gen.ts` : les types TypeScript générés à partir de ce contrat (`npm run api:types`) ;
+- `frontend/src/api/types.ts` : leur donne leur nom côté front (`RuleDetail`, `Alert`…) et garde les types
+  propres à l'interface ; les listes de valeurs (statuts, criticités, fréquences) y sont vérifiées à la
+  compilation contre le contrat.
+
+Après une modification d'une route ou d'un schéma du back : `make api-types` (ou les deux commandes ci-dessus),
+puis committer les deux fichiers régénérés. S'ils sont oubliés, les tests du back échouent (contrat périmé) et la
+CI du front aussi (types périmés) : le front ne peut pas diverger de l'API sans que ça se voie. Le mode démo
+implémente la même interface : il est vérifié contre les mêmes types.
 
 ### Avec Docker (optionnel)
 

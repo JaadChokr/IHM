@@ -303,7 +303,7 @@ function IssueItem({ issue, onGoTo }: { issue: SqlIssue; onGoTo: (l: number, c?:
       <span className="break-word">
         {issue.message}{' '}
         {issue.line && (
-          <button type="button" className="linkish small" onClick={() => onGoTo(issue.line!, issue.column)}>
+          <button type="button" className="linkish small" onClick={() => onGoTo(issue.line!, issue.column ?? undefined)}>
             ligne {issue.line}
             {issue.column ? `, col. ${issue.column}` : ''}
           </button>

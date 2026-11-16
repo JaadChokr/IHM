@@ -1,7 +1,7 @@
 """Schémas d'échange du test de requête."""
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from app.core.schemas import Model
 from app.rules.types import Schedule
@@ -79,7 +79,7 @@ class ExecutionResult(Model):
     ok: bool
     error: str | None = None
     columns: list[str]
-    rows: list[dict]
+    rows: list[dict[str, Any]]
     total_rows: int
     duration_ms: int
     bytes_processed: int

@@ -9,7 +9,7 @@ export function idleFor(lastRunAt: string): string {
 }
 
 /** Badge de statut. Pour une règle inactive, `lastRunAt` affiche depuis combien de temps elle ne tourne plus. */
-export function StatusBadge({ status, dim, lastRunAt }: { status: DisplayStatus; dim?: boolean; lastRunAt?: string }) {
+export function StatusBadge({ status, dim, lastRunAt }: { status: DisplayStatus; dim?: boolean; lastRunAt?: string | null }) {
   const label = status === 'INACTIVE' && lastRunAt ? `Inactive depuis ${idleFor(lastRunAt)}` : STATUS_LABEL[status];
   return (
     <span className={`badge st-${status}${dim ? ' dim' : ''}`} title={STATUS_HELP[status]}>
@@ -72,7 +72,7 @@ export function Alert({ kind, title, children }: { kind: AlertKind; title?: Reac
  * Cycle de vie avec le statut courant mis en avant. Les deux premières étapes sont des gestes de
  * l'analyste ; la suite se constate dans les exécutions Airflow.
  */
-export function Lifecycle({ status, lastRunAt }: { status: DisplayStatus; lastRunAt?: string }) {
+export function Lifecycle({ status, lastRunAt }: { status: DisplayStatus; lastRunAt?: string | null }) {
   const main: DisplayStatus[] = ['DRAFT', 'SUBMITTED', 'OBSERVATION', 'IN_PRODUCTION'];
   const branch = status === 'INACTIVE' || status === 'REPLACED' || status === 'DISCARDED' ? status : null;
   return (
