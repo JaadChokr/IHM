@@ -674,17 +674,33 @@ table.data a:not(.btn):hover {
   background: var(--muted-soft);
   color: var(--text-2);
 }
-.verdict-seg button[data-verdict='FRAUD'][aria-pressed='true'] {
-  background: var(--bad-soft);
+/* Qualification d'une commande en test : la liste prend la couleur du choix fait */
+select.verdict-select {
+  min-width: 170px;
+  font-weight: 500;
+}
+select.verdict-select.verdict-TO_REVIEW {
+  border-style: dashed;
+}
+select.verdict-select.verdict-FRAUD {
+  background-color: var(--bad-soft);
+  border-color: var(--bad);
   color: var(--bad);
 }
-.verdict-seg button[data-verdict='RISKY'][aria-pressed='true'] {
-  background: var(--warn-soft);
+select.verdict-select.verdict-RISKY {
+  background-color: var(--warn-soft);
+  border-color: var(--warn);
   color: var(--warn);
 }
-.verdict-seg button[data-verdict='NOT_FRAUD'][aria-pressed='true'] {
-  background: var(--good-soft);
+select.verdict-select.verdict-NOT_FRAUD {
+  background-color: var(--good-soft);
+  border-color: var(--good);
   color: var(--good);
+}
+/* Les options gardent les couleurs ordinaires de la liste déroulante */
+select.verdict-select option {
+  background: var(--surface);
+  color: var(--text);
 }
 /* Choix de la phase (alertes) : le nombre d'alertes de chaque phase dans le bouton */
 .phase-seg {

@@ -14,12 +14,8 @@ export const VERDICT_LABEL: Record<AlertVerdict, string> = {
   TO_REVIEW: 'À qualifier',
   PENDING: 'En attente du prestataire',
 };
-/** Les trois qualifications possibles d'une commande en test, dans l'ordre des boutons. */
-const REVIEW_CHOICES: { verdict: ReviewVerdict; label: string }[] = [
-  { verdict: 'FRAUD', label: 'Fraude avérée' },
-  { verdict: 'RISKY', label: 'Risquée' },
-  { verdict: 'NOT_FRAUD', label: 'RAS' },
-];
+/** Les trois qualifications possibles d'une commande en test, dans l'ordre de la liste. */
+const REVIEW_CHOICES: ReviewVerdict[] = ['FRAUD', 'RISKY', 'NOT_FRAUD'];
 /** Verdicts possibles dans chaque phase : en test, ceux des analystes ; en production, ceux du prestataire. */
 const PHASE_VERDICTS: Record<AlertPhase, AlertVerdict[]> = {
   TEST: ['TO_REVIEW', 'FRAUD', 'RISKY', 'NOT_FRAUD'],
@@ -112,9 +108,9 @@ export function AlertsPanel({ ruleId }: Props) {
     if (verdict && !data.verdicts.some((c) => c.verdict === verdict)) setVerdict('');
   }, [data, rule, verdict]);
 
-  async function review(a: Alert, choice: ReviewVerdict) {
-    // Un second clic sur le même choix retire la qualification.
-    const next = a.review?.verdict === choice ? null : choice;
+  /** Qualifie la commande ; `null` (« À qualifier ») retire la qualification. */
+  async function review(a: Alert, next: ReviewVerdict | null) {
+    if ((a.review?.verdict ?? null) === next) return;
     setBusy(a.orderId + a.ruleId + a.ruleVersion);
     setError(undefined);
     try {
@@ -240,7 +236,7 @@ export function AlertsPanel({ ruleId }: Props) {
                   <th>
                     Qualification
                     <InfoTip align="end">
-                      Fraude avérée, commande risquée ou RAS (rien à signaler). Un second clic sur le même choix retire la qualification.
+                      Fraude avérée, commande risquée ou RAS (rien à signaler). « À qualifier » retire la qualification.
                     </InfoTip>
                   </th>
                 ) : (
@@ -277,20 +273,20 @@ export function AlertsPanel({ ruleId }: Props) {
                     <td>
                       {testing && !byProvider ? (
                         <>
-                          <div className="seg verdict-seg" role="group" aria-label={`Qualifier la commande ${a.orderId}`}>
-                            {REVIEW_CHOICES.map((c) => (
-                              <button
-                                key={c.verdict}
-                                type="button"
-                                data-verdict={c.verdict}
-                                aria-pressed={a.review?.verdict === c.verdict}
-                                disabled={busy === id}
-                                onClick={() => review(a, c.verdict)}
-                              >
-                                {c.label}
-                              </button>
+                          <select
+                            className={`select-sm verdict-select verdict-${a.review?.verdict ?? 'TO_REVIEW'}`}
+                            value={a.review?.verdict ?? ''}
+                            disabled={busy === id}
+                            onChange={(e) => review(a, (e.target.value || null) as ReviewVerdict | null)}
+                            aria-label={`Qualifier la commande ${a.orderId}`}
+                          >
+                            <option value="">{VERDICT_LABEL.TO_REVIEW}</option>
+                            {REVIEW_CHOICES.map((v) => (
+                              <option key={v} value={v}>
+                                {VERDICT_LABEL[v]}
+                              </option>
                             ))}
-                          </div>
+                          </select>
                           {a.review && (
                             <div className="small muted">
                               {a.review.byName}, {fmtDateTime(a.review.at)}

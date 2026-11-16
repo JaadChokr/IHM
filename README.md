@@ -408,8 +408,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   nombre d'alertes par phase (pour la règle choisie), par règle (dans la phase choisie) et par verdict (pour
   les deux). Une commande **transmise** est vérifiée par le prestataire (fraude avérée, RAS, ou en attente) :
   rien à qualifier. Seules les commandes d'une version **en test**, non transmises, se qualifient : l'analyste
-  choisit **fraude avérée**, **commande risquée** ou **RAS** (rien à signaler ; un second clic retire la
-  qualification). Il teste ainsi une règle,
+  choisit dans une liste **fraude avérée**, **commande risquée** ou **RAS** (rien à signaler ; « À qualifier »
+  retire la qualification). Il teste ainsi une règle,
   qualifie ses remontées, et la met en production s'il la juge assez pertinente ; le prestataire traite alors
   directement ses commandes. La qualification porte sur la **commande**, toutes règles confondues, et s'ajoute à
   la table BigQuery `alert_reviews` (une ligne par qualification, ajouts seulement, la dernière fait foi ;
