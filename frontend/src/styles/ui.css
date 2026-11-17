@@ -2089,11 +2089,6 @@ details summary {
     display: none;
   }
 }
-@container (max-width: 780px) {
-  .rules-card .col-d {
-    display: none;
-  }
-}
 @container (max-width: 560px) {
   .rules-card .col-e {
     display: none;
