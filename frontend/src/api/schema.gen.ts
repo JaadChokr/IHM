@@ -329,6 +329,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/alerts/{order_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Alert
+         * @description Fiche d'une commande remontée : toutes ses remontées (règles, versions, dates) et les informations du
+         *     titulaire, lues à la demande dans BigQuery (données personnelles : ni stockées, ni journalisées).
+         */
+        get: operations["get_alert_alerts__order_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/alerts/review": {
         parameters: {
             query?: never;
@@ -367,6 +388,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AlertDetail
+         * @description Fiche d'une commande remontée : ses remontées (toutes règles et versions) et ses informations.
+         */
+        AlertDetail: {
+            /** Orderid */
+            orderId: string;
+            /** Alerts */
+            alerts: components["schemas"]["AlertOut"][];
+            holder?: components["schemas"]["OrderHolder"] | null;
+            /** Holdermissing */
+            holderMissing?: ("NOT_CONFIGURED" | "NOT_FOUND") | null;
+        };
         /** AlertOut */
         AlertOut: {
             /** Orderid */
@@ -724,6 +758,39 @@ export interface components {
         NameAvailable: {
             /** Available */
             available: boolean;
+        };
+        /**
+         * OrderHolder
+         * @description Titulaire, moyen de paiement, identité et évaluation e-risk d'une commande.
+         *
+         *     Données personnelles : lues à la demande dans BigQuery pour un utilisateur connecté, jamais stockées dans
+         *     la base de la plateforme ni écrites dans les journaux.
+         */
+        OrderHolder: {
+            /** Titulairefirstname */
+            titulaireFirstName?: string | null;
+            /** Titulairelastname */
+            titulaireLastName?: string | null;
+            /** Titulairephonenumber */
+            titulairePhoneNumber?: string | null;
+            /** Titulairebirthdate */
+            titulaireBirthDate?: string | null;
+            /** Titulaireaddress */
+            titulaireAddress?: string | null;
+            /** Titulairezipcode */
+            titulaireZipCode?: string | null;
+            /** Iban */
+            iban?: string | null;
+            /** Identitykey */
+            identityKey?: string | null;
+            /** Identitytype */
+            identityType?: string | null;
+            /** Identityorigincountry */
+            identityOriginCountry?: string | null;
+            /** Erisklabel */
+            eriskLabel?: string | null;
+            /** Processingstate */
+            processingState?: string | null;
         };
         /** PerformanceResponse */
         PerformanceResponse: {
@@ -1972,6 +2039,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AlertPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_alert_alerts__order_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlertDetail"];
                 };
             };
             /** @description Validation Error */

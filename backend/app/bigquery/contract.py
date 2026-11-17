@@ -120,6 +120,10 @@ class AlertResult:
     verdicts: dict[str, int] = field(default_factory=dict)
 
 
+class DetailsNotConfigured(Exception):
+    """La table des informations de commande n'est pas configurée (RM_BQ_ORDER_DETAILS_TABLE)."""
+
+
 def verdict_of(to_send: bool, provider_is_fraud: bool | None, has_feedback: bool, review: str | None) -> str:
     """Verdict effectif d'une alerte : le prestataire s'il l'a vérifiée ; sinon, en production, en attente du
     prestataire ; en test, la qualification de l'analyste (fraude avérée, commande risquée ou RAS ;
@@ -166,6 +170,15 @@ class BigQueryGateway(Protocol):
 
     def alerts(self, f: AlertFilter) -> AlertResult:
         """Alertes de la période (les plus récentes d'abord), avec les nombres qui guident les filtres."""
+        ...
+
+    def order_alerts(self, order_id: str) -> list[AlertRow]:
+        """Toutes les remontées d'une commande (règles, versions, dates), les plus récentes d'abord."""
+        ...
+
+    def order_details(self, order_id: str) -> dict[str, Any] | None:
+        """Informations de la commande (colonnes ORDER_DETAIL_COLUMNS), None si elle est absente de la table.
+        Lève DetailsNotConfigured si la table n'est pas configurée."""
         ...
 
     def add_review(self, order_id: str, rule_id: str, version: int, verdict: str | None, by: str) -> bool:

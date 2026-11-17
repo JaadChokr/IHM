@@ -9,7 +9,7 @@ Les sections suivent l'ordre des dépendances : une section n'utilise que les pr
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import ConfigDict, model_validator
+from pydantic import ConfigDict, field_validator, model_validator
 from pydantic.alias_generators import to_camel
 from sqlalchemy import BigInteger, DateTime, String, Text, UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
@@ -579,6 +579,67 @@ class AlertReviewIn(Model):
     rule_version: int
     # Fraude avérée, commande risquée ou RAS ; None : retirer la qualification.
     verdict: ReviewVerdict | None
+
+
+# ============================================================================================================
+# Fiche d'une alerte (données BigQuery)
+# ============================================================================================================
+# Colonnes lues dans la table des informations de commande (RM_BQ_ORDER_DETAILS_TABLE), jointe sur order_id.
+ORDER_DETAIL_COLUMNS = (
+    "titulaire_first_name",
+    "titulaire_last_name",
+    "titulaire_phone_number",
+    "titulaire_birth_date",
+    "titulaire_address",
+    "titulaire_zip_code",
+    "iban",
+    "identity_key",
+    "identity_type",
+    "identity_origin_country",
+    "erisk_label",
+    "processing_state",
+)
+
+
+class OrderHolder(Model):
+    """Titulaire, moyen de paiement, identité et évaluation e-risk d'une commande.
+
+    Données personnelles : lues à la demande dans BigQuery pour un utilisateur connecté, jamais stockées dans
+    la base de la plateforme ni écrites dans les journaux.
+    """
+
+    # La table source n'est pas la nôtre : un code postal ou un téléphone peut y être numérique, une date de
+    # naissance un horodatage. Nombres lus comme du texte ; horodatage réduit à sa date.
+    model_config = ConfigDict(coerce_numbers_to_str=True)
+
+    titulaire_first_name: str | None = None
+    titulaire_last_name: str | None = None
+    titulaire_phone_number: str | None = None
+    titulaire_birth_date: date | None = None
+    titulaire_address: str | None = None
+    titulaire_zip_code: str | None = None
+    iban: str | None = None
+    identity_key: str | None = None
+    identity_type: str | None = None
+    identity_origin_country: str | None = None
+    erisk_label: str | None = None
+    processing_state: str | None = None
+
+    @field_validator("titulaire_birth_date", mode="before")
+    @classmethod
+    def _date_only(cls, v: Any) -> Any:
+        return v.date() if isinstance(v, datetime) else v
+
+
+class AlertDetail(Model):
+    """Fiche d'une commande remontée : ses remontées (toutes règles et versions) et ses informations."""
+
+    order_id: str
+    # Les plus récentes d'abord.
+    alerts: list[AlertOut]
+    holder: OrderHolder | None = None
+    # Pourquoi `holder` manque : table non configurée, ou commande absente de la table.
+    holder_missing: Literal["NOT_CONFIGURED", "NOT_FOUND"] | None = None
 
 
 # Toutes les tables, enregistrées sur une seule métadonnée (Alembic, tests).

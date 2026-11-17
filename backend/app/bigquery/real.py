@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 import time
 from typing import Any
 
@@ -9,6 +10,7 @@ from app.bigquery.contract import (
     AlertResult,
     AlertRow,
     BytesLimitExceeded,
+    DetailsNotConfigured,
     DryRunMeta,
     ExecMeta,
     Overlap,
@@ -18,9 +20,37 @@ from app.bigquery.contract import (
 )
 from app.core.config import Settings
 from app.core.periods import Period
-from app.models import Column, DailyPerformance, RuleRun, VersionDaily, VersionPerformance
+from app.models import (
+    ORDER_DETAIL_COLUMNS,
+    Column,
+    DailyPerformance,
+    RuleRun,
+    VersionDaily,
+    VersionPerformance,
+)
 
 log = logging.getLogger(__name__)
+
+# Nom de table BigQuery : dataset.table ou projet.dataset.table.
+_TABLE_RE = re.compile(r"[A-Za-z0-9_-]+(\.[A-Za-z0-9_-]+){1,2}")
+
+
+def _alert_row(r: dict) -> AlertRow:
+    """Une ligne de v_rule_orders (verdict, retour du prestataire, qualification) en AlertRow."""
+    return AlertRow(
+        order_id=r["order_id"],
+        rule_id=r["rule_id"],
+        rule_version=r["rule_version"],
+        run_date=r["run_date"],
+        detected_at=r["detected_at"],
+        to_send=r["to_send"],
+        verdict=r["verdict"],
+        provider_is_fraud=r["provider_is_fraud"] if r["has_feedback"] else None,
+        review_verdict=r["review_verdict"],
+        reviewed_by=r["reviewed_by"],
+        reviewed_at=r["reviewed_at"],
+        details=json.loads(r["details"]) if r["details"] else None,
+    )
 
 
 class RealBigQueryGateway:
@@ -298,23 +328,7 @@ class RealBigQueryGateway:
                 P("offset", "INT64", f.offset),
             ],
         ) or [{}]
-        items = [
-            AlertRow(
-                order_id=r["order_id"],
-                rule_id=r["rule_id"],
-                rule_version=r["rule_version"],
-                run_date=r["run_date"],
-                detected_at=r["detected_at"],
-                to_send=r["to_send"],
-                verdict=r["verdict"],
-                provider_is_fraud=r["provider_is_fraud"] if r["has_feedback"] else None,
-                review_verdict=r["review_verdict"],
-                reviewed_by=r["reviewed_by"],
-                reviewed_at=r["reviewed_at"],
-                details=json.loads(r["details"]) if r["details"] else None,
-            )
-            for r in row.get("items") or []
-        ]
+        items = [_alert_row(r) for r in row.get("items") or []]
 
         def counts(key: str) -> dict[str, int]:
             return {c["k"]: c["n"] for c in row.get(key) or []}
@@ -326,6 +340,35 @@ class RealBigQueryGateway:
             rules={(c["k"], c["phase"]): c["n"] for c in row.get("rules") or []},
             verdicts=counts("verdicts"),
         )
+
+    def order_alerts(self, order_id):
+        rows = self._rows(
+            f"""SELECT order_id, rule_id, rule_version, run_date, detected_at, to_send,
+                       TO_JSON_STRING(details) AS details, has_feedback, is_fraud AS provider_is_fraud,
+                       review_verdict, reviewed_by, reviewed_at, verdict
+                FROM {self.ds}.v_rule_orders
+                WHERE order_id = @order_id
+                ORDER BY detected_at DESC, rule_id""",
+            [self._bq.ScalarQueryParameter("order_id", "STRING", order_id)],
+        )
+        return [_alert_row(r) for r in rows]
+
+    def order_details(self, order_id):
+        table = self.settings.bq_order_details_table.strip()
+        if not table:
+            raise DetailsNotConfigured
+        # Le nom vient de la configuration, mais il entre dans le texte SQL : forme stricte, sans guillemet.
+        if not _TABLE_RE.fullmatch(table):
+            raise ValueError(f"RM_BQ_ORDER_DETAILS_TABLE invalide : {table!r} (attendu dataset.table).")
+        full = table if table.count(".") == 2 else f"{self.client.project}.{table}"
+        rows = self._rows(
+            f"""SELECT {", ".join(ORDER_DETAIL_COLUMNS)}
+                FROM `{full}`
+                WHERE CAST(order_id AS STRING) = @order_id
+                LIMIT 1""",
+            [self._bq.ScalarQueryParameter("order_id", "STRING", order_id)],
+        )
+        return rows[0] if rows else None
 
     def add_review(self, order_id, rule_id, version, verdict, by):
         P = self._bq.ScalarQueryParameter

@@ -90,3 +90,41 @@ def test_alertes_et_qualifications_sql_valide():
     assert "(order_id, verdict," in insert
     for sql in seen:
         sqlglot.parse_one(re.sub(r"@\w+", "NULL", sql), read="bigquery")
+
+
+def test_fiche_d_une_alerte_sql_valide():
+    # Remontées d'une commande (vue v_rule_orders) et informations de la table configurée, jointe sur
+    # order_id : SQL BigQuery valide ; nom de table vérifié avant d'entrer dans la requête.
+    import re
+    from types import SimpleNamespace
+
+    import pytest
+    import sqlglot
+
+    from app.bigquery import DetailsNotConfigured
+
+    g = RealBigQueryGateway.__new__(RealBigQueryGateway)
+    g.ds = "`p.d`"
+    g.client = SimpleNamespace(project="p")
+    param = staticmethod(lambda *a: a)
+    g._bq = type("bq", (), {"ScalarQueryParameter": param})
+    seen: list[str] = []
+    g._rows = lambda sql, params: seen.append(sql) or []
+    assert g.order_alerts("O1") == []
+    g.settings = SimpleNamespace(bq_order_details_table="")
+    with pytest.raises(DetailsNotConfigured):
+        g.order_details("O1")
+    g.settings = SimpleNamespace(bq_order_details_table="crm.commandes")
+    assert g.order_details("O1") is None
+    g.settings = SimpleNamespace(bq_order_details_table="crm.commandes`; DROP TABLE x; --")
+    with pytest.raises(ValueError):
+        g.order_details("O1")
+    listing, details = seen
+    assert "`p.d`.v_rule_orders" in listing and "WHERE order_id = @order_id" in listing
+    assert (
+        "FROM `p.crm.commandes`" in details
+        and "titulaire_first_name" in details
+        and "processing_state" in details
+    )
+    for sql in seen:
+        sqlglot.parse_one(re.sub(r"@\w+", "NULL", sql), read="bigquery")

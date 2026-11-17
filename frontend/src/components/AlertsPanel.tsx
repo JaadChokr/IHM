@@ -273,13 +273,14 @@ export function AlertsPanel({ ruleId }: Props) {
             <tbody>
               {data.items.map((a) => {
                 const id = a.orderId + a.ruleId + a.ruleVersion;
-                const testing = a.phase === 'TEST';
-                // Une commande en test déjà vérifiée par le prestataire (transmise par une autre règle) : son verdict prime.
-                const byProvider = a.providerIsFraud !== null && a.providerIsFraud !== undefined;
                 return (
                   <tr key={id}>
                     <td className="small nowrap">{fmtDateTime(a.detectedAt)}</td>
-                    <td className="mono small nowrap">{a.orderId}</td>
+                    <td className="mono small nowrap">
+                      <Link to={`/alerts/${encodeURIComponent(a.orderId)}`} className="order-link" title="Voir la fiche de la commande">
+                        {a.orderId}
+                      </Link>
+                    </td>
                     <td className={ruleId ? 'nowrap' : 'alert-rule'}>
                       {ruleId ? (
                         <span className="small">v{a.ruleVersion}</span>
@@ -299,34 +300,7 @@ export function AlertsPanel({ ruleId }: Props) {
                       </div>
                     </td>
                     <td>
-                      {testing && !byProvider ? (
-                        <>
-                          <select
-                            className={`select-sm verdict-select verdict-${a.review?.verdict ?? 'TO_REVIEW'}`}
-                            value={a.review?.verdict ?? ''}
-                            disabled={busy === id}
-                            onChange={(e) => review(a, (e.target.value || null) as ReviewVerdict | null)}
-                            aria-label={`Qualifier la commande ${a.orderId}`}
-                          >
-                            <option value="">{VERDICT_LABEL.TO_REVIEW}</option>
-                            {REVIEW_CHOICES.map((v) => (
-                              <option key={v} value={v}>
-                                {VERDICT_LABEL[v]}
-                              </option>
-                            ))}
-                          </select>
-                          {a.review && (
-                            <div className="small muted">
-                              {a.review.byName}, {fmtDateTime(a.review.at)}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <span className={`badge verdict verdict-${a.verdict}`}>{VERDICT_LABEL[a.verdict]}</span>
-                          {testing && <div className="small muted">Déjà vérifiée par le prestataire</div>}
-                        </>
-                      )}
+                      <VerdictCell alert={a} busy={busy === id} onReview={review} />
                     </td>
                   </tr>
                 );
@@ -337,5 +311,46 @@ export function AlertsPanel({ ruleId }: Props) {
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Verdict d'une alerte : pour une commande en test que le prestataire n'a pas vérifiée, la liste de choix des
+ * analystes (fraude avérée, risquée, RAS ; « À vérifier » retire le verdict) ; sinon le verdict affiché.
+ */
+export function VerdictCell({ alert: a, busy, onReview }: { alert: Alert; busy: boolean; onReview: (a: Alert, next: ReviewVerdict | null) => void }) {
+  const testing = a.phase === 'TEST';
+  // Une commande en test déjà vérifiée par le prestataire (transmise par une autre règle) : son verdict prime.
+  const byProvider = a.providerIsFraud !== null && a.providerIsFraud !== undefined;
+  if (!testing || byProvider) {
+    return (
+      <>
+        <span className={`badge verdict verdict-${a.verdict}`}>{VERDICT_LABEL[a.verdict]}</span>
+        {testing && <div className="small muted">Déjà vérifiée par le prestataire</div>}
+      </>
+    );
+  }
+  return (
+    <>
+      <select
+        className={`select-sm verdict-select verdict-${a.review?.verdict ?? 'TO_REVIEW'}`}
+        value={a.review?.verdict ?? ''}
+        disabled={busy}
+        onChange={(e) => onReview(a, (e.target.value || null) as ReviewVerdict | null)}
+        aria-label={`Qualifier la commande ${a.orderId}`}
+      >
+        <option value="">{VERDICT_LABEL.TO_REVIEW}</option>
+        {REVIEW_CHOICES.map((v) => (
+          <option key={v} value={v}>
+            {VERDICT_LABEL[v]}
+          </option>
+        ))}
+      </select>
+      {a.review && (
+        <div className="small muted">
+          {a.review.byName}, {fmtDateTime(a.review.at)}
+        </div>
+      )}
+    </>
   );
 }

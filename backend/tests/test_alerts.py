@@ -102,3 +102,63 @@ def test_filtres_guides_par_les_nombres(client, bq):
     assert len(page["rules"]) == 3  # le choix de la règle ne réduit pas la liste des règles
     assert {c["verdict"]: c["count"] for c in page["verdicts"]} == {"NOT_FRAUD": 1}
     assert page["total"] == 1 and page["toReview"] == 0
+
+
+HOLDER = {
+    "titulaire_first_name": "Alex",
+    "titulaire_last_name": "Durand",
+    "titulaire_phone_number": 33600000000,  # numérique dans la table source : lu comme du texte
+    "titulaire_birth_date": datetime(1990, 5, 4, tzinfo=UTC),  # horodatage : réduit à sa date
+    "titulaire_address": "1 rue de l'Exemple",
+    "titulaire_zip_code": "75000",
+    "iban": "FR7600000000000000000000000",
+    "identity_key": "ID-0001",
+    "identity_type": "PASSPORT",
+    "identity_origin_country": "FR",
+    "erisk_label": "HIGH",
+    "processing_state": "DONE",
+}
+
+
+def test_fiche_d_une_alerte(client, bq):
+    # La fiche réunit les remontées de la commande (toutes règles et versions) et les informations du
+    # titulaire, lues à la demande dans la table configurée.
+    login(client)
+    a = _submit(client, RULE)
+    b = _submit(client, {**RULE, "name": "Autre règle"})
+    bq.alert_rows = [
+        _alert(a, "ORD-9", to_send=False, days_ago=2),
+        _alert(b, "ORD-9", to_send=True, days_ago=1),
+        _alert(a, "ORD-OTHER", to_send=False),
+    ]
+    bq.order_detail_rows = {"ORD-9": HOLDER}
+    review(client, "ORD-9", a, "RISKY")
+
+    d = client.get("/alerts/ORD-9").json()
+    assert [(x["ruleName"], x["phase"]) for x in d["alerts"]] == [
+        ("Autre règle", "PRODUCTION"),
+        ("Panier élevé", "TEST"),
+    ]
+    assert d["alerts"][1]["verdict"] == "RISKY" and d["alerts"][1]["review"]["byName"] == "Camille Martin"
+    h = d["holder"]
+    assert (h["titulaireFirstName"], h["titulairePhoneNumber"], h["titulaireBirthDate"]) == (
+        "Alex",
+        "33600000000",
+        "1990-05-04",
+    )
+    assert (h["iban"], h["identityOriginCountry"], h["eriskLabel"], h["processingState"]) == (
+        "FR7600000000000000000000000",
+        "FR",
+        "HIGH",
+        "DONE",
+    )
+    assert d["holderMissing"] is None
+
+    # Commande absente de la table, table non configurée : les remontées restent visibles.
+    assert client.get("/alerts/ORD-OTHER").json()["holderMissing"] == "NOT_FOUND"
+    bq.order_detail_rows = None
+    d = client.get("/alerts/ORD-9").json()
+    assert (d["holder"], d["holderMissing"], len(d["alerts"])) == (None, "NOT_CONFIGURED", 2)
+
+    # Une commande qu'aucune règle n'a remontée n'a pas de fiche.
+    assert client.get("/alerts/ORD-INCONNUE").status_code == 404

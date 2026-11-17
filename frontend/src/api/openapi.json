@@ -1105,6 +1105,49 @@
         }
       }
     },
+    "/alerts/{order_id}": {
+      "get": {
+        "tags": [
+          "alertes"
+        ],
+        "summary": "Get Alert",
+        "description": "Fiche d'une commande remontée : toutes ses remontées (règles, versions, dates) et les informations du\ntitulaire, lues à la demande dans BigQuery (données personnelles : ni stockées, ni journalisées).",
+        "operationId": "get_alert_alerts__order_id__get",
+        "parameters": [
+          {
+            "name": "order_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Order Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlertDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/alerts/review": {
       "post": {
         "tags": [
@@ -1221,6 +1264,53 @@
   },
   "components": {
     "schemas": {
+      "AlertDetail": {
+        "properties": {
+          "orderId": {
+            "type": "string",
+            "title": "Orderid"
+          },
+          "alerts": {
+            "items": {
+              "$ref": "#/components/schemas/AlertOut"
+            },
+            "type": "array",
+            "title": "Alerts"
+          },
+          "holder": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OrderHolder"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "holderMissing": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "NOT_CONFIGURED",
+                  "NOT_FOUND"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holdermissing"
+          }
+        },
+        "type": "object",
+        "required": [
+          "orderId",
+          "alerts"
+        ],
+        "title": "AlertDetail",
+        "description": "Fiche d'une commande remontée : ses remontées (toutes règles et versions) et ses informations."
+      },
       "AlertOut": {
         "properties": {
           "orderId": {
@@ -2143,6 +2233,146 @@
           "available"
         ],
         "title": "NameAvailable"
+      },
+      "OrderHolder": {
+        "properties": {
+          "titulaireFirstName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulairefirstname"
+          },
+          "titulaireLastName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulairelastname"
+          },
+          "titulairePhoneNumber": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulairephonenumber"
+          },
+          "titulaireBirthDate": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulairebirthdate"
+          },
+          "titulaireAddress": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulaireaddress"
+          },
+          "titulaireZipCode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Titulairezipcode"
+          },
+          "iban": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Iban"
+          },
+          "identityKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identitykey"
+          },
+          "identityType": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identitytype"
+          },
+          "identityOriginCountry": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Identityorigincountry"
+          },
+          "eriskLabel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Erisklabel"
+          },
+          "processingState": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processingstate"
+          }
+        },
+        "type": "object",
+        "title": "OrderHolder",
+        "description": "Titulaire, moyen de paiement, identité et évaluation e-risk d'une commande.\n\nDonnées personnelles : lues à la demande dans BigQuery pour un utilisateur connecté, jamais stockées dans\nla base de la plateforme ni écrites dans les journaux."
       },
       "PerformanceResponse": {
         "properties": {

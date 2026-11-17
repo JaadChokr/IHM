@@ -71,6 +71,9 @@ Avant de terminer une tâche : `make lint`, `make test`, et si le back a changé
   peut être envoyée au prestataire qu'après une première exécution (`NOT_RUN_YET`).
 - L'identité est résolue en un seul point : `get_current_user` (`services/auth.py`).
 - Toute action de l'analyste est tracée par `record_audit` (`services/audit.py`).
+- **Données personnelles** (fiche d'une alerte : titulaire, IBAN, identité, lus dans la table
+  `RM_BQ_ORDER_DETAILS_TABLE`) : lues à la demande dans BigQuery, jamais stockées dans PostgreSQL, jamais
+  écrites dans les journaux ni dans le journal d'activité. Dans la démo, uniquement des valeurs fictives.
 
 ## BigQuery : règles à respecter
 

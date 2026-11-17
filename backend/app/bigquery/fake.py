@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from app.bigquery.contract import (
     AlertResult,
     AlertRow,
+    DetailsNotConfigured,
     DryRunMeta,
     ExecMeta,
     Overlap,
@@ -180,30 +181,34 @@ class FakeBigQueryGateway:
     # Qualifications (alert_reviews), dans l'ordre : (order_id, verdict, matricule, horodatage).
     reviews: list[tuple[str, str | None, str, datetime]] = field(default_factory=list)
 
+    # Informations de commande (table RM_BQ_ORDER_DETAILS_TABLE), préremplies par les tests ; None : table
+    # non configurée.
+    order_detail_rows: dict[str, dict] | None = field(default_factory=dict)
+
+    def _row(self, a: AlertRow, has_feedback: bool) -> AlertRow:
+        """Une alerte avec son verdict, le retour du prestataire et la dernière qualification."""
+        review, by, at = {o: (v, b, t) for o, v, b, t in self.reviews}.get(a.order_id, (None, None, None))
+        return AlertRow(
+            a.order_id,
+            a.rule_id,
+            a.rule_version,
+            a.run_date,
+            a.detected_at,
+            a.to_send,
+            verdict_of(a.to_send, a.provider_is_fraud, has_feedback, review),
+            a.provider_is_fraud if has_feedback else None,
+            review,
+            by if review is not None else None,
+            at if review is not None else None,
+            a.details,
+        )
+
     def alerts(self, f):
-        last = {o: (v, by, at) for o, v, by, at in self.reviews}
-        base = []
-        for a, has_feedback in self.alert_rows:
-            if not (f.start <= a.run_date <= f.end) or (f.q and f.q not in a.order_id):
-                continue
-            review, by, at = last.get(a.order_id, (None, None, None))
-            verdict = verdict_of(a.to_send, a.provider_is_fraud, has_feedback, review)
-            base.append(
-                AlertRow(
-                    a.order_id,
-                    a.rule_id,
-                    a.rule_version,
-                    a.run_date,
-                    a.detected_at,
-                    a.to_send,
-                    verdict,
-                    a.provider_is_fraud if has_feedback else None,
-                    review,
-                    by if review is not None else None,
-                    at if review is not None else None,
-                    a.details,
-                )
-            )
+        base = [
+            self._row(a, has_feedback)
+            for a, has_feedback in self.alert_rows
+            if f.start <= a.run_date <= f.end and not (f.q and f.q not in a.order_id)
+        ]
 
         def rule_ok(x: AlertRow) -> bool:
             return not f.rule_id or x.rule_id == f.rule_id
@@ -224,6 +229,15 @@ class FakeBigQueryGateway:
             rules=count(base, lambda x: (x.rule_id, "PRODUCTION" if x.to_send else "TEST")),
             verdicts=count(chosen, lambda x: x.verdict),
         )
+
+    def order_alerts(self, order_id):
+        rows = [self._row(a, fb) for a, fb in self.alert_rows if a.order_id == order_id]
+        return sorted(rows, key=lambda x: (x.detected_at, x.rule_id), reverse=True)
+
+    def order_details(self, order_id):
+        if self.order_detail_rows is None:
+            raise DetailsNotConfigured
+        return self.order_detail_rows.get(order_id)
 
     def add_review(self, order_id, rule_id, version, verdict, by):
         ok = any(

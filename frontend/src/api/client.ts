@@ -1,5 +1,6 @@
 import type {
   AlertFilters,
+  AlertDetail,
   AlertPage,
   AlertReviewIn,
   AuditEvent,
@@ -72,6 +73,7 @@ export interface Api {
   // Alertes remontées ; qualification d'une commande en test (fraude, pas fraude, ou null : retirée).
   listAlerts(filters: AlertFilters): Promise<AlertPage>;
   reviewAlert(body: AlertReviewIn): Promise<void>;
+  getAlert(orderId: string): Promise<AlertDetail>;
 
   /** Présent uniquement en mode démo : simule les actions de l'équipe data en base. */
   demo?: {
@@ -138,6 +140,7 @@ export function createHttpApi(): Api {
     listAudit: (f) => http('GET', `/audit${qs(f)}`),
     listAlerts: (f) => http('GET', `/alerts${qs(Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v === undefined ? undefined : String(v)])))}`),
     reviewAlert: (body) => http('POST', '/alerts/review', body),
+    getAlert: (orderId) => http('GET', `/alerts/${encodeURIComponent(orderId)}`),
   };
 }
 

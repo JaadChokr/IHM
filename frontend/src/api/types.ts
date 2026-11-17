@@ -48,6 +48,9 @@ export type AuditAction = AuditEvent['action'];
 export type Alert = Schemas['AlertOut'];
 export type AlertReview = Schemas['AlertReviewOut'];
 export type AlertPage = Schemas['AlertPage'];
+/** Fiche d'une commande remontée : ses remontées et les informations du titulaire (données personnelles). */
+export type AlertDetail = Schemas['AlertDetail'];
+export type OrderHolder = Schemas['OrderHolder'];
 /** Qualification d'une commande en test : sa dernière version (None : la retirer). */
 export type AlertReviewIn = Schemas['AlertReviewIn'];
 /** Phase de la version qui a remonté la commande : en test (non transmise) ou en production (transmise). */

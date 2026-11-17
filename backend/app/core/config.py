@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Table de retour du prestataire (dataset.table), lue par la vue v_rule_orders (PRD Q2).
     # Utilisée par infra/bigquery/apply.sh / apply.ps1 pour créer la vue.
     bq_feedback_table: str = ""
+    # Table des informations d'une commande (titulaire, IBAN, identité, e-risk) : dataset.table ou
+    # projet.dataset.table, jointe sur order_id. Lue à la demande par la fiche d'une alerte, jamais recopiée.
+    # Vide : la fiche affiche les remontées sans ces informations.
+    bq_order_details_table: str = ""
     bq_location: str = "europe-west9"
 
     # Garde-fous F3 — réglables sans redéploiement (PRD R4).

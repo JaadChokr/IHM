@@ -429,6 +429,18 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   `v_rule_performance` et la liste des alertes la lisent ; `tests/test_verdict.py` vérifie que la passerelle
   simulée de l'API la reproduit à l'identique).
 
+  **Fiche d'une alerte** : le numéro de commande, dans la liste des alertes, ouvre sa fiche (`/alerts/<commande>`,
+  `GET /alerts/{order_id}`). Elle montre toutes les remontées de la commande (règles, versions, statut, détails,
+  verdict, à donner ici pour une commande en test), puis le **titulaire** (prénom, nom, téléphone, date de
+  naissance, adresse, code postal), le **paiement et l'identité** (IBAN, clé, type et pays d'émission de la
+  pièce) et l'**évaluation e-risk** (libellé, état de traitement). Ces colonnes (`titulaire_first_name`,
+  `titulaire_last_name`, `titulaire_phone_number`, `titulaire_birth_date`, `titulaire_address`,
+  `titulaire_zip_code`, `iban`, `identity_key`, `identity_type`, `identity_origin_country`, `erisk_label`,
+  `processing_state`) sont lues dans la table désignée par `RM_BQ_ORDER_DETAILS_TABLE` (`dataset.table` ou
+  `projet.dataset.table`), jointe sur `order_id`. Ce sont des **données personnelles** : lues à la demande pour
+  un utilisateur connecté, jamais recopiées dans PostgreSQL ni écrites dans les journaux. Sans table configurée,
+  ou pour une commande absente de la table, la fiche affiche les remontées seules et le dit.
+
   **Deux vues d'indicateurs** :
   - `v_rule_performance` (une ligne par règle, version et jour) sert au **comparatif des versions** : chaque
     version y garde toutes ses commandes, candidate comprise, y compris celles déjà remontées par une autre

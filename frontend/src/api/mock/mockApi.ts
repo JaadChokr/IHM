@@ -13,6 +13,7 @@ import {
   type DailyPerformance,
   type Draft,
   type Guardrails,
+  type OrderHolder,
   type PeriodTotals,
   type ReviewVerdict,
   type VersionDaily,
@@ -367,6 +368,29 @@ export function createMockApi(): Api {
         : `${c.name.slice(0, 3)}-${Math.floor(x * 1e5)}`;
     }
     return out;
+  }
+
+  /** Informations fictives du titulaire d'une commande (table des informations de commande), stables. */
+  function fakeHolder(id: string, details: Alert['details']): OrderHolder {
+    const pick = <T,>(k: string, list: readonly T[]) => list[Math.floor(rnd(id + k) * list.length)];
+    const digits = (k: string, n: number) => Array.from({ length: n }, (_, i) => Math.floor(rnd(id + k + i) * 10)).join('');
+    const country = typeof details?.card_country === 'string' ? details.card_country : pick('c', ['FR', 'FR', 'BE', 'NG', 'RO', 'BR']);
+    const year = 1950 + Math.floor(rnd(id + 'y') * 55);
+    const [city, zip] = pick('v', [['Paris', '75011'], ['Lyon', '69003'], ['Lille', '59000'], ['Nantes', '44000'], ['Marseille', '13006']] as const);
+    return {
+      titulaireFirstName: pick('f', ['Alexandre', 'Inès', 'Hugo', 'Chloé', 'Nathan', 'Léa', 'Yanis', 'Manon', 'Karim', 'Sofia']),
+      titulaireLastName: pick('l', ['Lefèvre', 'Roux', 'Fontaine', 'Chevalier', 'Mercier', 'Blanc', 'Guérin', 'Diallo', 'Nguyen', 'Costa']),
+      titulairePhoneNumber: `+33 6 ${digits('p', 8).replace(/(\d{2})(?=\d)/g, '$1 ')}`,
+      titulaireBirthDate: `${year}-${String(1 + Math.floor(rnd(id + 'm') * 12)).padStart(2, '0')}-${String(1 + Math.floor(rnd(id + 'd') * 28)).padStart(2, '0')}`,
+      titulaireAddress: `${1 + Math.floor(rnd(id + 'n') * 120)} ${pick('r', ['rue des Lilas', 'avenue Victor Hugo', 'boulevard Voltaire', 'rue de la Paix', 'chemin des Vignes'])}, ${city}`,
+      titulaireZipCode: zip,
+      iban: `FR76 ${digits('i', 23).replace(/(\d{4})(?=\d)/g, '$1 ')}`,
+      identityKey: `${pick('k', ['ID', 'PP', 'TS'])}-${digits('k', 9)}`,
+      identityType: pick('t', ['CARTE_IDENTITE', 'PASSEPORT', 'TITRE_SEJOUR']),
+      identityOriginCountry: country,
+      eriskLabel: pick('e', ['LOW', 'MEDIUM', 'HIGH', 'HIGH']),
+      processingState: pick('s', ['ACCEPTED', 'UNDER_REVIEW', 'REJECTED']),
+    };
   }
 
   /** Toutes les alertes d'une période (avant filtres de phase / verdict). */
@@ -967,6 +991,25 @@ export function createMockApi(): Api {
           .sort((a, b) => Number(a.phase !== 'TEST') - Number(b.phase !== 'TEST') || b.count - a.count || a.ruleName.localeCompare(b.ruleName)),
         verdicts: [...count(chosen, (a) => a.verdict)].map(([verdict, n]) => ({ verdict, count: n })),
       };
+    },
+
+    async getAlert(id) {
+      await delay();
+      currentUser();
+      // Numéro de commande simulé : règle (2 derniers caractères), version, jour, rang (voir orderId).
+      const m = /^CMD-(\w{2})\d+-(\d{2})(\d{2})(\d{2})-\d{3}$/.exec(id);
+      const d = m ? `20${m[2]}-${m[3]}-${m[4]}` : '';
+      const alerts = m
+        ? db.rules
+            .filter((r) => r.ruleId.slice(-2) === m[1])
+            .flatMap((r) => alertsBetween(d, d, r.ruleId))
+            .filter((a) => a.orderId === id)
+            .sort((a, b) => b.detectedAt.localeCompare(a.detectedAt))
+        : [];
+      if (!alerts.length) throw new ApiError(404, "Aucune règle n'a remonté cette commande.");
+      // Environ une commande sur dix absente de la table des informations de commande.
+      if (rnd(id + 'h') < 0.1) return { orderId: id, alerts, holder: null, holderMissing: 'NOT_FOUND' };
+      return { orderId: id, alerts, holder: fakeHolder(id, alerts[0].details), holderMissing: null };
     },
 
     async reviewAlert({ orderId: id, ruleId, ruleVersion, verdict }) {
