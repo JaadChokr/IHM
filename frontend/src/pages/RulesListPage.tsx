@@ -138,19 +138,7 @@ export function RulesListPage() {
                       </div>
                     </td>
                     <td>
-                      <div className="row gap-1 nowrap-row">
-                        <StatusBadge status={r.status} lastRunAt={r.lastRunAt} />
-                        {/* Une autre version que la dernière tourne en production (ex. la v1, pendant que la v2 est testée). */}
-                        {r.productionVersion && (
-                          <span
-                            className="prod-pill"
-                            title={`La v${r.productionVersion} reste en production : ses commandes partent toujours chez le prestataire.`}
-                            aria-label={`v${r.productionVersion} en production`}
-                          >
-                            <span className="prod-pill-dot" aria-hidden="true" />v{r.productionVersion}
-                          </span>
-                        )}
-                      </div>
+                      <StatusBadge status={r.status} lastRunAt={r.lastRunAt} />
                     </td>
                     <td className="col-c"><span className="tag">{r.fraudTypology}</span></td>
                     <td className="col-e"><CriticalityBadge value={r.criticality} /></td>

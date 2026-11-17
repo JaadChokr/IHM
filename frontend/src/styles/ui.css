@@ -614,26 +614,6 @@ table.data a:not(.btn):hover {
   background: var(--good-soft);
   color: var(--good);
 }
-/* Liste des règles : version encore en production quand la dernière est en test (pastille discrète, détail au survol) */
-.prod-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 6px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-pill);
-  font-size: var(--fs-2xs);
-  font-weight: 600;
-  color: var(--text-3);
-  white-space: nowrap;
-  cursor: default;
-}
-.prod-pill-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--good);
-}
 .st-INACTIVE {
   background: var(--warn-soft);
   color: var(--warn);
