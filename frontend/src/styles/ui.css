@@ -729,6 +729,9 @@ select.verdict-select option {
 .alerts-table .alert-rule {
   min-width: 200px;
 }
+.alerts-table .alert-rule .badge {
+  margin-top: var(--space-1);
+}
 .alerts-table .alert-details {
   max-width: 220px;
 }
