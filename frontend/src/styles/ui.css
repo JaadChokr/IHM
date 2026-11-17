@@ -597,8 +597,8 @@ table.data a:not(.btn):hover {
   background: var(--muted-soft);
   color: var(--text-2);
 }
-/* En observation : bleu, distinct de « inactive » (orange) et de « en production » (vert). */
-.st-OBSERVATION {
+/* En test : bleu, distinct de « inactive » (orange) et de « en production » (vert). */
+.st-TEST {
   background: color-mix(in srgb, var(--testing) 13%, transparent);
   color: var(--testing);
 }
@@ -1094,7 +1094,7 @@ select.verdict-select option {
   height: 2px;
   border-radius: 1px;
 }
-/* Barres journalières (DailyBars) : pleine en production, hachurée en observation. */
+/* Barres journalières (DailyBars) : pleine en production, hachurée en test. */
 .chart .bar {
   stroke: none;
 }
@@ -2230,7 +2230,7 @@ details summary {
   }
 }
 
-/* Décision après observation (page d'une règle) */
+/* Décision après le test (page d'une règle) */
 .decision-card {
   display: flex;
   flex-wrap: wrap;

@@ -107,7 +107,7 @@ export function SurveillancePage() {
                           <Link to={`/rules/${r.ruleId}`} className="rule-link">
                             {r.name}
                           </Link>
-                          {(r.status === 'INACTIVE' || r.status === 'OBSERVATION') && <StatusBadge status={r.status} lastRunAt={r.lastRunAt} />}
+                          {(r.status === 'INACTIVE' || r.status === 'TEST') && <StatusBadge status={r.status} lastRunAt={r.lastRunAt} />}
                         </div>
                         <div className="small muted">
                           v{r.version} · {r.fraudTypology} · {r.ownerName}

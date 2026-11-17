@@ -166,21 +166,21 @@ export function createMockApi(): Api {
     if (!run.lastRunAt) return undefined;
     const idleDays = (Date.now() - new Date(run.lastRunAt).getTime()) / 86400000;
     if (idleDays > PERIOD_DAYS[v.schedule] * (v.scheduleEvery ?? 1) * INACTIVE_AFTER_PERIODS) return 'INACTIVE';
-    return v.decision === 'SENT' ? 'IN_PRODUCTION' : 'OBSERVATION';
+    return v.decision === 'SENT' ? 'IN_PRODUCTION' : 'TEST';
   }
 
   function deriveStatus(r: MockRule, v: RuleVersion): RuleVersion['status'] {
     if (v.decision === 'DISCARDED') return 'DISCARDED';
     // Publiée, elle est en test d'office, même avant sa première exécution.
-    if (registryVersions(r).some(([w]) => w.version === v.version)) return runStatus(r, v) ?? 'OBSERVATION';
+    if (registryVersions(r).some(([w]) => w.version === v.version)) return runStatus(r, v) ?? 'TEST';
     // Hors de rules_registry : une version plus récente a pris sa place.
     const newer = r.versions.filter((w) => w.version > v.version && w.decision !== 'DISCARDED');
     if (newer.some((w) => r.productionSince[w.version] !== undefined)) return 'REPLACED';
-    return runStatus(r, v) ?? (newer.length ? 'REPLACED' : 'OBSERVATION');
+    return runStatus(r, v) ?? (newer.length ? 'REPLACED' : 'TEST');
   }
 
   const view = (r: MockRule, v: RuleVersion): RuleVersion => ({ ...withRuns(r, v), status: deriveStatus(r, v), candidate: isCandidate(r, v) });
-  const RUNNING: RuleVersion['status'][] = ['OBSERVATION', 'IN_PRODUCTION', 'INACTIVE'];
+  const RUNNING: RuleVersion['status'][] = ['TEST', 'IN_PRODUCTION', 'INACTIVE'];
   /** Version qui représente la règle à l'exécution : la version en production si elle tourne, jamais la candidate. */
   /** La version tourne : elle s'est déjà exécutée (une version publiée pas encore exécutée n'a rien à surveiller). */
   const isRunning = (r: MockRule, v: RuleVersion) => runStatus(r, v) !== undefined && RUNNING.includes(deriveStatus(r, v));
@@ -664,9 +664,9 @@ export function createMockApi(): Api {
       const status = deriveStatus(r, cur);
       const before = registryVersions(r).map(([v]) => v.version);
       const allowed: Record<typeof action, RuleVersion['status'][]> = {
-        send: ['OBSERVATION'],
+        send: ['TEST'],
         suspend: ['IN_PRODUCTION', 'INACTIVE'],
-        discard: ['OBSERVATION', 'INACTIVE'],
+        discard: ['TEST', 'INACTIVE'],
       };
       if (!allowed[action].includes(status) || (action === 'discard' && cur.decision === 'SENT')) {
         throw new ApiError(409, `Action impossible : la v${cur.version} est « ${status} ».`, 'BAD_STATUS');
@@ -846,7 +846,7 @@ export function createMockApi(): Api {
         ruleId: d.ruleId,
         candidate: false,
         version: r.versions.length ? current(r).version + 1 : 1,
-        status: 'OBSERVATION',
+        status: 'TEST',
         ownerMatricule: owner.ownerMatricule,
         ownerName: owner.ownerName,
         submittedBy: u.matricule,

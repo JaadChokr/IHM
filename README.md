@@ -307,14 +307,17 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   règle, qui part en test ; l'équipe data n'agit pas sur la plateforme et n'exploite que les DAG. Les gestes
   de l'analyste sont stockés (brouillon, publication, décision d'envoi) ; l'exécution se **déduit des runs Airflow**
   dans `rule_runs` :
-  - *En test* (code `OBSERVATION`) : dès sa publication, la version est écrite dans `rules_registry` ; Airflow
+  - *En test* (code `TEST`) : dès sa publication, la version est écrite dans `rules_registry` ; Airflow
     l'exécute à la prochaine échéance de sa fréquence et écrit ses commandes dans `rule_alerts`, **sans les
     envoyer au prestataire** (`send_to_provider = false`). Il n'y a pas de statut « publiée » à part : qu'elle
     ait déjà tourné se lit dans sa première exécution (`first_run_at`), et la fiche affiche la prochaine
     échéance tant qu'elle n'a pas tourné. Elle ne peut être envoyée au prestataire qu'après au moins une
-    exécution (refus `NOT_RUN_YET` sinon), et n'apparaît dans la Surveillance qu'à partir de là. L'analyste **qualifie lui-même ses alertes** (fraude
-    avérée, commande risquée ou RAS, voir « Alertes et qualification ») : sa pertinence se mesure sur ces
-    qualifications. Le test n'a pas d'échéance ;
+    exécution (refus `NOT_RUN_YET` sinon), et n'apparaît dans la Surveillance qu'à partir de là. L'analyste
+    **qualifie lui-même ses alertes** (fraude avérée, commande risquée ou RAS, voir « Alertes et
+    qualification ») : sa pertinence se mesure sur ces qualifications. Le test n'a pas d'échéance. Les statuts
+    ne sont pas stockés dans PostgreSQL (ils se déduisent des décisions et des exécutions) ; seule la colonne
+    `rules_registry.status` les recopie (`TEST`, `IN_PRODUCTION`, `INACTIVE`). Les lignes écrites avec les
+    anciens codes `SUBMITTED` et `OBSERVATION` sont migrées par `tables/015_maj_rules_registry_statut_test.sql` ;
   - *En production* : l'analyste a cliqué « Envoyer au prestataire » ; `send_to_provider` passe à vrai, et dès
     le run suivant le DAG marque ses commandes à transmettre (`to_send`) pour le script d'envoi. « Suspendre l'envoi » la ramène en test ;
   - *Écartée* : l'analyste a décidé de ne pas l'envoyer ; elle sort de `rules_registry` et la version

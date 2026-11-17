@@ -20,7 +20,7 @@ from app.query.models import TestRecord
 # Publiée, elle est en test d'office (Airflow l'exécute à sa prochaine échéance, rien n'est envoyé au
 # prestataire) → en production (envoyée au prestataire) ; inactive, remplacée ou écartée sinon. Qu'elle
 # ait déjà tourné se lit dans first_run_at.
-RuleStatus = Literal["OBSERVATION", "IN_PRODUCTION", "INACTIVE", "REPLACED", "DISCARDED"]
+RuleStatus = Literal["TEST", "IN_PRODUCTION", "INACTIVE", "REPLACED", "DISCARDED"]
 
 Decision = Literal["SENT", "DISCARDED"]
 

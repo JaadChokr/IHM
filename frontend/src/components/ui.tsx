@@ -73,7 +73,7 @@ export function Alert({ kind, title, children }: { kind: AlertKind; title?: Reac
  * l'analyste ; la suite se constate dans les exécutions Airflow.
  */
 export function Lifecycle({ status, lastRunAt }: { status: DisplayStatus; lastRunAt?: string | null }) {
-  const main: DisplayStatus[] = ['DRAFT', 'OBSERVATION', 'IN_PRODUCTION'];
+  const main: DisplayStatus[] = ['DRAFT', 'TEST', 'IN_PRODUCTION'];
   const branch = status === 'INACTIVE' || status === 'REPLACED' || status === 'DISCARDED' ? status : null;
   return (
     <div className="lifecycle" aria-label={`Cycle de vie, statut actuel : ${STATUS_LABEL[status]}`}>

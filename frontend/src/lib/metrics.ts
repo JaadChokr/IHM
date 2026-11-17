@@ -67,7 +67,7 @@ export function productionHealth(r: ConsolidatedRow, threshold: number): Product
     reasons.push(`Plus exécutée par Airflow${r.lastRunAt ? ` depuis le ${fmtDate(r.lastRunAt)}` : ''} — DAG arrêté ou en panne`);
   if (r.ordersFlagged30d === 0) reasons.push('Aucune remontée sur 30 jours — règle probablement cassée');
   // En test, rien n'est envoyé au prestataire : la pertinence se mesure, mais ne déclenche pas de surveillance.
-  if (r.status !== 'OBSERVATION' && relevance !== null && relevance < threshold)
+  if (r.status !== 'TEST' && relevance !== null && relevance < threshold)
     reasons.push(`Pertinence sous le seuil de ${fmtPct(threshold)}`);
   return { ...r, pending, relevance, reasons };
 }

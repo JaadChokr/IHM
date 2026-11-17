@@ -171,7 +171,7 @@ def make_dag(frequency: str, cron: str):
         @task
         def get_rules() -> list[dict]:
             """Versions dues à ce déclenchement : une ligne par version (celle en production et, le cas
-            échéant, une candidate en observation), dont le pas tombe sur ce déclenchement."""
+            échéant, une candidate en test), dont le pas tombe sur ce déclenchement."""
             client, ds = _bq()
             tick = get_current_context()["data_interval_end"]
             rows = _query(
@@ -220,7 +220,7 @@ def make_dag(frequency: str, cron: str):
                         SELECT @rule_id, @version, @run_id, @run_date,
                                CAST(t.order_id AS STRING), CURRENT_TIMESTAMP(), TO_JSON(t),
                                -- Recopié de rules_registry.send_to_provider : version en production
-                               -- (à transmettre) ou en observation.
+                               -- (à transmettre) ou en test.
                                @send
                         FROM (
                     {sql}

@@ -1,7 +1,7 @@
 -- Table de référence des règles (PRD §7.2) : alimentée par la plateforme, consommée par l'équipe data et
 -- Airflow. UNE LIGNE PAR VERSION QU'AIRFLOW EXÉCUTE (clé rule_id, version), mise à jour par la plateforme
 -- (MERGE) à chaque publication et décision : au plus deux par règle, la version en production
--- (send_to_provider vrai) et, à côté, une version candidate en observation (send_to_provider faux). Sans
+-- (send_to_provider vrai) et, à côté, une version candidate en test (send_to_provider faux). Sans
 -- version en production, une nouvelle version remplace la précédente. Le DAG de chaque fréquence lit à
 -- chaque run
 --   SELECT rule_id, version, name, sql_query, send_to_provider, schedule_every FROM rules_registry
@@ -23,8 +23,8 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rules_registry` (
   -- NULL (tables antérieures) = 1.
   schedule_every   INT64,
   sql_query        STRING    NOT NULL,
-  status           STRING    NOT NULL,   -- OBSERVATION (en test, exécutée ou non) | IN_PRODUCTION | INACTIVE
-  -- Faux : la règle tourne « en observation », ses commandes sont écrites dans rule_alerts mais PAS
+  status           STRING    NOT NULL,   -- TEST (en test, exécutée ou non) | IN_PRODUCTION | INACTIVE
+  -- Faux : la règle tourne « en test », ses commandes sont écrites dans rule_alerts mais PAS
   -- envoyées au prestataire. Vrai : l'analyste a décidé de l'envoyer ; le DAG transmet ses commandes.
   send_to_provider BOOL      NOT NULL,
   owner_matricule  STRING    NOT NULL,

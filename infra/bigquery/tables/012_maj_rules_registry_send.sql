@@ -1,4 +1,4 @@
--- Ajoute send_to_provider à une table rules_registry créée avant l'étape d'observation
+-- Ajoute send_to_provider à une table rules_registry créée avant l'étape de test
 -- (CREATE TABLE IF NOT EXISTS ne modifie pas une table existante). Sans effet si elle existe déjà.
 -- Les lignes existantes étaient en production : elles restent envoyées au prestataire.
 ALTER TABLE `${PROJECT}.${DATASET}.rules_registry` ADD COLUMN IF NOT EXISTS send_to_provider BOOL;

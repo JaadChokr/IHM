@@ -55,7 +55,7 @@ export function OverviewPage() {
   const myReady = myDrafts.filter(readyToSubmit);
   const activity = (audit.data ?? []).filter((e) => e.action !== 'LOGIN');
   const maxStatus = Math.max(1, ...RULE_STATUSES.map(count));
-  const notRun = all.filter((r) => r.status === 'OBSERVATION' && !r.firstRunAt).length;
+  const notRun = all.filter((r) => r.status === 'TEST' && !r.firstRunAt).length;
 
   return (
     <>
@@ -76,9 +76,9 @@ export function OverviewPage() {
               {count('INACTIVE') > 0 && ` · ${count('INACTIVE')} inactive${count('INACTIVE') > 1 ? 's' : ''} en plus`}
             </span>
           </button>
-          <button type="button" className="card kpi kpi-link" onClick={() => openList({ status: 'OBSERVATION' })}>
+          <button type="button" className="card kpi kpi-link" onClick={() => openList({ status: 'TEST' })}>
             <span className="kpi-label">En test</span>
-            <span className="kpi-value">{fmtInt(count('OBSERVATION'))}</span>
+            <span className="kpi-value">{fmtInt(count('TEST'))}</span>
             <span className="kpi-sub">
               Décision d'envoi attendue
               {notRun > 0 && ` · dont ${notRun} pas encore exécutée${notRun > 1 ? 's' : ''}`}
@@ -115,7 +115,7 @@ export function OverviewPage() {
               ) : health.length === 0 ? (
                 <div className="empty">Aucune règle en production.</div>
               ) : (
-                <RelevanceBars rows={health.filter((h) => h.status !== 'OBSERVATION')} threshold={threshold} />
+                <RelevanceBars rows={health.filter((h) => h.status !== 'TEST')} threshold={threshold} />
               )}
             </div>
             <CardFoot to="/surveillance">Voir la surveillance des règles</CardFoot>

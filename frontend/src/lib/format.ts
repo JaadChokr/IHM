@@ -2,7 +2,7 @@ import type { Criticality, DisplayStatus, Schedule } from '../api/types';
 
 export const STATUS_LABEL: Record<DisplayStatus, string> = {
   DRAFT: 'Brouillon',
-  OBSERVATION: 'En test',
+  TEST: 'En test',
   IN_PRODUCTION: 'En production',
   INACTIVE: 'Inactive',
   REPLACED: 'Remplacée',
@@ -11,7 +11,7 @@ export const STATUS_LABEL: Record<DisplayStatus, string> = {
 
 export const STATUS_HELP: Record<DisplayStatus, string> = {
   DRAFT: 'En cours de rédaction, visible de vous seul',
-  OBSERVATION: 'Exécutée automatiquement à chaque échéance, sans envoi au prestataire : vérifiez ses alertes, puis décidez de la mettre en production',
+  TEST: 'Exécutée automatiquement à chaque échéance, sans envoi au prestataire : vérifiez ses alertes, puis décidez de la mettre en production',
   IN_PRODUCTION: 'Exécutée automatiquement, commandes envoyées au prestataire',
   INACTIVE: "Ne s'exécute plus depuis 3 échéances : à signaler à l'équipe data",
   REPLACED: 'Remplacée par une version plus récente',

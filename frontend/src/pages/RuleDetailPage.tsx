@@ -174,7 +174,7 @@ export function RuleDetailPage() {
 
       <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
         {tab === 'definition' && <DefinitionTab r={r} onTested={rule.reload} />}
-        {tab === 'performance' && <PerformanceDashboard ruleId={r.ruleId} firstRunDate={firstRunDate} versionsRun={ran.length} observing={r.status === 'OBSERVATION' && !r.candidate} />}
+        {tab === 'performance' && <PerformanceDashboard ruleId={r.ruleId} firstRunDate={firstRunDate} versionsRun={ran.length} observing={r.status === 'TEST' && !r.candidate} />}
         {tab === 'alerts' && <AlertsPanel ruleId={r.ruleId} />}
         {tab === 'runs' && <RunsTab r={r} />}
         {tab === 'versions' && (
@@ -214,7 +214,7 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
             {scheduleLabel(r.schedule, r.scheduleEvery)}, {scheduleWhen(r.schedule, r.scheduleEvery)}
             {r.airflowDagId && <InfoTip>Traitement de l'équipe data : {r.airflowDagId}</InfoTip>}
           </dd>
-          {!r.firstRunAt && r.status === 'OBSERVATION' && (
+          {!r.firstRunAt && r.status === 'TEST' && (
             <>
               <dt>Prochaine exécution</dt>
               <dd>{fmtRun(nextRun(r.schedule, r.scheduleEvery))}</dd>
@@ -611,7 +611,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
   // Envoyer exige au moins une exécution en test : sans elle, rien pour juger la version.
   const notRunYet = r.firstRunAt ? undefined : `Possible après sa première exécution en test (${fmtRun(nextRun(r.schedule, r.scheduleEvery))}).`;
   let panel: ReactNode = null;
-  if (r.status === 'OBSERVATION' && prod) {
+  if (r.status === 'TEST' && prod) {
     panel = (
       <div className="decision-card observing">
         <div>
@@ -636,7 +636,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
         </div>
       </div>
     );
-  } else if (r.status === 'OBSERVATION') {
+  } else if (r.status === 'TEST') {
     panel = (
       <div className="decision-card observing">
         <div>
@@ -707,8 +707,8 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
 /** Mode démo uniquement : simule ce qu'Airflow écrit dans rule_runs. */
 function DemoPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) => void }) {
   const [err, setErr] = useState<string>();
-  const waiting = r.versions.some((v) => v.status === 'OBSERVATION' && !v.firstRunAt);
-  const running = r.versions.find((v) => (v.status === 'IN_PRODUCTION' || v.status === 'OBSERVATION') && v.firstRunAt);
+  const waiting = r.versions.some((v) => v.status === 'TEST' && !v.firstRunAt);
+  const running = r.versions.find((v) => (v.status === 'IN_PRODUCTION' || v.status === 'TEST') && v.firstRunAt);
   const act = async (fn: (id: string) => Promise<RuleDetail>) => {
     setErr(undefined);
     try {

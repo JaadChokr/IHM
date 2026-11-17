@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rule_runs` (
   finished_at   TIMESTAMP,
   status        STRING    NOT NULL,      -- SUCCESS | FAILED
   rows_returned INT64,                 -- commandes écrites dans rule_alerts par ce run
-  rows_to_send  INT64,                 -- dont marquées à transmettre au prestataire (0 en observation)
+  rows_to_send  INT64,                 -- dont marquées à transmettre au prestataire (0 en test)
   error_message STRING,
   -- Une ligne par TENTATIVE : une tâche qui échoue puis réussit laisse deux lignes de même run_id. Pour
   -- l'état d'un run, prendre la dernière tentative :

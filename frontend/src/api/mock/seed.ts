@@ -47,7 +47,7 @@ export interface MockReview {
   ruleVersion: number;
 }
 
-export const SCHEMA_VERSION = 20;
+export const SCHEMA_VERSION = 21;
 
 /** Marqueur : la version a tourné ; v() le remplace par le DAG de sa fréquence. */
 const dag = 'dag';
@@ -107,7 +107,7 @@ function v(def: Def, version: number, created: number, extra: Partial<RuleVersio
     schedule: def.schedule,
     scheduleEvery: def.every ?? 1,
     sqlQuery: def.sql,
-    status: 'OBSERVATION',
+    status: 'TEST',
     ownerMatricule: def.owner,
     ownerName: name(def.owner),
     submittedBy: def.owner,

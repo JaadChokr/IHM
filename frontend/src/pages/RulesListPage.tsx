@@ -15,7 +15,10 @@ const DEFAULT_FILTERS: RuleFilters = { q: '', status: '', typology: '', owner: '
 export function RulesListPage() {
   usePageTitle('Règles');
   const { user } = useAuth();
-  const [filters, setFilters] = usePref<RuleFilters>('rulesFilters', DEFAULT_FILTERS);
+  const [stored, setFilters] = usePref<RuleFilters>('rulesFilters', DEFAULT_FILTERS);
+  // Filtre enregistré avec un statut qui n'existe plus (ex. « Publiée », ancien code OBSERVATION) : ignoré.
+  const filters: RuleFilters =
+    stored.status && !(RULE_STATUSES as readonly string[]).includes(stored.status) ? { ...stored, status: '' } : stored;
   const [q, setQ] = useState(filters.q ?? '');
   // Recherche lancée depuis la barre supérieure (navigation avec { q }).
   const location = useLocation();

@@ -42,7 +42,7 @@ INACTIVE_AFTER_PERIODS = 3
 
 SCHEDULE_PERIOD = {"HOURLY": timedelta(hours=1), "DAILY": timedelta(days=1), "WEEKLY": timedelta(weeks=1)}
 
-RUNNING = ("OBSERVATION", "IN_PRODUCTION", "INACTIVE")
+RUNNING = ("TEST", "IN_PRODUCTION", "INACTIVE")
 
 
 def production_version(rule: Rule) -> RuleVersion | None:
@@ -82,7 +82,7 @@ def _run_status(v: RuleVersion, at: datetime | None) -> str | None:
     period = SCHEDULE_PERIOD.get(v.schedule, timedelta(days=1)) * (v.schedule_every or 1)
     if idle > period * INACTIVE_AFTER_PERIODS:
         return "INACTIVE"
-    return "IN_PRODUCTION" if v.decision == "SENT" else "OBSERVATION"
+    return "IN_PRODUCTION" if v.decision == "SENT" else "TEST"
 
 
 def derive_status(rule: Rule, v: RuleVersion, at: datetime | None = None) -> str:
@@ -97,13 +97,13 @@ def derive_status(rule: Rule, v: RuleVersion, at: datetime | None = None) -> str
     if v.decision == "DISCARDED":
         return "DISCARDED"
     if any(w.version == v.version for w, _ in registry_versions(rule)):
-        return _run_status(v, at) or "OBSERVATION"
+        return _run_status(v, at) or "TEST"
     # Hors de rules_registry : une version plus récente a pris sa place.
     newer = [w for w in rule.versions if w.version > v.version and w.decision != "DISCARDED"]
     if any(w.first_run_at for w in newer):
         return "REPLACED"
     # La nouvelle version n'a pas encore tourné : celle-ci a pu tourner jusque-là.
-    return _run_status(v, at) or ("REPLACED" if newer else "OBSERVATION")
+    return _run_status(v, at) or ("REPLACED" if newer else "TEST")
 
 
 def running_version(rule: Rule) -> RuleVersion | None:

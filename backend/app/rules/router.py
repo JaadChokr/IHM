@@ -78,9 +78,9 @@ def get_rule(
 
 DECISIONS = {
     # action : (statuts acceptés, décision posée, événement d'audit, notification équipe data)
-    "send": (("OBSERVATION",), "SENT", "RULE_SEND_TO_PROVIDER", "RULE_SENT_TO_PROVIDER"),
+    "send": (("TEST",), "SENT", "RULE_SEND_TO_PROVIDER", "RULE_SENT_TO_PROVIDER"),
     "suspend": (("IN_PRODUCTION", "INACTIVE"), None, "RULE_SUSPEND_SENDING", "RULE_SENDING_SUSPENDED"),
-    "discard": (("OBSERVATION", "INACTIVE"), "DISCARDED", "RULE_DISCARD", "RULE_DISCARDED"),
+    "discard": (("TEST", "INACTIVE"), "DISCARDED", "RULE_DISCARD", "RULE_DISCARDED"),
 }
 
 DECISION_LABEL = {
