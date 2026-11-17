@@ -45,6 +45,12 @@ function GlobalSearch() {
   );
 }
 
+/**
+ * Clé de la transition de page : la fiche d'une commande (/alerts/<commande>) s'ouvre par-dessus la liste des
+ * alertes, ce n'est pas un changement de page (la liste et ses filtres restent en place).
+ */
+const pageKey = (pathname: string) => pathname.replace(/^\/alerts\/.+$/, '/alerts');
+
 export function Layout() {
   const { user } = useAuth();
   const location = useLocation();
@@ -112,7 +118,7 @@ export function Layout() {
         </header>
         <main id="main">
           {/* Apparition de chaque page (pas au changement d'onglet ou de filtre : clé = chemin). */}
-          <motion.div key={location.pathname} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
+          <motion.div key={pageKey(location.pathname)} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: 'easeOut' }}>
             <Outlet />
           </motion.div>
         </main>

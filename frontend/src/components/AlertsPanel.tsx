@@ -4,18 +4,11 @@ import { api } from '../api/client';
 import type { Alert, AlertFilters, AlertPage, AlertPhase, AlertVerdict, ReviewVerdict } from '../api/types';
 import { addDays, fmtDateTime, fmtInt, isoDate } from '../lib/format';
 import { usePref } from '../prefs/prefs';
+import { AlertModal } from './AlertModal';
 import { Pager } from './Pager';
+import { VERDICT_LABEL, VerdictCell } from './Verdict';
 import { Alert as Notice, Card, InfoTip, Spinner } from './ui';
 
-export const VERDICT_LABEL: Record<AlertVerdict, string> = {
-  FRAUD: 'Fraude avérée',
-  RISKY: 'Commande risquée',
-  NOT_FRAUD: 'RAS',
-  TO_REVIEW: 'À vérifier',
-  PENDING: 'En attente de vérification',
-};
-/** Les trois qualifications possibles d'une commande en test, dans l'ordre de la liste. */
-const REVIEW_CHOICES: ReviewVerdict[] = ['FRAUD', 'RISKY', 'NOT_FRAUD'];
 /** Verdicts possibles selon la phase : en test, ceux des analystes ; en production, ceux du prestataire. */
 const PHASE_VERDICTS: Record<AlertPhase | '', AlertVerdict[]> = {
   '': ['TO_REVIEW', 'PENDING', 'FRAUD', 'RISKY', 'NOT_FRAUD'],
@@ -46,6 +39,12 @@ const verdictCountIn = (d: AlertPage | undefined, v: AlertVerdict) => d?.verdict
 interface Props {
   /** Alertes d'une seule règle (onglet de la fiche) ; sans : toutes les règles, avec un filtre par règle. */
   ruleId?: string;
+  /**
+   * Commande dont la fiche est ouverte, et son changement : fournis par la page Alertes pour que la fiche ait
+   * sa propre adresse (/alerts/<commande>). Sans eux, la fiche s'ouvre sur place.
+   */
+  order?: string;
+  onOrderChange?: (orderId: string | undefined) => void;
 }
 
 /**
@@ -58,7 +57,10 @@ interface Props {
  * - en production, le prestataire rend le verdict.
  * Les menus ne proposent que des choix qui renvoient des alertes (nombres renvoyés par l'API).
  */
-export function AlertsPanel({ ruleId }: Props) {
+export function AlertsPanel({ ruleId, order: shownOrder, onOrderChange }: Props) {
+  const [localOrder, setLocalOrder] = useState<string>();
+  const order = shownOrder ?? localOrder;
+  const setOrder = onOrderChange ?? setLocalOrder;
   const [days, setDays] = usePref<(typeof PERIODS)[number]>('alertsDays', 7);
   // '' : toutes les phases.
   const [phase, setPhase] = useState<AlertPhase | ''>('');
@@ -277,9 +279,9 @@ export function AlertsPanel({ ruleId }: Props) {
                   <tr key={id}>
                     <td className="small nowrap">{fmtDateTime(a.detectedAt)}</td>
                     <td className="mono small nowrap">
-                      <Link to={`/alerts/${encodeURIComponent(a.orderId)}`} className="order-link" title="Voir la fiche de la commande">
+                      <button type="button" className="order-link" onClick={() => setOrder(a.orderId)} title="Ouvrir la fiche de la commande">
                         {a.orderId}
-                      </Link>
+                      </button>
                     </td>
                     <td className={ruleId ? 'nowrap' : 'alert-rule'}>
                       {ruleId ? (
@@ -310,47 +312,15 @@ export function AlertsPanel({ ruleId }: Props) {
           <Pager page={page} pages={pages} size={size} total={data.total} onPage={setPage} onSize={setSize} />
         </div>
       )}
-    </Card>
-  );
-}
-
-/**
- * Verdict d'une alerte : pour une commande en test que le prestataire n'a pas vérifiée, la liste de choix des
- * analystes (fraude avérée, risquée, RAS ; « À vérifier » retire le verdict) ; sinon le verdict affiché.
- */
-export function VerdictCell({ alert: a, busy, onReview }: { alert: Alert; busy: boolean; onReview: (a: Alert, next: ReviewVerdict | null) => void }) {
-  const testing = a.phase === 'TEST';
-  // Une commande en test déjà vérifiée par le prestataire (transmise par une autre règle) : son verdict prime.
-  const byProvider = a.providerIsFraud !== null && a.providerIsFraud !== undefined;
-  if (!testing || byProvider) {
-    return (
-      <>
-        <span className={`badge verdict verdict-${a.verdict}`}>{VERDICT_LABEL[a.verdict]}</span>
-        {testing && <div className="small muted">Déjà vérifiée par le prestataire</div>}
-      </>
-    );
-  }
-  return (
-    <>
-      <select
-        className={`select-sm verdict-select verdict-${a.review?.verdict ?? 'TO_REVIEW'}`}
-        value={a.review?.verdict ?? ''}
-        disabled={busy}
-        onChange={(e) => onReview(a, (e.target.value || null) as ReviewVerdict | null)}
-        aria-label={`Qualifier la commande ${a.orderId}`}
-      >
-        <option value="">{VERDICT_LABEL.TO_REVIEW}</option>
-        {REVIEW_CHOICES.map((v) => (
-          <option key={v} value={v}>
-            {VERDICT_LABEL[v]}
-          </option>
-        ))}
-      </select>
-      {a.review && (
-        <div className="small muted">
-          {a.review.byName}, {fmtDateTime(a.review.at)}
-        </div>
+      {order && (
+        <AlertModal
+          key={order}
+          orderId={order}
+          onClose={() => setOrder(undefined)}
+          // Un verdict donné depuis la fiche se reflète dans la liste.
+          onChanged={() => api.listAlerts(filters).then(setData, () => undefined)}
+        />
       )}
-    </>
+    </Card>
   );
 }

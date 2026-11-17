@@ -10,7 +10,6 @@ import { RuleEditorPage } from './pages/RuleEditorPage';
 import { RuleDetailPage } from './pages/RuleDetailPage';
 import { SurveillancePage } from './pages/SurveillancePage';
 import { ActivityPage } from './pages/ActivityPage';
-import { AlertDetailPage } from './pages/AlertDetailPage';
 import { AlertsPage } from './pages/AlertsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { OverviewPage } from './pages/OverviewPage';
@@ -60,8 +59,8 @@ export function App() {
               <Route path="/drafts/:draftId" element={<RuleEditorPage />} />
               <Route path="/surveillance" element={<SurveillancePage />} />
               <Route path="/production" element={<Navigate to="/surveillance" replace />} />
-              <Route path="/alerts" element={<AlertsPage />} />
-              <Route path="/alerts/:orderId" element={<AlertDetailPage />} />
+              {/* Une seule route : ouvrir ou fermer la fiche d'une commande garde la liste et ses filtres. */}
+              <Route path="/alerts/:orderId?" element={<AlertsPage />} />
               <Route path="/journal" element={<ActivityPage />} />
               <Route path="/audit" element={<Navigate to="/journal" replace />} />
               <Route path="/profile" element={<ProfilePage />} />
