@@ -403,12 +403,13 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 
   **Alertes et qualification** : la page **Alertes** (et l'onglet Alertes de la fiche d'une règle) liste les
   commandes remontées, une ligne par commande et par version (`rule_alerts`), avec leurs détails et leur verdict.
-  Un seul menu choisit la **phase et la règle** : « Règles en test » puis « Règles en production », chaque
-  groupe commençant par « toutes les règles » de la phase, chaque entrée avec son nombre d'alertes (une règle
-  avec une candidate figure dans les deux groupes). Le menu des verdicts ne propose que ceux de la phase. Tous
+  Un seul menu choisit la **phase et la règle** : « Toutes les règles » (par défaut, en test et en production),
+  puis les groupes « Règles en test » et « Règles en production », chacun commençant par « toutes les règles »
+  de la phase, chaque entrée avec son nombre d'alertes (une règle avec une candidate figure dans les deux
+  groupes). Sans phase choisie, chaque ligne indique la sienne sous le nom de la règle. Le menu des verdicts ne propose que ceux de la phase. Tous
   deux ne proposent que des choix qui renvoient des alertes : l'API renvoie, avec la page, le nombre d'alertes
   par règle et par phase, et par verdict pour la règle et la phase choisies. Dans l'onglet Alertes d'une
-  règle, le premier menu ne choisit que la phase. Une commande **transmise** est vérifiée par le prestataire
+  règle, le premier menu ne choisit que la phase (les deux par défaut). Une commande **transmise** est vérifiée par le prestataire
   (fraude avérée, RAS, ou en attente de vérification), affiché dans la colonne « Verdict ». Seules les
   commandes d'une version **en test**, non transmises, se qualifient : dans la même colonne, l'analyste choisit
   **fraude avérée**, **commande risquée** ou **RAS** (rien à signaler ; « À vérifier » retire son verdict). Il teste ainsi une règle,

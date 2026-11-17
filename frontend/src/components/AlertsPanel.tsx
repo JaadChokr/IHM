@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Alert, AlertFilters, AlertPage, AlertPhase, AlertVerdict, ReviewVerdict } from '../api/types';
@@ -16,11 +16,14 @@ export const VERDICT_LABEL: Record<AlertVerdict, string> = {
 };
 /** Les trois qualifications possibles d'une commande en test, dans l'ordre de la liste. */
 const REVIEW_CHOICES: ReviewVerdict[] = ['FRAUD', 'RISKY', 'NOT_FRAUD'];
-/** Verdicts possibles dans chaque phase : en test, ceux des analystes ; en production, ceux du prestataire. */
-const PHASE_VERDICTS: Record<AlertPhase, AlertVerdict[]> = {
+/** Verdicts possibles selon la phase : en test, ceux des analystes ; en production, ceux du prestataire. */
+const PHASE_VERDICTS: Record<AlertPhase | '', AlertVerdict[]> = {
+  '': ['TO_REVIEW', 'PENDING', 'FRAUD', 'RISKY', 'NOT_FRAUD'],
   TEST: ['TO_REVIEW', 'FRAUD', 'RISKY', 'NOT_FRAUD'],
   PRODUCTION: ['PENDING', 'FRAUD', 'NOT_FRAUD'],
 };
+/** Sans phase choisie : toutes les règles, en test et en production. */
+const ALL_HINT = 'en test, le verdict est donné par les analystes ; en production, par le prestataire.';
 const PHASES: { phase: AlertPhase; label: string; ofRule: string; hint: string }[] = [
   { phase: 'TEST', label: 'Règles en test', ofRule: 'En test', hint: 'commandes non transmises au prestataire, dont le verdict est donné par les analystes.' },
   { phase: 'PRODUCTION', label: 'Règles en production', ofRule: 'En production', hint: 'commandes transmises au prestataire, qui rend le verdict.' },
@@ -47,7 +50,8 @@ interface Props {
 
 /**
  * Alertes remontées par les règles : une ligne par commande et par version. Un seul menu choisit la phase et
- * la règle : les règles en test, puis les règles en production, chacune avec son nombre d'alertes.
+ * la règle : toutes les règles (par défaut), puis les règles en test, puis les règles en production, chacune
+ * avec son nombre d'alertes.
  * - en test, les commandes ne sont pas transmises au prestataire ; les analystes donnent leur verdict (fraude
  *   avérée, commande risquée ou RAS). Il porte sur la commande, toutes règles confondues, et entre dans la
  *   pertinence de la règle ;
@@ -56,7 +60,8 @@ interface Props {
  */
 export function AlertsPanel({ ruleId }: Props) {
   const [days, setDays] = usePref<(typeof PERIODS)[number]>('alertsDays', 7);
-  const [phase, setPhase] = useState<AlertPhase>('TEST');
+  // '' : toutes les phases.
+  const [phase, setPhase] = useState<AlertPhase | ''>('');
   const [verdict, setVerdict] = useState<AlertVerdict | ''>('');
   const [rule, setRule] = useState('');
   const [q, setQ] = useState('');
@@ -66,8 +71,6 @@ export function AlertsPanel({ ruleId }: Props) {
   const [data, setData] = useState<AlertPage>();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState<string>();
-  // Phase choisie d'office une seule fois : en production si la règle n'a rien en test.
-  const phaseSettled = useRef(false);
 
   // Recherche par numéro de commande : appliquée après une courte pause de saisie.
   useEffect(() => {
@@ -78,7 +81,7 @@ export function AlertsPanel({ ruleId }: Props) {
   const filters: AlertFilters = {
     from: addDays(isoDate(new Date()), -(days - 1)),
     ruleId: ruleId ?? (rule || undefined),
-    phase,
+    phase: phase || undefined,
     verdict: verdict || undefined,
     q: query || undefined,
     limit: size,
@@ -102,10 +105,6 @@ export function AlertsPanel({ ruleId }: Props) {
   // Un choix qui ne renvoie plus rien (autre période, autre phase) est retiré plutôt que d'afficher une liste vide.
   useEffect(() => {
     if (!data) return;
-    if (!phaseSettled.current) {
-      phaseSettled.current = true;
-      if (phaseCountIn(data, 'TEST', ruleId) === 0 && phaseCountIn(data, 'PRODUCTION', ruleId) > 0) return setPhase('PRODUCTION');
-    }
     if (rule && !data.rules.some((c) => c.ruleId === rule && c.phase === phase)) return setRule('');
     if (verdict && !data.verdicts.some((c) => c.verdict === verdict)) setVerdict('');
     // Seulement à l'arrivée de nouveaux résultats : ceux affichés pendant un rechargement correspondent encore aux
@@ -128,9 +127,9 @@ export function AlertsPanel({ ruleId }: Props) {
     }
   }
 
-  /** Choix du menu « phase et règle » : « TEST » (toutes les règles en test) ou « TEST:<ruleId> ». */
+  /** Choix du menu « phase et règle » : « » (toutes), « TEST » (toutes les règles en test) ou « TEST:<ruleId> ». */
   function chooseScope(value: string) {
-    const [p, r = ''] = value.split(':') as [AlertPhase, string?];
+    const [p, r = ''] = value.split(':') as [AlertPhase | '', string?];
     if (p !== phase) setVerdict('');
     setPhase(p);
     setRule(r);
@@ -139,9 +138,9 @@ export function AlertsPanel({ ruleId }: Props) {
   const phaseCount = (p: AlertPhase) => phaseCountIn(data, p, ruleId);
   const verdictCount = (v: AlertVerdict) => verdictCountIn(data, v);
   const all = phaseCount('TEST') + phaseCount('PRODUCTION');
-  const inPhase = data ? phaseCount(phase) : 0;
+  const inPhase = data ? (phase ? phaseCount(phase) : phaseCount('TEST') + phaseCount('PRODUCTION')) : 0;
+  const current = PHASES.find((p) => p.phase === phase);
   const pages = data ? Math.max(1, Math.ceil(data.total / size)) : 1;
-  const testing = phase === 'TEST';
 
   return (
     <Card
@@ -185,6 +184,10 @@ export function AlertsPanel({ ruleId }: Props) {
         <div className="row gap-3 alerts-filters">
           {ruleId ? (
             <select className="select-sm" value={phase} onChange={(e) => chooseScope(e.target.value)} aria-label="Phase">
+              <option value="">
+                En test et en production
+                {data ? ` (${fmtInt(phaseCount('TEST') + phaseCount('PRODUCTION'))})` : ''}
+              </option>
               {PHASES.map((p) => (
                 <option key={p.phase} value={p.phase} disabled={!!data && phaseCount(p.phase) === 0 && phase !== p.phase}>
                   {p.ofRule}
@@ -194,6 +197,10 @@ export function AlertsPanel({ ruleId }: Props) {
             </select>
           ) : (
             <select className="select-sm" value={rule ? `${phase}:${rule}` : phase} onChange={(e) => chooseScope(e.target.value)} aria-label="Phase et règle">
+              <option value="">
+                Toutes les règles
+                {data ? ` (${fmtInt(phaseCount('TEST') + phaseCount('PRODUCTION'))})` : ''}
+              </option>
               {PHASES.map((p) => (
                 <optgroup key={p.phase} label={p.label}>
                   <option value={p.phase} disabled={!!data && phaseCount(p.phase) === 0 && !(phase === p.phase && !rule)}>
@@ -225,8 +232,8 @@ export function AlertsPanel({ ruleId }: Props) {
           </div>
         </div>
         <p className="small muted m-0">
-          <strong>{ruleId ? PHASES.find((p) => p.phase === phase)!.ofRule : PHASES.find((p) => p.phase === phase)!.label}</strong> :{' '}
-          {PHASES.find((p) => p.phase === phase)!.hint}
+          <strong>{current ? (ruleId ? current.ofRule : current.label) : ruleId ? 'En test et en production' : 'Toutes les règles'}</strong> :{' '}
+          {current ? current.hint : ALL_HINT}
         </p>
       </div>
       {error && (
@@ -241,7 +248,7 @@ export function AlertsPanel({ ruleId }: Props) {
       ) : data.items.length === 0 ? (
         <div className="empty">
           {inPhase === 0
-            ? `Aucune alerte ${ruleId ? 'de cette règle' : "d'une règle"} ${testing ? 'en test' : 'en production'} sur ${days} jours.`
+            ? `Aucune alerte ${ruleId ? 'de cette règle' : "d'une règle"}${current ? (phase === 'TEST' ? ' en test' : ' en production') : ''} sur ${days} jours.`
             : 'Aucune alerte avec ces critères.'}
         </div>
       ) : (
@@ -253,25 +260,20 @@ export function AlertsPanel({ ruleId }: Props) {
                 <th>Commande</th>
                 <th>{ruleId ? 'Version' : 'Règle'}</th>
                 <th>Détails</th>
-                {testing ? (
-                  <th>
-                    Verdict
-                    <InfoTip align="end">
-                      Donné par les analystes : fraude avérée, commande risquée ou RAS (rien à signaler). Il vaut pour la commande, toutes règles
-                      confondues. « À vérifier » retire le verdict donné.
-                    </InfoTip>
-                  </th>
-                ) : (
-                  <th>
-                    Verdict
-                    <InfoTip align="end">Donné par le prestataire, à qui la commande a été transmise.</InfoTip>
-                  </th>
-                )}
+                <th>
+                  Verdict
+                  <InfoTip align="end">
+                    {phase !== 'PRODUCTION' &&
+                      "En test, donné par les analystes : fraude avérée, commande risquée ou RAS (rien à signaler). Il vaut pour la commande, toutes règles confondues. « À vérifier » retire le verdict donné. "}
+                    {phase !== 'TEST' && 'En production, donné par le prestataire, à qui la commande a été transmise.'}
+                  </InfoTip>
+                </th>
               </tr>
             </thead>
             <tbody>
               {data.items.map((a) => {
                 const id = a.orderId + a.ruleId + a.ruleVersion;
+                const testing = a.phase === 'TEST';
                 // Une commande en test déjà vérifiée par le prestataire (transmise par une autre règle) : son verdict prime.
                 const byProvider = a.providerIsFraud !== null && a.providerIsFraud !== undefined;
                 return (
@@ -289,6 +291,7 @@ export function AlertsPanel({ ruleId }: Props) {
                           <span className="small muted">v{a.ruleVersion}</span>
                         </>
                       )}
+                      {!phase && <div className="small muted">{a.phase === 'TEST' ? 'en test' : 'en production'}</div>}
                     </td>
                     <td className="small muted alert-details">
                       <div className="ellipsis" title={detailsText(a.details)}>
