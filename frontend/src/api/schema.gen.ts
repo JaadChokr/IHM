@@ -509,7 +509,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
+            status: "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
             /** Lastrunat */
             lastRunAt?: string | null;
             /** Ordersflagged30D */
@@ -879,7 +879,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
+            status: "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
             /** Ownermatricule */
             ownerMatricule: string;
             /** Ownername */
@@ -1039,7 +1039,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
+            status: "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
             /** Ownermatricule */
             ownerMatricule: string;
             /** Ownername */
@@ -1119,7 +1119,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
+            status: "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED";
             /** Ownermatricule */
             ownerMatricule: string;
             /** Ownername */
@@ -1464,7 +1464,7 @@ export interface operations {
         parameters: {
             query?: {
                 q?: string;
-                status?: ("SUBMITTED" | "OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED") | null;
+                status?: ("OBSERVATION" | "IN_PRODUCTION" | "INACTIVE" | "REPLACED" | "DISCARDED") | null;
                 typology?: string;
                 owner?: string;
                 criticality?: string;

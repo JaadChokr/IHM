@@ -597,10 +597,6 @@ table.data a:not(.btn):hover {
   background: var(--muted-soft);
   color: var(--text-2);
 }
-.st-SUBMITTED {
-  background: var(--info-soft);
-  color: var(--info);
-}
 /* En observation : bleu, distinct de « inactive » (orange) et de « en production » (vert). */
 .st-OBSERVATION {
   background: color-mix(in srgb, var(--testing) 13%, transparent);

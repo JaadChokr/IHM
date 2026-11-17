@@ -65,10 +65,11 @@ export type DecisionAction = Schemas['DecisionIn']['action'];
 
 // ---------- listes de valeurs de l'interface (vérifiées contre le contrat) ----------
 /**
- * Statuts d'une version de règle : publiée → en test (Airflow l'exécute, ses commandes ne partent pas chez
- * le prestataire) → en production (l'analyste a décidé de l'envoyer). Inactive, remplacée ou écartée sinon.
+ * Statuts d'une version de règle : publiée, elle est en test d'office (Airflow l'exécute à sa prochaine
+ * échéance, ses commandes ne partent pas chez le prestataire) → en production (l'analyste a décidé de
+ * l'envoyer, après au moins une exécution). Inactive, remplacée ou écartée sinon.
  */
-export const RULE_STATUSES = ['SUBMITTED', 'OBSERVATION', 'IN_PRODUCTION', 'INACTIVE', 'REPLACED', 'DISCARDED'] as const;
+export const RULE_STATUSES = ['OBSERVATION', 'IN_PRODUCTION', 'INACTIVE', 'REPLACED', 'DISCARDED'] as const;
 export type RuleStatus = (typeof RULE_STATUSES)[number];
 /** Statut affiché : celui d'une version, ou « brouillon » pour le travail en cours d'un analyste. */
 export type DisplayStatus = RuleStatus | 'DRAFT';

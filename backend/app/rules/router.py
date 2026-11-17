@@ -80,7 +80,7 @@ DECISIONS = {
     # action : (statuts acceptés, décision posée, événement d'audit, notification équipe data)
     "send": (("OBSERVATION",), "SENT", "RULE_SEND_TO_PROVIDER", "RULE_SENT_TO_PROVIDER"),
     "suspend": (("IN_PRODUCTION", "INACTIVE"), None, "RULE_SUSPEND_SENDING", "RULE_SENDING_SUSPENDED"),
-    "discard": (("SUBMITTED", "OBSERVATION", "INACTIVE"), "DISCARDED", "RULE_DISCARD", "RULE_DISCARDED"),
+    "discard": (("OBSERVATION", "INACTIVE"), "DISCARDED", "RULE_DISCARD", "RULE_DISCARDED"),
 }
 
 DECISION_LABEL = {
@@ -110,6 +110,14 @@ def decide(
     status = derive_status(rule, cur)
     if status not in allowed or (body.action == "discard" and cur.decision == "SENT"):
         raise ApiError(409, f"Action impossible : la v{cur.version} est « {status} ».", "BAD_STATUS")
+    if body.action == "send" and cur.first_run_at is None:
+        # En test d'office, mais sans aucune exécution : rien pour juger la version avant de l'envoyer.
+        raise ApiError(
+            409,
+            f"La v{cur.version} ne s'est pas encore exécutée : attendez sa première exécution en test pour "
+            "l'envoyer au prestataire.",
+            "NOT_RUN_YET",
+        )
     if body.action == "send":
         # Une seule version en production : la précédente s'arrête au run suivant (sa décision est retirée,
         # l'historique reste dans le journal d'audit).

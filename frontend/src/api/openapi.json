@@ -210,7 +210,6 @@
               "anyOf": [
                 {
                   "enum": [
-                    "SUBMITTED",
                     "OBSERVATION",
                     "IN_PRODUCTION",
                     "INACTIVE",
@@ -1581,7 +1580,6 @@
           "status": {
             "type": "string",
             "enum": [
-              "SUBMITTED",
               "OBSERVATION",
               "IN_PRODUCTION",
               "INACTIVE",
@@ -2536,7 +2534,6 @@
           "status": {
             "type": "string",
             "enum": [
-              "SUBMITTED",
               "OBSERVATION",
               "IN_PRODUCTION",
               "INACTIVE",
@@ -2960,7 +2957,6 @@
           "status": {
             "type": "string",
             "enum": [
-              "SUBMITTED",
               "OBSERVATION",
               "IN_PRODUCTION",
               "INACTIVE",
@@ -3183,7 +3179,6 @@
           "status": {
             "type": "string",
             "enum": [
-              "SUBMITTED",
               "OBSERVATION",
               "IN_PRODUCTION",
               "INACTIVE",

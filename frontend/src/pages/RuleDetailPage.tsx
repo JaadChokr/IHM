@@ -144,7 +144,7 @@ export function RuleDetailPage() {
         {r.productionVersion && !r.candidate && (
           <Alert kind="info" title={`La v${r.version} remplacera la v${r.productionVersion} à sa première exécution, en test.`} />
         )}
-        {r.candidate && r.productionVersion && r.status === 'SUBMITTED' && (
+        {r.candidate && r.productionVersion && !r.firstRunAt && (
           <Alert
             kind="info"
             title={
@@ -214,7 +214,7 @@ function DefinitionTab({ r, onTested }: { r: RuleDetail; onTested: () => void })
             {scheduleLabel(r.schedule, r.scheduleEvery)}, {scheduleWhen(r.schedule, r.scheduleEvery)}
             {r.airflowDagId && <InfoTip>Traitement de l'équipe data : {r.airflowDagId}</InfoTip>}
           </dd>
-          {!r.firstRunAt && r.status === 'SUBMITTED' && (
+          {!r.firstRunAt && r.status === 'OBSERVATION' && (
             <>
               <dt>Prochaine exécution</dt>
               <dd>{fmtRun(nextRun(r.schedule, r.scheduleEvery))}</dd>
@@ -608,13 +608,15 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
     },
   };
 
+  // Envoyer exige au moins une exécution en test : sans elle, rien pour juger la version.
+  const notRunYet = r.firstRunAt ? undefined : `Possible après sa première exécution en test (${fmtRun(nextRun(r.schedule, r.scheduleEvery))}).`;
   let panel: ReactNode = null;
   if (r.status === 'OBSERVATION' && prod) {
     panel = (
       <div className="decision-card observing">
         <div>
           <strong>
-            Candidate en test{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}
+            Candidate en test{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ', pas encore exécutée'}
             <InfoTip align="start">
               La v{r.version} s'exécute à côté de la v{prod}, qui reste en production et continue d'être envoyée. Comparez-les sur la même
               période dans l'onglet Performance, puis décidez.
@@ -628,7 +630,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
           <button type="button" className="btn" onClick={() => setConfirming('discard')} disabled={busy}>
             Écarter
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => setConfirming('send')} disabled={busy}>
+          <button type="button" className="btn btn-primary" onClick={() => setConfirming('send')} disabled={busy || !r.firstRunAt} title={notRunYet}>
             Mettre en production
           </button>
         </div>
@@ -639,7 +641,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
       <div className="decision-card observing">
         <div>
           <strong>
-            En test{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ''}
+            En test{r.firstRunAt ? ` depuis ${idleFor(r.firstRunAt)}` : ', pas encore exécutée'}
             <InfoTip align="start">
               La v{r.version} s'exécute, mais ses commandes ne sont pas envoyées au prestataire. Consultez l'onglet Performance, puis décidez.
             </InfoTip>
@@ -649,7 +651,7 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
           <button type="button" className="btn" onClick={() => setConfirming('discard')} disabled={busy}>
             Écarter
           </button>
-          <button type="button" className="btn btn-primary" onClick={() => setConfirming('send')} disabled={busy}>
+          <button type="button" className="btn btn-primary" onClick={() => setConfirming('send')} disabled={busy || !r.firstRunAt} title={notRunYet}>
             Envoyer au prestataire
           </button>
         </div>
@@ -705,8 +707,8 @@ function DecisionPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetai
 /** Mode démo uniquement : simule ce qu'Airflow écrit dans rule_runs. */
 function DemoPanel({ r, onChange }: { r: RuleDetail; onChange: (d: RuleDetail) => void }) {
   const [err, setErr] = useState<string>();
-  const waiting = r.versions.some((v) => v.status === 'SUBMITTED');
-  const running = r.versions.find((v) => v.status === 'IN_PRODUCTION' || v.status === 'OBSERVATION');
+  const waiting = r.versions.some((v) => v.status === 'OBSERVATION' && !v.firstRunAt);
+  const running = r.versions.find((v) => (v.status === 'IN_PRODUCTION' || v.status === 'OBSERVATION') && v.firstRunAt);
   const act = async (fn: (id: string) => Promise<RuleDetail>) => {
     setErr(undefined);
     try {

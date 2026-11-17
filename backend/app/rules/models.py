@@ -16,10 +16,11 @@ from app.core.models import Model, UtcDateTime
 from app.core.periods import Schedule, check_every
 from app.query.models import TestRecord
 
-# Statut d'une version de règle (toujours soumise : les brouillons sont à part, voir DraftOut).
-# Soumise → en test (Airflow l'exécute, rien n'est envoyé au prestataire) → en production
-# (envoyée au prestataire) ; inactive, remplacée ou écartée sinon.
-RuleStatus = Literal["SUBMITTED", "OBSERVATION", "IN_PRODUCTION", "INACTIVE", "REPLACED", "DISCARDED"]
+# Statut d'une version de règle (toujours publiée : les brouillons sont à part, voir DraftOut).
+# Publiée, elle est en test d'office (Airflow l'exécute à sa prochaine échéance, rien n'est envoyé au
+# prestataire) → en production (envoyée au prestataire) ; inactive, remplacée ou écartée sinon. Qu'elle
+# ait déjà tourné se lit dans first_run_at.
+RuleStatus = Literal["OBSERVATION", "IN_PRODUCTION", "INACTIVE", "REPLACED", "DISCARDED"]
 
 Decision = Literal["SENT", "DISCARDED"]
 

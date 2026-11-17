@@ -107,7 +107,7 @@ function v(def: Def, version: number, created: number, extra: Partial<RuleVersio
     schedule: def.schedule,
     scheduleEvery: def.every ?? 1,
     sqlQuery: def.sql,
-    status: 'SUBMITTED',
+    status: 'OBSERVATION',
     ownerMatricule: def.owner,
     ownerName: name(def.owner),
     submittedBy: def.owner,

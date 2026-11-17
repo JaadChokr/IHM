@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `${PROJECT}.${DATASET}.rules_registry` (
   -- NULL (tables antérieures) = 1.
   schedule_every   INT64,
   sql_query        STRING    NOT NULL,
-  status           STRING    NOT NULL,   -- SUBMITTED | OBSERVATION | IN_PRODUCTION | INACTIVE
+  status           STRING    NOT NULL,   -- OBSERVATION (en test, exécutée ou non) | IN_PRODUCTION | INACTIVE
   -- Faux : la règle tourne « en observation », ses commandes sont écrites dans rule_alerts mais PAS
   -- envoyées au prestataire. Vrai : l'analyste a décidé de l'envoyer ; le DAG transmet ses commandes.
   send_to_provider BOOL      NOT NULL,

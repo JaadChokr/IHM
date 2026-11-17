@@ -88,30 +88,36 @@ def _run_status(v: RuleVersion, at: datetime | None) -> str | None:
 def derive_status(rule: Rule, v: RuleVersion, at: datetime | None = None) -> str:
     """Statut affiché d'une version (toutes les versions stockées ont été publiées).
 
-    Cycle : publiée → en test (Airflow l'exécute, rien n'est envoyé au prestataire) → en
-    production (l'analyste a décidé de l'envoyer) ou écartée. Une nouvelle version d'une règle en
-    production tourne en parallèle comme candidate, sans remplacer la version en production. L'exécution
-    se constate dans `rule_runs` (first_run_at / last_run_at) ; la décision est un geste de l'analyste.
+    Cycle : publiée, donc en test (Airflow l'exécute à sa prochaine échéance, rien n'est envoyé au
+    prestataire) → en production (l'analyste a décidé de l'envoyer) ou écartée. Une nouvelle version d'une
+    règle en production tourne en parallèle comme candidate, sans remplacer la version en production.
+    L'exécution se constate dans `rule_runs` (first_run_at / last_run_at) ; la décision est un geste de
+    l'analyste.
     """
     if v.decision == "DISCARDED":
         return "DISCARDED"
     if any(w.version == v.version for w, _ in registry_versions(rule)):
-        return _run_status(v, at) or "SUBMITTED"
+        return _run_status(v, at) or "OBSERVATION"
     # Hors de rules_registry : une version plus récente a pris sa place.
     newer = [w for w in rule.versions if w.version > v.version and w.decision != "DISCARDED"]
     if any(w.first_run_at for w in newer):
         return "REPLACED"
     # La nouvelle version n'a pas encore tourné : celle-ci a pu tourner jusque-là.
-    return _run_status(v, at) or ("REPLACED" if newer else "SUBMITTED")
+    return _run_status(v, at) or ("REPLACED" if newer else "OBSERVATION")
 
 
 def running_version(rule: Rule) -> RuleVersion | None:
     """Version qui représente la règle à l'exécution (en test, en production ou inactive) : la
     version en production si elle tourne, sinon la plus récente qui tourne. Jamais la candidate."""
+
+    # Une version publiée qui n'a pas encore tourné n'a rien à surveiller.
+    def runs(v: RuleVersion) -> bool:
+        return v.first_run_at is not None and derive_status(rule, v) in RUNNING
+
     for v, candidate in registry_versions(rule):
-        if not candidate and derive_status(rule, v) in RUNNING:
+        if not candidate and runs(v):
             return v
-    running = (v for v in reversed(rule.versions) if derive_status(rule, v) in RUNNING)
+    running = (v for v in reversed(rule.versions) if runs(v))
     return next((v for v in running if not is_candidate(rule, v)), None)
 
 

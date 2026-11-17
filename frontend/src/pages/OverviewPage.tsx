@@ -55,6 +55,7 @@ export function OverviewPage() {
   const myReady = myDrafts.filter(readyToSubmit);
   const activity = (audit.data ?? []).filter((e) => e.action !== 'LOGIN');
   const maxStatus = Math.max(1, ...RULE_STATUSES.map(count));
+  const notRun = all.filter((r) => r.status === 'OBSERVATION' && !r.firstRunAt).length;
 
   return (
     <>
@@ -80,7 +81,7 @@ export function OverviewPage() {
             <span className="kpi-value">{fmtInt(count('OBSERVATION'))}</span>
             <span className="kpi-sub">
               Décision d'envoi attendue
-              {count('SUBMITTED') > 0 && ` · ${count('SUBMITTED')} publiée${count('SUBMITTED') > 1 ? 's' : ''} en attente de première exécution`}
+              {notRun > 0 && ` · dont ${notRun} pas encore exécutée${notRun > 1 ? 's' : ''}`}
             </span>
           </button>
           <Link to="/surveillance" className="card kpi kpi-link">
