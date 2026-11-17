@@ -215,7 +215,7 @@ export function createMockApi(): Api {
     };
   }
 
-  // ---------- brouillons personnels (même logique que backend/app/drafts/) ----------
+  // ---------- brouillons personnels (même logique que backend/app/services/drafts.py et routers/drafts.py) ----------
   const draftTests = (id: string) => db.tests.filter((t) => t.draftId === id).sort((a, b) => b.at.localeCompare(a.at));
 
   function draftOut(d: MockDraft, withdrawn = false): Draft {
