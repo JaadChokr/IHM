@@ -18,8 +18,7 @@ from app.bigquery.contract import (
 )
 from app.core.config import Settings
 from app.core.periods import Period
-from app.performance.models import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
-from app.query.models import Column
+from app.models import Column, DailyPerformance, RuleRun, VersionDaily, VersionPerformance
 
 log = logging.getLogger(__name__)
 

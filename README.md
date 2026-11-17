@@ -13,20 +13,18 @@ sans passer par le mail, et mesure leur efficacité grâce au retour du prestata
 │   ├── src/pages/       écrans (liste, éditeur, détail, alertes, surveillance, journal d'activité, profil)
 │   ├── src/styles/      style centralisé : tokens.css (valeurs) + ui.css (classes communes), voir frontend/STYLE.md
 │   └── nginx/           conf Nginx : sert la SPA et relaie /api vers l'API
-├── backend/             Python 3.12 + FastAPI + SQLModel — l'API, un dossier par fonctionnalité, chacun avec
-│                        models.py (tables et formats d'API), router.py (routes) et service.py (logique)
-│   ├── app/main.py      création de l'application, branchement des routes
-│   ├── app/core/        transverse : config.py (variables RM_*), errors.py, clock.py, db.py, models.py (base
-│   │                    SQLModel camelCase), periods.py (calendrier des fréquences), sql.py (lecture du SQL)
-│   ├── app/auth/        identification par matricule, sessions ; point UNIQUE de résolution de l'identité
-│   ├── app/rules/       règles : référentiel, versions, statuts, registre BigQuery, décisions (F1, F5)
-│   ├── app/drafts/      brouillons personnels et publication (F4)
-│   ├── app/query/       test d'une requête (F3) : contrôles SQL, période testée, garde-fous
-│   ├── app/performance/ indicateurs de performance, historique des exécutions (F6, F7)
-│   ├── app/alerts/      alertes remontées et qualification par les analystes
-│   ├── app/audit/       journal d'activité, écriture et consultation (F8)
+├── backend/             Python 3.12 + FastAPI + SQLModel — l'API, organisée par couche
+│   ├── app/main.py      création de l'application FastAPI, branchement des routes
+│   ├── app/models.py    TOUS les modèles SQLModel : tables PostgreSQL et formats d'API, au même endroit
+│   ├── app/routers/     un fichier par groupe de routes HTTP : auth, rules, drafts, query, performance,
+│   │                    alerts, audit
+│   ├── app/services/    la logique métier partagée par les routes : auth (point UNIQUE de résolution de
+│   │                    l'identité), rules (statuts, registre BigQuery), drafts (publication), query
+│   │                    (contrôles SQL, période testée), audit (journal d'activité)
 │   ├── app/bigquery/    tout l'accès BigQuery : contract.py (interface), real.py, fake.py (développement, tests)
-│   ├── app/models.py    réunit les tables de toutes les fonctionnalités (Alembic, tests)
+│   ├── app/core/        transverse : config.py (variables RM_*), errors.py, clock.py, db.py, periods.py
+│   │                    (calendrier des fréquences), sql.py (lecture du SQL)
+│   ├── app/openapi_export.py  export du contrat OpenAPI pour le front
 │   ├── migrations/      Alembic (PostgreSQL / Cloud SQL)
 │   └── tests/           pytest (SQLite en mémoire + BigQuery factice)
 ├── infra/
@@ -174,8 +172,8 @@ implémente la même interface : il est vérifié contre les mêmes types.
 ### Tables et formats d'API : SQLModel
 
 Le back déclare ses tables et ses formats d'échange avec SQLModel : une classe peut être les deux à la fois.
-Chaque fonctionnalité les réunit dans son `models.py`. Un champ commun à une table et à l'API n'y est écrit
-qu'une fois, dans une base partagée. La table (avec `table=True`) et le format d'API en héritent, et chacun
+Ils sont tous dans `backend/app/models.py`, par sections, dans l'ordre de leurs dépendances. Un champ commun à
+une table et à l'API n'y est écrit qu'une fois, dans une base partagée. La table (avec `table=True`) et le format d'API en héritent, et chacun
 n'ajoute que ce qui lui est propre. Par exemple, `RuleInput` (le contenu éditable d'une règle) est la base des versions
 publiées, des brouillons et de leurs formats d'API.
 
@@ -292,7 +290,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 - Le front ne détient aucun credential BigQuery ; il ne parle qu'à l'API, sur la même origine (cookie de session first-party).
 - Les garde-fous de test (`maximumBytesBilled`, `jobTimeoutMs`, `maxResults`) sont appliqués par l'API.
 - Les lignes renvoyées par un test ne sont jamais persistées ni journalisées : seules les métadonnées le sont.
-- L'identité (matricule) est résolue en un seul point, `get_current_user` dans `backend/app/auth/service.py` ; le front la relit toujours via `/me`.
+- L'identité (matricule) est résolue en un seul point, `get_current_user` dans `backend/app/services/auth.py` ; le front la relit toujours via `/me`.
   Passer au SSO (PRD §5.4) revient à réécrire `get_current_user`.
 
 ## Décisions prises dans ce squelette — à valider

@@ -9,11 +9,11 @@ from fastapi import Depends, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.models import User, UserSession
 from app.core.clock import as_utc, now
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.errors import ApiError
+from app.models import User, UserSession
 
 MATRICULE_RE = re.compile(r"^\d{6}$")
 

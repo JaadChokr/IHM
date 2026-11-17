@@ -3,14 +3,13 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.auth.models import User
-from app.auth.service import get_current_user
 from app.bigquery import BigQueryGateway, BytesLimitExceeded, QueryError, get_bigquery
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.errors import ApiError
-from app.query.models import DryRunResult, ExecutionResult, Guardrails, QueryIn, TestPeriod
-from app.query.service import analyse, record_test, resolve_target, test_period_for
+from app.models import DryRunResult, ExecutionResult, Guardrails, QueryIn, TestPeriod, User
+from app.services.auth import get_current_user
+from app.services.query import analyse, record_test, resolve_target, test_period_for
 
 router = APIRouter(tags=["test"])
 

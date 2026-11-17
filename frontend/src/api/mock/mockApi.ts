@@ -131,7 +131,7 @@ export function createMockApi(): Api {
     return db.tests.filter((t) => t.ruleId === ruleId && t.version === version).sort((a, b) => b.at.localeCompare(a.at))[0];
   }
 
-  // ---------- statuts déduits des runs Airflow (même logique que backend/app/rules/service.py) ----------
+  // ---------- statuts déduits des runs Airflow (même logique que backend/app/services/rules.py) ----------
   const PERIOD_DAYS = { HOURLY: 1 / 24, DAILY: 1, WEEKLY: 7 } as const;
   const INACTIVE_AFTER_PERIODS = 3;
 

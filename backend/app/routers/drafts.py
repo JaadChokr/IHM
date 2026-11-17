@@ -7,19 +7,16 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.audit.service import record_audit
-from app.auth.models import User
-from app.auth.service import get_current_user
 from app.bigquery import BigQueryGateway, get_bigquery
 from app.core.clock import now
 from app.core.db import get_db
 from app.core.errors import ApiError
 from app.core.sql import query_hash
-from app.drafts.models import Draft, DraftIn, DraftOut
-from app.drafts.service import adopt_tests, apply_content, draft_out, draft_tests, load_draft
-from app.query.models import TestRun
-from app.rules.models import Rule, RuleDetail, RuleInput, RuleVersion
-from app.rules.service import (
+from app.models import Draft, DraftIn, DraftOut, Rule, RuleDetail, RuleInput, RuleVersion, TestRun, User
+from app.services.audit import record_audit
+from app.services.auth import get_current_user
+from app.services.drafts import adopt_tests, apply_content, draft_out, draft_tests, load_draft
+from app.services.rules import (
     detail,
     find_rule,
     load_rule,

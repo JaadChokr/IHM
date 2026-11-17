@@ -10,17 +10,24 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth.models import User
-from app.auth.service import display_name, users_by_matricule
 from app.bigquery import BigQueryGateway, QueryError
 from app.core.clock import as_utc, now
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.core.periods import last_period
-from app.drafts.models import Draft
-from app.query.models import TestRun
-from app.query.service import as_test_record
-from app.rules.models import Rule, RuleDetail, RuleInput, RuleSummary, RuleVersion, RuleVersionOut
+from app.models import (
+    Draft,
+    Rule,
+    RuleDetail,
+    RuleInput,
+    RuleSummary,
+    RuleVersion,
+    RuleVersionOut,
+    TestRun,
+    User,
+)
+from app.services.auth import display_name, users_by_matricule
+from app.services.query import as_test_record
 
 log = logging.getLogger(__name__)
 

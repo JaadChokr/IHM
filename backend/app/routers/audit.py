@@ -4,10 +4,9 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.audit.models import AuditEvent, AuditEventOut
-from app.auth.models import User
-from app.auth.service import get_current_user
 from app.core.db import get_db
+from app.models import AuditEvent, AuditEventOut, User
+from app.services.auth import get_current_user
 
 router = APIRouter(tags=["audit"])
 

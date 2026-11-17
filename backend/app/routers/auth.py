@@ -4,12 +4,12 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.audit.service import record_audit
-from app.auth.models import LoginIn, LoginOut, ProfileIn, User, UserOut, UserSession
-from app.auth.service import MATRICULE_RE, close_session, get_current_user, get_session_record, open_session
 from app.core.clock import now
 from app.core.db import get_db
 from app.core.errors import ApiError
+from app.models import LoginIn, LoginOut, ProfileIn, User, UserOut, UserSession
+from app.services.audit import record_audit
+from app.services.auth import MATRICULE_RE, close_session, get_current_user, get_session_record, open_session
 
 router = APIRouter(tags=["identification"])
 

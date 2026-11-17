@@ -5,16 +5,13 @@ from datetime import timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth.models import User
-from app.auth.service import users_by_matricule
 from app.core.clock import as_utc, now
 from app.core.errors import ApiError
 from app.core.sql import query_hash
-from app.drafts.models import Draft, DraftOut
-from app.query.models import TestRun
-from app.query.service import as_test_record
-from app.rules.models import RuleInput, RuleVersion
-from app.rules.service import find_rule
+from app.models import Draft, DraftOut, RuleInput, RuleVersion, TestRun, User
+from app.services.auth import users_by_matricule
+from app.services.query import as_test_record
+from app.services.rules import find_rule
 
 # Fenêtre pendant laquelle un test fait depuis l'éditeur est rattaché au brouillon enregistré ensuite.
 TEST_ADOPTION_WINDOW = timedelta(hours=1)

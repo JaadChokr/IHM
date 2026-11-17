@@ -4,10 +4,8 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.audit.models import AuditAction, AuditEvent
-from app.auth.models import User
 from app.core.clock import now
-from app.rules.models import RuleVersion
+from app.models import AuditAction, AuditEvent, RuleVersion, User
 
 
 def record_audit(

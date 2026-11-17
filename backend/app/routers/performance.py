@@ -6,15 +6,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth.models import User
-from app.auth.service import get_current_user
 from app.bigquery import BigQueryGateway, get_bigquery
 from app.core.config import Settings, get_settings
 from app.core.db import get_db
 from app.core.errors import ApiError
-from app.performance.models import ConsolidatedRow, PerformanceResponse, PeriodTotals, RuleRun
-from app.rules.models import Rule
-from app.rules.service import derive_status, load_rule, production_version, running_version, sync_runs
+from app.models import ConsolidatedRow, PerformanceResponse, PeriodTotals, Rule, RuleRun, User
+from app.services.auth import get_current_user
+from app.services.rules import derive_status, load_rule, production_version, running_version, sync_runs
 
 router = APIRouter(tags=["performance"])
 

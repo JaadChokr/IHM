@@ -4,15 +4,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.audit.service import record_audit
-from app.auth.models import User
-from app.auth.service import get_current_user, users_by_matricule
 from app.bigquery import BigQueryGateway, get_bigquery
 from app.core.clock import now
 from app.core.db import get_db
 from app.core.errors import ApiError
-from app.rules.models import DecisionIn, NameAvailable, Rule, RuleDetail, RuleStatus, RuleSummary
-from app.rules.service import (
+from app.models import DecisionIn, NameAvailable, Rule, RuleDetail, RuleStatus, RuleSummary, User
+from app.services.audit import record_audit
+from app.services.auth import get_current_user, users_by_matricule
+from app.services.rules import (
     derive_status,
     detail,
     load_rule,

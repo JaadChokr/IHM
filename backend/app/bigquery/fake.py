@@ -19,8 +19,7 @@ from app.bigquery.contract import (
 )
 from app.core.periods import Period
 from app.core.sql import mask_sql
-from app.performance.models import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
-from app.query.models import Column
+from app.models import Column, DailyPerformance, RuleRun, VersionDaily, VersionPerformance
 
 log = logging.getLogger(__name__)
 

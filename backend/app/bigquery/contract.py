@@ -6,9 +6,7 @@ from datetime import date, datetime
 from typing import Any, Protocol
 
 from app.core.periods import Period
-from app.performance.models import DailyPerformance, RuleRun, VersionDaily, VersionPerformance
-from app.query.models import Column
-from app.rules.models import Rule, RuleVersion
+from app.models import Column, DailyPerformance, Rule, RuleRun, RuleVersion, VersionDaily, VersionPerformance
 
 
 class QueryError(Exception):

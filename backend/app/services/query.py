@@ -12,17 +12,14 @@ import uuid
 
 from sqlalchemy.orm import Session
 
-from app.audit.service import record_audit
-from app.auth.models import User
-from app.auth.service import display_name
 from app.bigquery import BigQueryGateway, QueryError
 from app.core.clock import now
 from app.core.errors import ApiError
 from app.core.periods import PARAMS, Period, last_period
 from app.core.sql import find_params, mask_sql, offset_to_line_col, query_hash
-from app.drafts.models import Draft
-from app.query.models import QueryIn, SqlIssue, TestRecord, TestRun
-from app.rules.models import Rule, RuleVersion
+from app.models import Draft, QueryIn, Rule, RuleVersion, SqlIssue, TestRecord, TestRun, User
+from app.services.audit import record_audit
+from app.services.auth import display_name
 
 _CLOCK_RE = re.compile(r"\bCURRENT_(?:DATE|DATETIME|TIMESTAMP)\b(?:\s*\(\s*\))?", re.IGNORECASE)
 _DATE_RE = re.compile(r"(?:\b(?:DATE|TIMESTAMP)\s*)?'\d{4}-\d{2}-\d{2}[^']*'", re.IGNORECASE)

@@ -6,24 +6,24 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.alerts.models import (
+from app.bigquery import AlertFilter, BigQueryGateway, get_bigquery
+from app.core.clock import now
+from app.core.db import get_db
+from app.core.errors import ApiError
+from app.models import (
     AlertOut,
     AlertPage,
     AlertPhase,
     AlertReviewIn,
     AlertReviewOut,
     AlertVerdict,
+    Rule,
     RuleCount,
+    User,
     VerdictCount,
 )
-from app.audit.service import record_audit
-from app.auth.models import User
-from app.auth.service import get_current_user, users_by_matricule
-from app.bigquery import AlertFilter, BigQueryGateway, get_bigquery
-from app.core.clock import now
-from app.core.db import get_db
-from app.core.errors import ApiError
-from app.rules.models import Rule
+from app.services.audit import record_audit
+from app.services.auth import get_current_user, users_by_matricule
 
 router = APIRouter(tags=["alertes"])
 

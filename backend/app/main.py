@@ -4,15 +4,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401  (enregistre toutes les tables sur SQLModel.metadata)
-from app.alerts import router as alerts
-from app.audit import router as audit
-from app.auth import router as auth
 from app.core.config import get_settings
 from app.core.errors import ApiError, api_error_handler
-from app.drafts import router as drafts
-from app.performance import router as performance
-from app.query import router as query
-from app.rules import router as rules
+from app.routers import alerts, audit, auth, drafts, performance, query, rules
 
 
 def create_app() -> FastAPI:
