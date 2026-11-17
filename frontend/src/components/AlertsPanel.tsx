@@ -258,7 +258,8 @@ export function AlertsPanel({ ruleId }: Props) {
               <tr>
                 <th>Détectée le</th>
                 <th>Commande</th>
-                <th>{ruleId ? 'Version' : 'Règle'}</th>
+                {!ruleId && <th>Règle</th>}
+                <th>Statut</th>
                 <th>Détails</th>
                 <th>
                   Verdict
@@ -280,18 +281,19 @@ export function AlertsPanel({ ruleId }: Props) {
                   <tr key={id}>
                     <td className="small nowrap">{fmtDateTime(a.detectedAt)}</td>
                     <td className="mono small nowrap">{a.orderId}</td>
-                    <td className={ruleId ? 'nowrap' : 'alert-rule'}>
-                      {ruleId ? (
-                        <span className="small">v{a.ruleVersion}</span>
-                      ) : (
-                        <>
-                          <Link to={`/rules/${a.ruleId}`} className="rule-link">
-                            {a.ruleName}
-                          </Link>{' '}
-                          <span className="small muted">v{a.ruleVersion}</span>
-                        </>
-                      )}
-                      {!phase && <div className="small muted">{a.phase === 'TEST' ? 'en test' : 'en production'}</div>}
+                    {!ruleId && (
+                      <td className="alert-rule">
+                        <Link to={`/rules/${a.ruleId}`} className="rule-link">
+                          {a.ruleName}
+                        </Link>
+                      </td>
+                    )}
+                    <td className="nowrap">
+                      {/* Statut de la version qui a remonté la commande : en test (non transmise) ou en production. */}
+                      <span className={`badge ${testing ? 'st-OBSERVATION' : 'st-IN_PRODUCTION'}`}>
+                        <span className="badge-dot" aria-hidden="true" />
+                        {testing ? 'En test' : 'En production'}
+                      </span>
                     </td>
                     <td className="small muted alert-details">
                       <div className="ellipsis" title={detailsText(a.details)}>
