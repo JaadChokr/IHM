@@ -24,8 +24,8 @@ type Segment = Exclude<BarMeasure, 'relevance'>;
 
 /**
  * Les couleurs de la qualification, pour que le graphique se lise sans légende : rouge = fraude avérée,
- * orange = commande risquée, vert = RAS, gris = pas encore vérifiée (à qualifier en test, en attente du
- * prestataire en production). La pertinence est une ligne sombre, neutre. Classes `.m-<mesure>` (ui.css).
+ * orange = commande risquée, vert = RAS, gris = pas encore vérifiée (à vérifier en test, en attente de
+ * vérification en production). La pertinence est une ligne sombre, neutre. Classes `.m-<mesure>` (ui.css).
  */
 export const MEASURES: { key: BarMeasure; label: string }[] = [
   { key: 'fraud', label: 'Fraudes avérées' },
@@ -335,7 +335,7 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
                 ['fraud', plural('fraud', 'fraude avérée', 'fraudes avérées')],
                 ['risky', plural('risky', 'risquée', 'risquées')],
                 ['ras', 'RAS'],
-                ['pending', test ? 'à qualifier' : 'en attente de vérification'],
+                ['pending', test ? 'à vérifier' : 'en attente de vérification'],
               ];
               return (
                 <div key={s.version} className="tt-version">

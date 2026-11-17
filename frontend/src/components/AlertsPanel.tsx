@@ -11,7 +11,7 @@ export const VERDICT_LABEL: Record<AlertVerdict, string> = {
   FRAUD: 'Fraude avérée',
   RISKY: 'Commande risquée',
   NOT_FRAUD: 'RAS',
-  TO_REVIEW: 'À qualifier',
+  TO_REVIEW: 'À vérifier',
   PENDING: 'En attente de vérification',
 };
 /** Les trois qualifications possibles d'une commande en test, dans l'ordre de la liste. */
@@ -113,7 +113,7 @@ export function AlertsPanel({ ruleId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
-  /** Qualifie la commande ; `null` (« À qualifier ») retire la qualification. */
+  /** Qualifie la commande ; `null` (« À vérifier ») retire la qualification. */
   async function review(a: Alert, next: ReviewVerdict | null) {
     if ((a.review?.verdict ?? null) === next) return;
     setBusy(a.orderId + a.ruleId + a.ruleVersion);
@@ -161,7 +161,7 @@ export function AlertsPanel({ ruleId }: Props) {
                     setVerdict('TO_REVIEW');
                   }}
                 >
-                  {fmtInt(data.toReview)} à qualifier
+                  {fmtInt(data.toReview)} à vérifier
                 </button>
               </>
             )}
@@ -255,14 +255,17 @@ export function AlertsPanel({ ruleId }: Props) {
                 <th>Détails</th>
                 {testing ? (
                   <th>
-                    Verdict de l'analyste
+                    Verdict
                     <InfoTip align="end">
-                      Fraude avérée, commande risquée ou RAS (rien à signaler). Il vaut pour la commande, toutes règles confondues. « À qualifier »
-                      retire le verdict donné.
+                      Donné par les analystes : fraude avérée, commande risquée ou RAS (rien à signaler). Il vaut pour la commande, toutes règles
+                      confondues. « À vérifier » retire le verdict donné.
                     </InfoTip>
                   </th>
                 ) : (
-                  <th>Verdict du prestataire</th>
+                  <th>
+                    Verdict
+                    <InfoTip align="end">Donné par le prestataire, à qui la commande a été transmise.</InfoTip>
+                  </th>
                 )}
               </tr>
             </thead>
