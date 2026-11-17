@@ -335,7 +335,7 @@ export function DailyBars({ label, dates, series, show, markers = [], height = 2
                 ['fraud', plural('fraud', 'fraude avérée', 'fraudes avérées')],
                 ['risky', plural('risky', 'risquée', 'risquées')],
                 ['ras', 'RAS'],
-                ['pending', test ? 'à qualifier' : 'en attente du prestataire'],
+                ['pending', test ? 'à qualifier' : 'en attente de vérification'],
               ];
               return (
                 <div key={s.version} className="tt-version">

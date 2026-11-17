@@ -12,7 +12,7 @@ export const VERDICT_LABEL: Record<AlertVerdict, string> = {
   RISKY: 'Commande risquée',
   NOT_FRAUD: 'RAS',
   TO_REVIEW: 'À qualifier',
-  PENDING: 'En attente du prestataire',
+  PENDING: 'En attente de vérification',
 };
 /** Les trois qualifications possibles d'une commande en test, dans l'ordre de la liste. */
 const REVIEW_CHOICES: ReviewVerdict[] = ['FRAUD', 'RISKY', 'NOT_FRAUD'];

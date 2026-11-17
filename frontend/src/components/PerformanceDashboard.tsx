@@ -217,7 +217,7 @@ export function PerformanceDashboard({ ruleId, firstRunDate, versionsRun, observ
 
           <Card
             title="Remontées par verdict et pertinence, par jour"
-            info="Une barre par version et par jour : toutes les commandes remontées, découpées par verdict avec les couleurs de la qualification. Rouge : fraude avérée ; orange : commande risquée ; vert : RAS ; gris : pas encore vérifiée (à qualifier en test, en attente du prestataire en production). Hachurée quand la version est en test. En production, le prestataire ne distingue que fraude ou non. La ligne : la pertinence du jour (fraudes avérées et commandes risquées, sur les commandes vérifiées), lue sur l'axe de droite. Chaque mesure s'affiche ou se masque avec les boutons."
+            info="Une barre par version et par jour : toutes les commandes remontées, découpées par verdict avec les couleurs de la qualification. Rouge : fraude avérée ; orange : commande risquée ; vert : RAS ; gris : pas encore vérifiée (à qualifier en test, en attente de vérification en production). Hachurée quand la version est en test. En production, le prestataire ne distingue que fraude ou non. La ligne : la pertinence du jour (fraudes avérées et commandes risquées, sur les commandes vérifiées), lue sur l'axe de droite. Chaque mesure s'affiche ou se masque avec les boutons."
             actions={
               <div className="seg measure-seg" role="group" aria-label="Mesures affichées">
                 {MEASURES.map(({ key, label }) => (

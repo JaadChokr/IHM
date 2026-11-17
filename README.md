@@ -453,7 +453,7 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   **Graphique de la page règle** : un histogramme journalier, en nombre de commandes, qui reprend les couleurs
   de la qualification pour se lire sans légende. Une barre **par version** et par jour : toutes les commandes
   **remontées**, découpées par verdict, de bas en haut : **rouge** fraude avérée, **orange** commande risquée,
-  **vert** RAS, **gris** pas encore vérifiée (à qualifier en test, en attente du prestataire en production). La
+  **vert** RAS, **gris** pas encore vérifiée (à qualifier en test, en attente de vérification en production). La
   barre est **hachurée** quand la version est en test (avant sa mise en production, ou candidate à côté de la
   version en production). En production, le prestataire ne distingue que fraude ou non : pas d'orange. En
   option, la **pertinence** du jour, en ligne sombre neutre (trait plein, puis tirets pour une seconde version),
