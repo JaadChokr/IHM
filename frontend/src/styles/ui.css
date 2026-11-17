@@ -702,13 +702,6 @@ select.verdict-select option {
   background: var(--surface);
   color: var(--text);
 }
-/* Choix de la phase (alertes) : le nombre d'alertes de chaque phase dans le bouton */
-.phase-seg {
-  align-self: flex-start;
-}
-.phase-seg .count {
-  margin-left: var(--space-2);
-}
 .alerts-filters select {
   flex: none;
 }

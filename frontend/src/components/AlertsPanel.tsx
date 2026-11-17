@@ -22,8 +22,8 @@ const PHASE_VERDICTS: Record<AlertPhase, AlertVerdict[]> = {
   PRODUCTION: ['PENDING', 'FRAUD', 'NOT_FRAUD'],
 };
 const PHASES: { phase: AlertPhase; label: string; ofRule: string; hint: string }[] = [
-  { phase: 'TEST', label: 'Règles en test', ofRule: 'En test', hint: 'Commandes non transmises au prestataire : à qualifier par les analystes.' },
-  { phase: 'PRODUCTION', label: 'Règles en production', ofRule: 'En production', hint: 'Commandes transmises au prestataire, qui rend le verdict.' },
+  { phase: 'TEST', label: 'Règles en test', ofRule: 'En test', hint: 'commandes non transmises au prestataire, dont le verdict est donné par les analystes.' },
+  { phase: 'PRODUCTION', label: 'Règles en production', ofRule: 'En production', hint: 'commandes transmises au prestataire, qui rend le verdict.' },
 ];
 const PERIODS = [7, 30, 90] as const;
 
@@ -35,8 +35,9 @@ function detailsText(d: Alert['details']): string {
     .join(' · ');
 }
 
-/** Nombre d'alertes d'une phase, ou d'un verdict, dans une page (0 si absent). */
-const phaseCountIn = (d: AlertPage | undefined, p: AlertPhase) => d?.phases.find((c) => c.phase === p)?.count ?? 0;
+/** Nombre d'alertes d'une phase (d'une seule règle si `ruleId`), ou d'un verdict, dans une page (0 si absent). */
+const phaseCountIn = (d: AlertPage | undefined, p: AlertPhase, ruleId?: string) =>
+  (d?.rules ?? []).filter((c) => c.phase === p && (!ruleId || c.ruleId === ruleId)).reduce((t, c) => t + c.count, 0);
 const verdictCountIn = (d: AlertPage | undefined, v: AlertVerdict) => d?.verdicts.find((c) => c.verdict === v)?.count ?? 0;
 
 interface Props {
@@ -45,12 +46,13 @@ interface Props {
 }
 
 /**
- * Alertes remontées par les règles : une ligne par commande et par version. On choisit d'abord la phase :
- * - en test, les commandes ne sont pas transmises au prestataire ; les analystes les qualifient (fraude
- *   avérée, commande risquée ou RAS). La qualification porte sur la commande, toutes règles confondues, et
- *   entre dans la pertinence de la règle ;
- * - en production, le prestataire rend le verdict : rien à qualifier.
- * Les filtres ne proposent que des choix qui renvoient des alertes (nombres renvoyés par l'API).
+ * Alertes remontées par les règles : une ligne par commande et par version. Un seul menu choisit la phase et
+ * la règle : les règles en test, puis les règles en production, chacune avec son nombre d'alertes.
+ * - en test, les commandes ne sont pas transmises au prestataire ; les analystes donnent leur verdict (fraude
+ *   avérée, commande risquée ou RAS). Il porte sur la commande, toutes règles confondues, et entre dans la
+ *   pertinence de la règle ;
+ * - en production, le prestataire rend le verdict.
+ * Les menus ne proposent que des choix qui renvoient des alertes (nombres renvoyés par l'API).
  */
 export function AlertsPanel({ ruleId }: Props) {
   const [days, setDays] = usePref<(typeof PERIODS)[number]>('alertsDays', 7);
@@ -97,16 +99,19 @@ export function AlertsPanel({ ruleId }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
-  // Un choix qui ne renvoie plus rien (autre phase, autre période) est retiré plutôt que d'afficher une liste vide.
+  // Un choix qui ne renvoie plus rien (autre période, autre phase) est retiré plutôt que d'afficher une liste vide.
   useEffect(() => {
     if (!data) return;
     if (!phaseSettled.current) {
       phaseSettled.current = true;
-      if (phaseCountIn(data, 'TEST') === 0 && phaseCountIn(data, 'PRODUCTION') > 0) return setPhase('PRODUCTION');
+      if (phaseCountIn(data, 'TEST', ruleId) === 0 && phaseCountIn(data, 'PRODUCTION', ruleId) > 0) return setPhase('PRODUCTION');
     }
-    if (rule && !data.rules.some((c) => c.ruleId === rule)) return setRule('');
+    if (rule && !data.rules.some((c) => c.ruleId === rule && c.phase === phase)) return setRule('');
     if (verdict && !data.verdicts.some((c) => c.verdict === verdict)) setVerdict('');
-  }, [data, rule, verdict]);
+    // Seulement à l'arrivée de nouveaux résultats : ceux affichés pendant un rechargement correspondent encore aux
+    // anciens filtres et retireraient à tort un choix qui vient d'être fait.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
   /** Qualifie la commande ; `null` (« À qualifier ») retire la qualification. */
   async function review(a: Alert, next: ReviewVerdict | null) {
@@ -123,12 +128,15 @@ export function AlertsPanel({ ruleId }: Props) {
     }
   }
 
-  function choosePhase(p: AlertPhase) {
+  /** Choix du menu « phase et règle » : « TEST » (toutes les règles en test) ou « TEST:<ruleId> ». */
+  function chooseScope(value: string) {
+    const [p, r = ''] = value.split(':') as [AlertPhase, string?];
+    if (p !== phase) setVerdict('');
     setPhase(p);
-    setVerdict('');
+    setRule(r);
   }
 
-  const phaseCount = (p: AlertPhase) => phaseCountIn(data, p);
+  const phaseCount = (p: AlertPhase) => phaseCountIn(data, p, ruleId);
   const verdictCount = (v: AlertVerdict) => verdictCountIn(data, v);
   const all = phaseCount('TEST') + phaseCount('PRODUCTION');
   const inPhase = data ? phaseCount(phase) : 0;
@@ -162,7 +170,7 @@ export function AlertsPanel({ ruleId }: Props) {
           '…'
         )
       }
-      info="Une ligne par commande remontée et par version de règle. Choisissez d'abord la phase. En test, les commandes ne sont pas transmises au prestataire : qualifiez-les (fraude avérée, commande risquée ou RAS). Votre qualification vaut pour la commande, toutes règles confondues, et entre dans la pertinence de la règle. En production, le prestataire rend le verdict."
+      info="Une ligne par commande remontée et par version de règle. Le premier menu choisit les règles en test ou en production, toutes ou une seule. En test, les commandes ne sont pas transmises au prestataire : donnez votre verdict (fraude avérée, commande risquée ou RAS). Il vaut pour la commande, toutes règles confondues, et entre dans la pertinence de la règle. En production, le prestataire rend le verdict."
       actions={
         <div className="seg" role="group" aria-label="Période">
           {PERIODS.map((p) => (
@@ -174,26 +182,32 @@ export function AlertsPanel({ ruleId }: Props) {
       }
     >
       <div className="card-pad stack gap-3 divider-bottom">
-        <div className="seg phase-seg" role="group" aria-label="Phase des règles">
-          {PHASES.map((p) => (
-            <button key={p.phase} type="button" aria-pressed={phase === p.phase} onClick={() => choosePhase(p.phase)} title={p.hint}>
-              {ruleId ? p.ofRule : p.label}
-              {data && <span className="count">{fmtInt(phaseCount(p.phase))}</span>}
-            </button>
-          ))}
-        </div>
-        <p className="small muted m-0">{PHASES.find((p) => p.phase === phase)!.hint}</p>
         <div className="row gap-3 alerts-filters">
-          <div className="field grow-field">
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Numéro de commande…" aria-label="Rechercher une commande" />
-          </div>
-          {!ruleId && (
-            <select className="select-sm" value={rule} onChange={(e) => setRule(e.target.value)} aria-label="Règle">
-              <option value="">Toutes les règles{data ? ` (${fmtInt(inPhase)})` : ''}</option>
-              {data?.rules.map((c) => (
-                <option key={c.ruleId} value={c.ruleId}>
-                  {c.ruleName} ({fmtInt(c.count)})
+          {ruleId ? (
+            <select className="select-sm" value={phase} onChange={(e) => chooseScope(e.target.value)} aria-label="Phase">
+              {PHASES.map((p) => (
+                <option key={p.phase} value={p.phase} disabled={!!data && phaseCount(p.phase) === 0 && phase !== p.phase}>
+                  {p.ofRule}
+                  {data ? ` (${fmtInt(phaseCount(p.phase))})` : ''}
                 </option>
+              ))}
+            </select>
+          ) : (
+            <select className="select-sm" value={rule ? `${phase}:${rule}` : phase} onChange={(e) => chooseScope(e.target.value)} aria-label="Phase et règle">
+              {PHASES.map((p) => (
+                <optgroup key={p.phase} label={p.label}>
+                  <option value={p.phase} disabled={!!data && phaseCount(p.phase) === 0 && !(phase === p.phase && !rule)}>
+                    Toutes les {p.label.toLowerCase()}
+                    {data ? ` (${fmtInt(phaseCount(p.phase))})` : ''}
+                  </option>
+                  {data?.rules
+                    .filter((c) => c.phase === p.phase)
+                    .map((c) => (
+                      <option key={c.ruleId} value={`${p.phase}:${c.ruleId}`}>
+                        {c.ruleName} ({fmtInt(c.count)})
+                      </option>
+                    ))}
+                </optgroup>
               ))}
             </select>
           )}
@@ -206,7 +220,14 @@ export function AlertsPanel({ ruleId }: Props) {
               </option>
             ))}
           </select>
+          <div className="field grow-field">
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Numéro de commande…" aria-label="Rechercher une commande" />
+          </div>
         </div>
+        <p className="small muted m-0">
+          <strong>{ruleId ? PHASES.find((p) => p.phase === phase)!.ofRule : PHASES.find((p) => p.phase === phase)!.label}</strong> :{' '}
+          {PHASES.find((p) => p.phase === phase)!.hint}
+        </p>
       </div>
       {error && (
         <div className="card-pad">
@@ -234,9 +255,10 @@ export function AlertsPanel({ ruleId }: Props) {
                 <th>Détails</th>
                 {testing ? (
                   <th>
-                    Qualification
+                    Verdict de l'analyste
                     <InfoTip align="end">
-                      Fraude avérée, commande risquée ou RAS (rien à signaler). « À qualifier » retire la qualification.
+                      Fraude avérée, commande risquée ou RAS (rien à signaler). Il vaut pour la commande, toutes règles confondues. « À qualifier »
+                      retire le verdict donné.
                     </InfoTip>
                   </th>
                 ) : (

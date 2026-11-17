@@ -77,8 +77,8 @@ def test_alertes_et_qualification(client, bq):
 
 
 def test_filtres_guides_par_les_nombres(client, bq):
-    # Les filtres ne proposent que des choix qui renvoient des alertes : par phase pour la règle choisie, par
-    # règle dans la phase choisie, par verdict pour les deux.
+    # Les filtres ne proposent que des choix qui renvoient des alertes : les règles groupées par phase, puis
+    # les verdicts de la règle et de la phase choisies.
     login(client)
     a = _submit(client, RULE)
     b = _submit(client, {**RULE, "name": "Autre règle"})
@@ -91,14 +91,14 @@ def test_filtres_guides_par_les_nombres(client, bq):
     review(client, "A-2", a, "NOT_FRAUD")
 
     page = client.get("/alerts", params={"phase": "TEST"}).json()
-    assert {c["phase"]: c["count"] for c in page["phases"]} == {"TEST": 2, "PRODUCTION": 2}
-    # En test, seule la première règle a des alertes : l'autre n'est pas proposée.
-    assert [(c["ruleName"], c["count"]) for c in page["rules"]] == [("Panier élevé", 2)]
+    # Par règle et par phase, quelle que soit la phase choisie : les règles en test, puis en production.
+    by_rule = [(c["phase"], c["ruleName"], c["count"]) for c in page["rules"]]
+    assert by_rule[0] == ("TEST", "Panier élevé", 2)
+    assert sorted(by_rule[1:]) == [("PRODUCTION", "Autre règle", 1), ("PRODUCTION", "Panier élevé", 1)]
     assert {c["verdict"]: c["count"] for c in page["verdicts"]} == {"TO_REVIEW": 1, "NOT_FRAUD": 1}
     assert page["toReview"] == 1
 
     page = client.get("/alerts", params={"phase": "PRODUCTION", "ruleId": b}).json()
-    assert {c["phase"]: c["count"] for c in page["phases"]} == {"PRODUCTION": 1}
-    assert {c["ruleName"]: c["count"] for c in page["rules"]} == {"Panier élevé": 1, "Autre règle": 1}
+    assert len(page["rules"]) == 3  # le choix de la règle ne réduit pas la liste des règles
     assert {c["verdict"]: c["count"] for c in page["verdicts"]} == {"NOT_FRAUD": 1}
     assert page["total"] == 1 and page["toReview"] == 0

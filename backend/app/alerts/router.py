@@ -13,7 +13,6 @@ from app.alerts.models import (
     AlertReviewIn,
     AlertReviewOut,
     AlertVerdict,
-    PhaseCount,
     RuleCount,
     VerdictCount,
 )
@@ -54,7 +53,7 @@ def list_alerts(
     search = (q or "").strip() or None
     res = bq.alerts(AlertFilter(start, end, rule_id, phase, verdict, search, limit, offset))
     rows = res.items
-    ids = {a.rule_id for a in rows} | set(res.rules)
+    ids = {a.rule_id for a in rows} | {r for r, _ in res.rules}
     found = db.scalars(select(Rule).where(Rule.rule_id.in_(ids)).options(selectinload(Rule.versions)))
     rules = {r.rule_id: r for r in found}
     users = users_by_matricule(db)
@@ -98,10 +97,12 @@ def list_alerts(
         items=items,
         total=res.total,
         to_review=res.to_review,
-        phases=[PhaseCount(phase=p, count=n) for p, n in sorted(res.phases.items())],  # type: ignore[arg-type]
         rules=sorted(
-            (RuleCount(rule_id=r, rule_name=latest_name(r), count=n) for r, n in res.rules.items()),
-            key=lambda c: (-c.count, c.rule_name.lower()),
+            (
+                RuleCount(rule_id=r, rule_name=latest_name(r), phase=ph, count=n)  # type: ignore[arg-type]
+                for (r, ph), n in res.rules.items()
+            ),
+            key=lambda c: (c.phase != "TEST", -c.count, c.rule_name.lower()),
         ),
         verdicts=[VerdictCount(verdict=v, count=n) for v, n in res.verdicts.items()],  # type: ignore[arg-type]
     )

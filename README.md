@@ -403,13 +403,15 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
 
   **Alertes et qualification** : la page **Alertes** (et l'onglet Alertes de la fiche d'une règle) liste les
   commandes remontées, une ligne par commande et par version (`rule_alerts`), avec leurs détails et leur verdict.
-  On choisit d'abord la **phase** : règles en test ou règles en production. Les filtres suivants (règle, verdict)
-  ne proposent que des choix qui renvoient des alertes, avec leur nombre : l'API renvoie, avec la page, le
-  nombre d'alertes par phase (pour la règle choisie), par règle (dans la phase choisie) et par verdict (pour
-  les deux). Une commande **transmise** est vérifiée par le prestataire (fraude avérée, RAS, ou en attente) :
-  rien à qualifier. Seules les commandes d'une version **en test**, non transmises, se qualifient : l'analyste
-  choisit dans une liste **fraude avérée**, **commande risquée** ou **RAS** (rien à signaler ; « À qualifier »
-  retire la qualification). Il teste ainsi une règle,
+  Un seul menu choisit la **phase et la règle** : « Règles en test » puis « Règles en production », chaque
+  groupe commençant par « toutes les règles » de la phase, chaque entrée avec son nombre d'alertes (une règle
+  avec une candidate figure dans les deux groupes). Le menu des verdicts ne propose que ceux de la phase. Tous
+  deux ne proposent que des choix qui renvoient des alertes : l'API renvoie, avec la page, le nombre d'alertes
+  par règle et par phase, et par verdict pour la règle et la phase choisies. Dans l'onglet Alertes d'une
+  règle, le premier menu ne choisit que la phase. Une commande **transmise** est vérifiée par le prestataire
+  (fraude avérée, RAS, ou en attente) : colonne « Verdict du prestataire ». Seules les commandes d'une version
+  **en test**, non transmises, se qualifient : colonne « Verdict de l'analyste », où l'analyste choisit
+  **fraude avérée**, **commande risquée** ou **RAS** (rien à signaler ; « À qualifier » retire son verdict). Il teste ainsi une règle,
   qualifie ses remontées, et la met en production s'il la juge assez pertinente ; le prestataire traite alors
   directement ses commandes. La qualification porte sur la **commande**, toutes règles confondues, et s'ajoute à
   la table BigQuery `alert_reviews` (une ligne par qualification, ajouts seulement, la dernière fait foi ;

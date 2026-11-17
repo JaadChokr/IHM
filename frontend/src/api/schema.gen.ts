@@ -416,11 +416,6 @@ export interface components {
             /** Toreview */
             toReview: number;
             /**
-             * Phases
-             * @default []
-             */
-            phases: components["schemas"]["PhaseCount"][];
-            /**
              * Rules
              * @default []
              */
@@ -785,16 +780,6 @@ export interface components {
              */
             ordersObserved: number;
         };
-        /** PhaseCount */
-        PhaseCount: {
-            /**
-             * Phase
-             * @enum {string}
-             */
-            phase: "TEST" | "PRODUCTION";
-            /** Count */
-            count: number;
-        };
         /** ProfileIn */
         ProfileIn: {
             /** Firstname */
@@ -817,12 +802,20 @@ export interface components {
             /** Scheduleevery */
             scheduleEvery?: number | null;
         };
-        /** RuleCount */
+        /**
+         * RuleCount
+         * @description Alertes d'une règle dans une phase : ses versions en test, ou sa version en production.
+         */
         RuleCount: {
             /** Ruleid */
             ruleId: string;
             /** Rulename */
             ruleName: string;
+            /**
+             * Phase
+             * @enum {string}
+             */
+            phase: "TEST" | "PRODUCTION";
             /** Count */
             count: number;
         };

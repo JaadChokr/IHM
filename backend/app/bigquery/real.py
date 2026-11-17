@@ -258,8 +258,8 @@ class RealBigQueryGateway:
         P = self._bq.ScalarQueryParameter
         # Verdict, retour du prestataire et qualification : calculés par la vue v_rule_orders, seule
         # définition de la règle de verdict. Une seule requête, une seule ligne : la page d'alertes et les
-        # nombres qui guident les filtres (par phase pour la règle choisie, par règle dans la phase choisie,
-        # par verdict pour les deux).
+        # nombres qui guident les filtres (par règle et par phase, puis par verdict pour la règle et la phase
+        # choisies).
         sql = f"""
             WITH base AS (
               SELECT order_id, rule_id, rule_version, run_date, detected_at, to_send,
@@ -282,11 +282,8 @@ class RealBigQueryGateway:
               (SELECT COUNT(*) FROM listed) AS total,
               (SELECT COUNTIF(verdict = 'TO_REVIEW') FROM base WHERE rule_ok) AS to_review,
               ARRAY(
-                SELECT AS STRUCT IF(to_send, 'PRODUCTION', 'TEST') AS k, COUNT(*) AS n
-                FROM base WHERE rule_ok GROUP BY k
-              ) AS phases,
-              ARRAY(
-                SELECT AS STRUCT rule_id AS k, COUNT(*) AS n FROM base WHERE phase_ok GROUP BY k
+                SELECT AS STRUCT rule_id AS k, IF(to_send, 'PRODUCTION', 'TEST') AS phase, COUNT(*) AS n
+                FROM base GROUP BY k, phase
               ) AS rules,
               ARRAY(SELECT AS STRUCT verdict AS k, COUNT(*) AS n FROM chosen GROUP BY k) AS verdicts"""
         (row,) = self._rows(
@@ -327,8 +324,7 @@ class RealBigQueryGateway:
             items=items,
             total=row.get("total") or 0,
             to_review=row.get("to_review") or 0,
-            phases=counts("phases"),
-            rules=counts("rules"),
+            rules={(c["k"], c["phase"]): c["n"] for c in row.get("rules") or []},
             verdicts=counts("verdicts"),
         )
 

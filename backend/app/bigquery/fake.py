@@ -222,8 +222,7 @@ class FakeBigQueryGateway:
             items=out[f.offset : f.offset + f.limit],
             total=len(out),
             to_review=sum(rule_ok(x) and x.verdict == "TO_REVIEW" for x in base),
-            phases=count([x for x in base if rule_ok(x)], lambda x: "PRODUCTION" if x.to_send else "TEST"),
-            rules=count([x for x in base if phase_ok(x)], lambda x: x.rule_id),
+            rules=count(base, lambda x: (x.rule_id, "PRODUCTION" if x.to_send else "TEST")),
             verdicts=count(chosen, lambda x: x.verdict),
         )
 

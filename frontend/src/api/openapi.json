@@ -1332,14 +1332,6 @@
             "type": "integer",
             "title": "Toreview"
           },
-          "phases": {
-            "items": {
-              "$ref": "#/components/schemas/PhaseCount"
-            },
-            "type": "array",
-            "title": "Phases",
-            "default": []
-          },
           "rules": {
             "items": {
               "$ref": "#/components/schemas/RuleCount"
@@ -2278,28 +2270,6 @@
         "title": "PeriodTotals",
         "description": "Chiffres d'une règle sur une période, en commandes distinctes : exacts même si deux versions ont\nremonté la même commande (la somme des jours peut la compter deux fois)."
       },
-      "PhaseCount": {
-        "properties": {
-          "phase": {
-            "type": "string",
-            "enum": [
-              "TEST",
-              "PRODUCTION"
-            ],
-            "title": "Phase"
-          },
-          "count": {
-            "type": "integer",
-            "title": "Count"
-          }
-        },
-        "type": "object",
-        "required": [
-          "phase",
-          "count"
-        ],
-        "title": "PhaseCount"
-      },
       "ProfileIn": {
         "properties": {
           "firstName": {
@@ -2405,6 +2375,14 @@
             "type": "string",
             "title": "Rulename"
           },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "TEST",
+              "PRODUCTION"
+            ],
+            "title": "Phase"
+          },
           "count": {
             "type": "integer",
             "title": "Count"
@@ -2414,9 +2392,11 @@
         "required": [
           "ruleId",
           "ruleName",
+          "phase",
           "count"
         ],
-        "title": "RuleCount"
+        "title": "RuleCount",
+        "description": "Alertes d'une règle dans une phase : ses versions en test, ou sa version en production."
       },
       "RuleDetail": {
         "properties": {

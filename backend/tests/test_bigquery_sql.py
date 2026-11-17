@@ -83,7 +83,7 @@ def test_alertes_et_qualifications_sql_valide():
     # Le verdict vient de la vue v_rule_orders : la requête ne le recalcule pas.
     assert "COUNTIF(verdict = 'TO_REVIEW')" in listing
     # Une seule requête : la page et les nombres qui guident les filtres.
-    assert all(f"AS {k}" in listing for k in ("items", "total", "phases", "rules", "verdicts"))
+    assert all(f"AS {k}" in listing for k in ("items", "total", "rules", "verdicts"))
     assert "`p.d`.v_rule_orders" in listing
     assert "CASE" not in listing and "alert_reviews" not in listing
     assert "INSERT INTO `p.d`.alert_reviews" in insert and "NOT IFNULL(to_send, FALSE)" in insert

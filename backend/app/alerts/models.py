@@ -42,14 +42,12 @@ class AlertOut(Model):
     details: dict[str, Any] | None = None
 
 
-class PhaseCount(Model):
-    phase: AlertPhase
-    count: int
-
-
 class RuleCount(Model):
+    """Alertes d'une règle dans une phase : ses versions en test, ou sa version en production."""
+
     rule_id: str
     rule_name: str
+    phase: AlertPhase
     count: int
 
 
@@ -66,9 +64,8 @@ class AlertPage(Model):
     total: int
     # Alertes en test pas encore qualifiées, pour la règle choisie.
     to_review: int
-    # Alertes par phase, pour la règle choisie.
-    phases: list[PhaseCount] = []
-    # Alertes par règle, dans la phase choisie (les plus nombreuses d'abord).
+    # Alertes par règle et par phase, quelles que soient la règle et la phase choisies : le filtre propose les
+    # règles en test puis les règles en production (les plus nombreuses d'abord dans chaque groupe).
     rules: list[RuleCount] = []
     # Alertes par verdict, pour la règle et la phase choisies.
     verdicts: list[VerdictCount] = []

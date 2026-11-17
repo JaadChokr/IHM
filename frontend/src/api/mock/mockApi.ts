@@ -6,6 +6,7 @@ import type { Api } from '../client';
 import {
   ApiError,
   type Alert,
+  type AlertPhase,
   type AlertVerdict,
   EVERY,
   type AuditEvent,
@@ -933,8 +934,8 @@ export function createMockApi(): Api {
       if (from > to) throw new ApiError(422, 'La date de début doit précéder la date de fin.');
       if (addDays(from, 92) <= to) throw new ApiError(422, 'Période trop longue : 92 jours au plus.');
       const q = f.q?.trim();
-      // Nombres qui guident les filtres (comme l'API) : par phase pour la règle choisie, par règle dans la
-      // phase choisie, par verdict pour les deux.
+      // Nombres qui guident les filtres (comme l'API) : par règle et par phase, puis par verdict pour la règle
+      // et la phase choisies.
       const base = alertsBetween(from, to).filter((a) => !q || a.orderId.includes(q));
       const ruleOk = (a: Alert) => !f.ruleId || a.ruleId === f.ruleId;
       const phaseOk = (a: Alert) => !f.phase || a.phase === f.phase;
@@ -951,10 +952,13 @@ export function createMockApi(): Api {
         items: shown.slice(offset, offset + (f.limit ?? 25)),
         total: shown.length,
         toReview: base.filter((a) => ruleOk(a) && a.verdict === 'TO_REVIEW').length,
-        phases: [...count(base.filter(ruleOk), (a) => a.phase)].sort().map(([phase, n]) => ({ phase, count: n })),
-        rules: [...count(base.filter(phaseOk), (a) => a.ruleId)]
-          .map(([ruleId, n]) => ({ ruleId, ruleName: ruleName(ruleId), count: n }))
-          .sort((a, b) => b.count - a.count || a.ruleName.localeCompare(b.ruleName)),
+        // Par règle et par phase : les règles en test, puis en production.
+        rules: [...count(base, (a) => `${a.phase}:${a.ruleId}`)]
+          .map(([key, n]) => {
+            const [phase, ruleId] = key.split(':') as [AlertPhase, string];
+            return { ruleId, ruleName: ruleName(ruleId), phase, count: n };
+          })
+          .sort((a, b) => Number(a.phase !== 'TEST') - Number(b.phase !== 'TEST') || b.count - a.count || a.ruleName.localeCompare(b.ruleName)),
         verdicts: [...count(chosen, (a) => a.verdict)].map(([verdict, n]) => ({ verdict, count: n })),
       };
     },

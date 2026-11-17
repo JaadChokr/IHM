@@ -110,16 +110,15 @@ class AlertRow:
 @dataclass
 class AlertResult:
     """Une page d'alertes et les nombres qui guident les filtres (facettes), sur la période et la recherche :
-    - `phases` : alertes par phase (TEST, PRODUCTION), pour la règle choisie ;
-    - `rules` : alertes par règle, dans la phase choisie ;
+    - `rules` : alertes par règle et par phase, clé (rule_id, TEST | PRODUCTION), quels que soient la règle et
+      la phase choisies (le choix de la règle se fait dans ces deux groupes) ;
     - `verdicts` : alertes par verdict, pour la règle et la phase choisies ;
     - `to_review` : alertes en test encore à qualifier, pour la règle choisie (toutes phases)."""
 
     items: list[AlertRow]
     total: int
     to_review: int = 0
-    phases: dict[str, int] = field(default_factory=dict)
-    rules: dict[str, int] = field(default_factory=dict)
+    rules: dict[tuple[str, str], int] = field(default_factory=dict)
     verdicts: dict[str, int] = field(default_factory=dict)
 
 
