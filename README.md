@@ -389,7 +389,8 @@ navigateur ──► front (Nginx, Cloud Run) ──/api──► API FastAPI (C
   1. lit les commandes `to_send` absentes du journal, une ligne par commande, toutes règles et versions
      confondues ;
   2. les transmet au prestataire ;
-  3. les inscrit au journal (ajout seulement).
+  3. les inscrit au journal (ajout seulement), avec les valeurs lues à l'étape 1, passées en paramètre : il ne
+     relit pas `rule_alerts`, qu'une nouvelle tentative du DAG peut être en train de réécrire.
 
   Requêtes de référence : `infra/prestataire/requetes_envoi.sql`. Le script ne modifie jamais `rule_alerts` et le
   DAG n'écrit jamais dans `rule_sends` : les deux ne se gênent pas, même quand ils tournent en même temps (pas
