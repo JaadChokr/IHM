@@ -1,6 +1,6 @@
 """DAG de référence : un DAG par fréquence de règles (horaire, quotidienne, hebdomadaire).
 
-À adapter par l'équipe data : GCP_CONN_ID, RULES_DS et ALERT_EMAILS ci-dessous. Chaque DAG lit
+À adapter par l'équipe data : GCP_CONN_ID, GCP_PROJECT, RULES_DS et ALERT_EMAILS ci-dessous. Chaque DAG lit
 `rules_registry` à chaque exécution et lance une tâche par version à exécuter (mappage dynamique, Airflow 2.9
 ou plus) : une règle publiée est prise en charge dès le run suivant, sans action manuelle.
 
@@ -53,7 +53,8 @@ from google.cloud import bigquery
 
 # --- À adapter ---------------------------------------------------------------------------------------
 GCP_CONN_ID = "google_cloud_default"  # connexion Airflow vers BigQuery
-RULES_DS = "mon-projet.fraud_rules"  # projet.dataset des tables de la plateforme
+GCP_PROJECT = "mon-projet"  # projet des tables de la plateforme
+RULES_DS = f"{GCP_PROJECT}.fraud_rules"  # projet.dataset des tables de la plateforme
 ALERT_EMAILS: list[str] = []  # destinataires des e-mails d'échec et de succès
 # -----------------------------------------------------------------------------------------------------
 
@@ -71,6 +72,8 @@ default_args = {
 }
 
 
+# Si votre environnement Airflow a déjà un utilitaire d'e-mail de succès (ex. `from utils.mail_callback
+# import send_success_email`, même signature), importez-le et supprimez cette fonction.
 def send_success_email(context, to: list[str]) -> None:
     """E-mail de fin de run réussi (on_success_callback du DAG)."""
     if not to:
